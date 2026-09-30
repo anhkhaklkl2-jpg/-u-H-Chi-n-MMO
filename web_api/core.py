@@ -1840,7 +1840,13 @@ class WebHub:
         if not safe.lower().endswith(".png"):
             await self.send_to_client(cid, {"type": "asset_data", "name": name, "b64": None})
             return
-        if name.startswith("blocks/"):
+        if name.startswith("npcs/"):
+            # NPC real sprites (Ninja Adventure pack exports under
+            # assets/npcs, e.g. npcs/npc_gac_dac_idle.png) — same basename-
+            # confined pipeline as mobs/node. Web client only; Discord never
+            # requests these.
+            base_dir = ASSETS_DIR.parent / "npcs"
+        elif name.startswith("blocks/"):
             base_dir = ASSETS_DIR.parent / "blocks"
         elif name.startswith("tilesets/"):
             # Tiled tileset sheets (bigmap/lobbytrade maps reference them as

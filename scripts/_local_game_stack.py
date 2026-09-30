@@ -506,7 +506,10 @@ class LocalStack:
         if not safe.lower().endswith(".png"):
             await self._send(cid, {"type": "asset_data", "name": name, "b64": None})
             return
-        if name.startswith("blocks/"):
+        if name.startswith("npcs/"):
+            # NPC real sprites (parity with web_api/core.py asset serve).
+            base_dir = ASSETS_DIR.parent / "npcs"
+        elif name.startswith("blocks/"):
             base_dir = ASSETS_DIR.parent / "blocks"
         elif name.startswith("tilesets/"):
             base_dir = ASSETS_DIR.parent / "tilesets"

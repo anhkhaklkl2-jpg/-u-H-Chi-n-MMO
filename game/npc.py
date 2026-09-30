@@ -12,6 +12,10 @@ class NPCDef:
     x: int
     y: int
     dialogue: Optional[str] = None
+    # WEB CLIENT ONLY: optional real sprite served through the assets
+    # pipeline ("npcs/<stem>.png"). Discord ignores it (maintenance mode);
+    # absent/None -> the client keeps drawing the emoji token.
+    sprite: Optional[Dict[str, int]] = None
 
 
 @dataclass

@@ -6,7 +6,8 @@
       "emoji": "🦝",
       "x": 137,
       "y": 104,
-      "dialogue": "gac_dac_intro"
+      "dialogue": "gac_dac_intro",
+      "sprite": { "w": 16, "h": 16, "frames": 4 }
     }
   ],
   "dialogues": {

@@ -302,8 +302,8 @@ export class WorldScene extends Phaser.Scene {
   >();
   /** Set by main.ts: opens the NPC dialogue toast (E / click near an NPC). */
   onNpcInteract: ((npc: { id: string; name: string }) => void) | null = null;
-  /** Nearest NPC within interact range (E-key gate). */
-  private nearestNpc: { id: string; name: string } | null = null;
+  /** Nearest NPC within interact range (F-key gate). */
+  private nearestNpc: { id: string; name: string; x: number; y: number } | null = null;
 
   /** True when an NPC is within interact range of self (E-key gate). */
   nearNpc(): boolean {
@@ -2119,6 +2119,9 @@ export class WorldScene extends Phaser.Scene {
     }
     // NPC proximity is recomputed per frame (cheap — a handful of tokens).
     this.nearestNpc = this.findNearestNpc();
+    // NPC "F" bubble: same fade/bob pattern as the station "E" bubble, but
+    // its own element + own suppression so the craft flow stays untouched.
+    this.updateNpcPrompt();
     // --- client-side prediction: move SELF instantly every frame ---
     // Server speed: walk 4 tiles/s, run 6 tiles/s (config.WEB_*_SPEED).
     this.stepSelf();
@@ -2852,9 +2855,21 @@ export class WorldScene extends Phaser.Scene {
 
   // ===== NPC tokens: emoji sprite + label + E/click dialogue =====
 
+  /** Re-run the last spawnNpcs (npc idle sheet just landed via the relay) —
+   *  the texture now exists so the sprite branch swaps in for the emoji. */
+  respawnNpcs(): void {
+    if (this.lastNpcs.length) this.spawnNpcs(this.lastNpcs);
+  }
+
+  private lastNpcs: { id: string; name: string; emoji: string; x: number; y: number;
+                      sprite?: { w: number; h: number; frames: number } }[] = [];
+
+
   private spawnNpcs(
-    npcs: { id: string; name: string; emoji: string; x: number; y: number }[],
+    npcs: { id: string; name: string; emoji: string; x: number; y: number;
+            sprite?: { w: number; h: number; frames: number } }[],
   ): void {
+    this.lastNpcs = npcs;
     for (const s of this.npcSprites.values()) s.container.destroy();
     this.npcSprites.clear();
     for (const n of npcs) {
@@ -2865,10 +2880,48 @@ export class WorldScene extends Phaser.Scene {
           color: "#ffe9a8", stroke: "#1a1208", strokeThickness: 3,
         })
         .setOrigin(0.5);
-      const emoji = this.add
-        .text(0, 0, n.emoji, { fontSize: "26px" })
-        .setOrigin(0.5);
-      container.add([emoji, label]);
+      // REAL SPRITE when the NPC carries sprite geometry (Ninja Adventure
+      // pack, e.g. Gạc Đặc): npcs/<id>_idle.png arrives through the SAME
+      // relay pipe as mob sheets (fetchAsset -> asset_request -> asset_data
+      // b64 -> addSpriteSheet "npc-<id>"); until then the emoji token renders
+      // (fallback — npc-only-emoji maps keep working untouched).
+      let body: Phaser.GameObjects.GameObject & { width: number };
+      if (n.sprite && n.sprite.frames > 0) {
+        const key = `npc-${n.id}`;
+        if (!this.textures.exists(key)) {
+          // Same relay pipe as mob sheets (license-safe: bytes stay on bot).
+          this.assetFetch?.(`npcs/${n.id}_idle.png`);
+          // Emoji stand-in keeps the NPC clickable while the sheet flies.
+          const standIn = this.add.text(0, 0, n.emoji, { fontSize: "26px" }).setOrigin(0.5);
+          container.add([standIn, label]);
+          container.setDepth(20);
+          container.setInteractive(
+            new Phaser.Geom.Rectangle(0, 0, 40, 48), Phaser.Geom.Rectangle.Contains,
+          );
+          container.on("pointerdown", () => this.onNpcInteract?.(n));
+          this.npcSprites.set(n.id, { container, x: n.x, y: n.y });
+          continue;
+        }
+        if (!this.anims.exists(key)) {
+          this.anims.create({
+            key,
+            frames: this.anims.generateFrameNumbers(key, {
+              start: 0, end: n.sprite.frames - 1,
+            }),
+            frameRate: 5, repeat: -1,
+          });
+        }
+        // Feet on the tile floor: sprite bottom == tile bottom (the
+        // container anchor is the tile CENTER, so shift up half a frame).
+        const spr = this.add.sprite(0, this.tilePx / 2 - (n.sprite.h * this.tilePx) / 2, key);
+        spr.play(key);
+        body = spr;
+      } else {
+        body = this.add
+          .text(0, 0, n.emoji, { fontSize: "26px" })
+          .setOrigin(0.5);
+      }
+      container.add([body, label]);
       container.setDepth(20);
       container.setInteractive(
         new Phaser.Geom.Rectangle(0, 0, 40, 48), Phaser.Geom.Rectangle.Contains,
@@ -2876,6 +2929,59 @@ export class WorldScene extends Phaser.Scene {
       container.on("pointerdown", () => this.onNpcInteract?.(n));
       this.npcSprites.set(n.id, { container, x: n.x, y: n.y });
     }
+  }
+
+  // ===== NPC interact prompt: "F" bubble (own mirror of the station's
+  // ===== "E" bubble — same fade/bob feel, separate element/state so the
+  // ===== craft-station code is NOT touched).
+
+  private npcPrompt: Phaser.GameObjects.Container | null = null;
+  private npcPromptAlpha = 0;
+  private npcLastPromptPos: { x: number; y: number } | null = null;
+
+  /** Per-frame: show/fade the "F" bubble above the adjacent NPC (station
+   *  bubble parity: exponential fade, 2px bob, rise on fade-out). */
+  private updateNpcPrompt(): void {
+    const n = this.nearestNpc;
+    if (n) this.npcLastPromptPos = { x: n.x, y: n.y };
+    const target = n ? 1 : 0;
+    this.npcPromptAlpha += (target - this.npcPromptAlpha) * Math.min(1, this.frameDtSec * 9);
+    if (this.npcPromptAlpha < 0.015) {
+      this.npcPromptAlpha = 0;
+      this.npcPrompt?.setVisible(false);
+      return;
+    }
+    if (!this.npcPrompt) this.npcPrompt = this.buildNpcPrompt();
+    const p = this.npcLastPromptPos ?? { x: 0, y: 0 };
+    const now = performance.now();
+    const bob = Math.sin(now / 300) * 2;
+    const rise = (1 - this.npcPromptAlpha) * 8;
+    this.npcPrompt.setPosition(
+      p.x * this.tilePx + this.tilePx / 2,
+      p.y * this.tilePx - 26 + bob + rise,
+    );
+    this.npcPrompt.setAlpha(this.npcPromptAlpha);
+    this.npcPrompt.setVisible(true).setDepth(150);
+  }
+
+  /** Pixel "F" prompt bubble (dark box + tail) — visually the station "E"
+   *  bubble's sibling, letter F for NPC talk. */
+  private buildNpcPrompt(): Phaser.GameObjects.Container {
+    const W = 22, H = 22, R = 4;
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1a17, 0.92);
+    g.fillRoundedRect(-W / 2, -H / 2, W, H, R);
+    g.lineStyle(2, 0xd8b46a, 1);
+    g.strokeRoundedRect(-W / 2, -H / 2, W, H, R);
+    g.fillStyle(0x1c1a17, 0.92);
+    g.fillTriangle(-4, H / 2 - 1, 4, H / 2 - 1, 0, H / 2 + 5);
+    const label = this.add.text(0, 0, "F", {
+      fontFamily: "Verdana, sans-serif",
+      fontSize: "14px",
+      color: "#f0e6c8",
+      fontStyle: "bold",
+    }).setOrigin(0.5);
+    return this.add.container(0, 0, [g, label]);
   }
 
   /** Nearest NPC within Chebyshev range 1 (adjacent, like the Discord
@@ -2886,14 +2992,18 @@ export class WorldScene extends Phaser.Scene {
    *  lúc không"). Round self to tile ints first, then a small tolerance for
    *  in-between movement: still adjacency-equivalent, never far away. */
   private findNearestNpc(): { id: string; name: string; x: number; y: number } | null {
-    const sx = Math.round(this.selfX);
-    const sy = Math.round(this.selfY);
+    // EXACT server parity (web_api/core.py "npc"): rounded-tile Manhattan
+    // d<=1 OR true float distance<=1.6 — prediction mid-step must not make
+    // the F bubble/interact flicker while the server would accept the talk.
+    const px = this.selfX, py = this.selfY;
     let best: { id: string; name: string; x: number; y: number } | null = null;
+    let bestD = Infinity;
     for (const [id, n] of this.npcSprites) {
-      const d = Math.abs(n.x - sx) + Math.abs(n.y - sy);
-      if (d <= 1) {
+      const dInt = Math.abs(n.x - Math.round(px)) + Math.abs(n.y - Math.round(py));
+      const dFloat = Math.hypot(n.x - px, n.y - py);
+      if ((dInt <= 1 || dFloat <= 1.6) && dFloat < bestD) {
+        bestD = dFloat;
         best = { id, name: id, x: n.x, y: n.y };
-        break;
       }
     }
     return best;

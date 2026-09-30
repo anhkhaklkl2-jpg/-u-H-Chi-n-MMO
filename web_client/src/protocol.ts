@@ -131,7 +131,8 @@ export interface WelcomePayload {
   armor?: Record<string, string>;
   // Interactive NPCs of this map (emoji tokens; E/click chats). Absent on
   // older servers — client renders nothing extra then.
-  npcs?: { id: string; name: string; emoji: string; x: number; y: number }[];
+  npcs?: { id: string; name: string; emoji: string; x: number; y: number;
+           sprite?: { w: number; h: number; frames: number } }[];
   // Paperdoll manifest (frame grid + animation rows/speeds) for the player
   // sheets in assets/players/. Absent on older servers — client falls back
   // to the plan-A square body in that case.

@@ -275,9 +275,11 @@ function applyTexture(name: string, b64: string): void {
     ? `block-${name.slice("blocks/".length).replace(/\.png$/i, "")}`
     : name.startsWith("mobs/")
       ? `mob-${name.slice("mobs/".length).replace(/\.png$/i, "")}`
-      : name.startsWith("node/")
-        ? `node-${name.slice("node/".length).replace(/\.png$/i, "").replace(/\//g, "-")}`
-        : bareTileset.replace(/\.png$/i, "");
+      : name.startsWith("npcs/")
+        ? `npc-${name.slice("npcs/".length).replace(/_idle\.png$/i, "")}`
+        : name.startsWith("node/")
+          ? `node-${name.slice("node/".length).replace(/\.png$/i, "").replace(/\//g, "-")}`
+          : bareTileset.replace(/\.png$/i, "");
   if (assetTextures.has(key) || !game.textures) return;
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
@@ -311,6 +313,13 @@ function applyTexture(name: string, b64: string): void {
       };
       const [fw, fh] = MOB_CELLS[mobId] ?? [32, 32];
       game.textures.addSpriteSheet(key, img, { frameWidth: fw, frameHeight: fh });
+    } else if (name.startsWith("npcs/")) {
+      // NPC idle strips (Ninja Adventure pack): register as a SPRITESHEET
+      // with the geometry from the npc's welcome payload (16px frames here).
+      // A blanket cell size mis-crops differently-sized strips.
+      game.textures.addSpriteSheet(key, img, {
+        frameWidth: 16, frameHeight: 16,
+      });
     } else {
       game.textures.addImage(key, img);
     }
@@ -348,9 +357,17 @@ function applyTexture(name: string, b64: string): void {
       return;
     }
     if (name.startsWith("node/")) {
-      // Bundled node sprite (meteor-ore crater rock): register as      // node-meteor-ore and rebuild the resource layer so pending
+      // Bundled node sprite (meteor-ore crater rock): register as
+      // node-meteor-ore and rebuild the resource layer so pending
       // pseudo-tile draws pick the texture up.
       scene.onNodeTexture(name.slice("node/".length).replace(/\.png$/i, ""));
+      return;
+    }
+    if (name.startsWith("npcs/")) {
+      // NPC idle strip arrived: re-spawn the NPCs so the sprite swaps in
+      // for the emoji stand-in (spawnNpcs no-ops the re-fetch — texture
+      // now exists under "npc-<id>").
+      scene.respawnNpcs();
       return;
     }
     // Tileset image arrived (blocking asset) — tick the loading overlay.

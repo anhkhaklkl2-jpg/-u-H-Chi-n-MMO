@@ -750,7 +750,8 @@ def _blocks_catalog_payload() -> List[dict]:
 
 
 def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
-    """Interactive NPCs of this map for the web client (id/name/emoji/pos)."""
+    """Interactive NPCs of this map for the web client (id/name/emoji/pos
+    + optional real-sprite geometry for the sprite renderer)."""
     npc_map = getattr(rt, "npc_map", None)
     return [
         {
@@ -759,6 +760,7 @@ def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
             "emoji": n.emoji,
             "x": n.x,
             "y": n.y,
+            **({"sprite": n.sprite} if n.sprite else {}),
         }
         for n in (npc_map.npcs if npc_map else [])
     ]
