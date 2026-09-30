@@ -1200,10 +1200,19 @@ class WebHub:
             player = rt.state.get_player(sess.user_id) if rt else None
             npc = None
             if rt is not None and player is not None:
+                # Web client runs CLIENT PREDICTION: the reported self position
+                # is a float tile-center that may be mid-step when F lands.
+                # Discord's strict Manhattan == 1 rejected those ("lúc được lúc
+                # không"). Accept EITHER rounded-tile adjacency (d <= 1) OR the
+                # true float distance <= 1.6 (physically standing next to the
+                # NPC even when rounding tips the tile over the boundary).
+                px, py = float(player.x), float(player.y)
                 for n in rt.npc_map.npcs:
-                    if n.id.lower() == npc_id and (
-                        abs(n.x - player.x) + abs(n.y - player.y) == 1
-                    ):
+                    if n.id.lower() != npc_id:
+                        continue
+                    d_int = abs(n.x - round(px)) + abs(n.y - round(py))
+                    d_float = ((n.x - px) ** 2 + (n.y - py) ** 2) ** 0.5
+                    if d_int <= 1 or d_float <= 1.6:
                         npc = n
                         break
             if npc is None or npc.dialogue is None:
@@ -1214,9 +1223,45 @@ class WebHub:
                 return
             node = rt.npc_map.dialogues.get(npc.dialogue)
             text = node.text if node else "…"
+            # Structured dialogue frame -> the web client renders the DialogBox
+            # (Ninja Adventure pack + VT323) instead of a flat chat toast.
+            await self.send_to_client_conn(sess, {
+                "type": "npc_dialogue",
+                "npc": npc.id,
+                "name": npc.name,
+                "emoji": npc.emoji,
+                "text": text,
+                "options": [
+                    {"label": o.label, "next": o.next} for o in (node.options if node else [])
+                ],
+            })
+            # Legacy lane so the chat log keeps a record too.
             await self.send_to_client_conn(sess, {
                 "type": MSG_PUSH,
                 "message": f"{npc.emoji} {npc.name}: {text}",
+            })
+        elif cmd == "npc_next":
+            # Dialogue tree navigation: client sends "npc_next <dialogue_id>",
+            # server answers with that node (no adjacency re-check — the node
+            # id only exists after a valid first interaction).
+            node_id = (args[0].lower() if args else "")
+            rt = self.manager.runtime_of(sess.channel_id, sess.user_id) \
+                or self.manager.get_runtime(sess.channel_id)
+            node = rt.npc_map.dialogues.get(node_id) if rt else None
+            if node is None:
+                await self.send_to_client_conn(sess, {
+                    "type": MSG_PUSH, "message": "Hội thoại không tồn tại.",
+                })
+                return
+            await self.send_to_client_conn(sess, {
+                "type": "npc_dialogue",
+                "npc": node_id.split("_")[0],
+                "name": "Gạc Đặc" if node_id.startswith("gac_dac") else node_id,
+                "emoji": "🦝",
+                "text": node.text,
+                "options": [
+                    {"label": o.label, "next": o.next} for o in node.options
+                ],
             })
         elif cmd == "weather":
             rt = self.manager.get_runtime(sess.channel_id)
@@ -1351,7 +1396,9 @@ class WebHub:
         player.hp = 0
         player.visible = False
         player.dead_until = time.time() + 5.0
-        player.death_reason = "tự kết thúc để xem màn hồi sinh"
+        from game.death_reasons import SELF_KILL_REASON, stamp as _stamp
+
+        _stamp(player, SELF_KILL_REASON, kind="self")
         self.manager._schedule_respawn(rt, sess.user_id)
         self.manager._schedule_save(rt, player)
         await self.send_to_client_conn(sess, {

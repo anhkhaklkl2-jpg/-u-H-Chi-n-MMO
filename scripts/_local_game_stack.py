@@ -197,7 +197,7 @@ class LocalStack:
             if not ch:
                 return
             from game.actions import (
-                AttackAction, ChopAction, BreakBlockAction,
+                AttackAction, ChopAction, BreakBlockAction, TurnAction,
                 PlaceBlockAction, ShovelAction,
             )
             name = str(frame.get("name", ""))
@@ -222,6 +222,17 @@ class LocalStack:
                 action = BreakBlockAction(user_id=uid, dx=abs_dx, dy=abs_dy)
             elif name == "shovel":
                 action = ShovelAction(user_id=uid)
+            elif name == "turn":
+                # Parity with web_api/core.py: mouse-facing sync sends a
+                # throttled "turn" — without this branch EVERY facing change
+                # answered error bad_action (toast "Lỗi: bad_action" popped
+                # whenever the mouse moved ⇒ phím F "lúc được lúc không").
+                from game.state import Direction
+                try:
+                    direction = Direction[str(frame.get("dir", "SOUTH")).upper()]
+                    action = TurnAction(user_id=uid, direction=direction)
+                except KeyError:
+                    action = None
             elif name == "place":
                 dx, dy = (abs_dx, abs_dy) if abs_dx is not None else (
                     frame.get("dx"), frame.get("dy"))
@@ -424,6 +435,61 @@ class LocalStack:
                     await self._send(cid, {"type": "push", "message":
                         "Dùng: /mac leather | /mac off | /mac <helmet|chest|legs> <stem>. "
                         f"Sheet có: {', '.join(sorted(armor_catalog.keys()))}"})
+                return
+            if cmd == "npc":
+                # Parity with web_api/core.py "npc": rounded-tile adjacency OR
+                # float distance <= 1.6 (client prediction mid-step proof).
+                npc_id = (args[0].lower() if args else "")
+                rt = self.gm.get_runtime(ch)
+                player = rt.state.get_player(uid) if rt is not None else None
+                npc = None
+                if rt is not None and player is not None:
+                    px, py = float(player.x), float(player.y)
+                    for n in rt.npc_map.npcs:
+                        if n.id.lower() != npc_id:
+                            continue
+                        d_int = abs(n.x - round(px)) + abs(n.y - round(py))
+                        d_float = ((n.x - px) ** 2 + (n.y - py) ** 2) ** 0.5
+                        if d_int <= 1 or d_float <= 1.6:
+                            npc = n
+                            break
+                if npc is None or npc.dialogue is None:
+                    await self._send(cid, {"type": "push",
+                                           "message": "Không có NPC nào ở cạnh đó."})
+                    return
+                node = rt.npc_map.dialogues.get(npc.dialogue)
+                await self._send(cid, {
+                    "type": "npc_dialogue",
+                    "npc": npc.id,
+                    "name": npc.name,
+                    "emoji": npc.emoji,
+                    "text": node.text if node else "…",
+                    "options": [
+                        {"label": o.label, "next": o.next}
+                        for o in (node.options if node else [])
+                    ],
+                })
+                return
+            if cmd == "npc_next":
+                # Dialogue tree navigation (parity with web_api/core.py).
+                node_id = (args[0].lower() if args else "")
+                rt = self.gm.get_runtime(ch)
+                node = rt.npc_map.dialogues.get(node_id) if rt else None
+                if node is None:
+                    await self._send(cid, {"type": "push",
+                                           "message": "Hội thoại không tồn tại."})
+                    return
+                who = "Gạc Đặc" if node_id.startswith("gac_dac") else node_id
+                await self._send(cid, {
+                    "type": "npc_dialogue",
+                    "npc": node_id.split("_")[0],
+                    "name": who,
+                    "emoji": "🦝",
+                    "text": node.text,
+                    "options": [
+                        {"label": o.label, "next": o.next} for o in node.options
+                    ],
+                })
                 return
             await self._send(cid, {"type": "push", "message": f"[preview] Lệnh không hỗ trợ local: {cmd}"})
             return

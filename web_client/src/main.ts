@@ -6,6 +6,7 @@ import { WorldScene } from "./game";
 import { KeyboardInput } from "./input";
 import { MobileControls } from "./mobile_controls";
 import { Net } from "./net";
+import { dialogBox, DialogPage } from "./dialog_box";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { weatherFx } from "./weather";
@@ -688,6 +689,10 @@ const net = new Net({
     // it here: the output must STAY in the result slot until collected.
   },
   onPush: (message, kind) => {
+    // NPC dialogue pushes (legacy flat lane) are now rendered by the
+    // DialogBox via the structured npc_dialogue frame; skip duplicate toast
+    // while a live dialogue is open.
+    if (dialogBox.isOpen) return;
     // Server-tagged pushes land in the CHAT LOG with their colour kind
     // (world-3 = khẩn cấp tím đậm nhất, system-priv = vàng đậm chỉ mình
     // thấy...). kind mapping mirrors web_api/core.py PUSH_KIND. The toast
@@ -752,8 +757,14 @@ const net = new Net({
     // Inventory/craft housekeeping errors are NEVER user-facing: a stale
     // reorder/split frame just means the server state moved on — the next
     // inventory delta repaints the truth. Toasting them was the "bad other"
-    // spam during fast drags.
-    if (code === "bad_order" || code === "bad_split" || code === "bad_slot") {
+    // spam during fast drags. bad_action likewise: turn frames raced a
+    // map-switch/rejoin used to toast "Lỗi: bad_action" whenever the mouse
+    // moved (phím F "lúc được lúc không") — the action result path already
+    // surfaces anything the player must know about.
+    if (
+      code === "bad_order" || code === "bad_split" || code === "bad_slot" ||
+      code === "bad_action"
+    ) {
       return;
     }
     // COLLECT refused (empty_result): the optimistic UI already emptied the
@@ -1128,14 +1139,18 @@ const input = new KeyboardInput({
   // E near a station: open the craft panel (bubble punch effect plays in
   // the scene). Returns true when handled; false falls back to inventory.
   onStationKey: () => {
-    // NPC FIRST: standing next to an NPC (chợ đen, bảng thông báo, cửa…)
-    // E chats with it instead of opening the inventory/craft panel.
-    if (scene.nearNpc()) {
-      scene.requestNpcDialogue();
-      return true;
-    }
+    // E = station/craft only now (NPC moved to F — user 30/09).
     if (!scene.nearStation()) return false;
     scene.stationInteract();
+    return true;
+  },
+  onNpcKey: () => {
+    // F khi hộp thoại ĐANG MỞ = chuyển trang/skip typewriter (dialogBox tự xử
+    // qua keyHandler của nó) — không gửi /npc lại (sẽ re-open trang 1).
+    if (dialogBox.isOpen) return true;
+    // F = NPC talk (user 30/09): standing next to an NPC opens the dialogue.
+    if (!scene.nearNpc()) return false;
+    scene.requestNpcDialogue();
     return true;
   },
   onSlot: (index) => hud.selectSlot(index),
@@ -1679,9 +1694,39 @@ input.clearKeys = () => {
 game.events.once("ready", () => {
   input.bindCanvas(game.canvas);
   // NPC dialogue: ask the SERVER for the NPC's dialogue text (it owns the
-  // npcs.json data) — the reply rides the "push" toast lane.
+  // npcs.json data) — the structured npc_dialogue frame renders the DialogBox.
   scene.onNpcInteract = (npc) => {
-    net.chatCommand(`npc ${npc.id}`);
+    net.chatCommand(`/npc ${npc.id}`);
+  };
+  // Live NPC dialogue: server answers with options; clicking an option asks
+  // the next node ("npc_next <id>") and the reply re-opens the box.
+  net.onNpcDialogue = (frame) => {
+    // Auto-paginate long node text: box fits ~3 lines of VT323 24px
+    // (~44 chars/line). Split at word boundaries; options only on LAST page.
+    const MAX_CHARS = 120;
+    const words = frame.text.split(" ");
+    const chunks: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      if ((cur + " " + w).trim().length > MAX_CHARS && cur) {
+        chunks.push(cur.trim());
+        cur = w;
+      } else {
+        cur = (cur + " " + w).trim();
+      }
+    }
+    if (cur.trim()) chunks.push(cur.trim());
+    const opts = frame.options ?? [];
+    const pages: DialogPage[] = chunks.map((chunk, i) => ({
+      who: frame.name,
+      lines: [chunk],
+      options: i === chunks.length - 1 ? opts : [],
+      onPick: (_label, next) => {
+        if (next) net.chatCommand(`/npc_next ${next}`);
+        else dialogBox.close();
+      },
+    }));
+    dialogBox.open(pages);
   };
   // Mouse-facing sync: the scene's 8-way facing label (driven by the blue
   // hover-box tile) forwards as a server "turn" action so remote players

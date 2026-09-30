@@ -1,0 +1,49 @@
+{
+  "npcs": [
+    {
+      "id": "gac_dac",
+      "name": "Gạc Đặc",
+      "emoji": "🦝",
+      "x": 137,
+      "y": 104,
+      "dialogue": "gac_dac_intro"
+    }
+  ],
+  "dialogues": {
+    "gac_dac_intro": {
+      "text": "Chào mừng đến Chợ Bà! Ta là Gạc Đặc — đổi thú hơn quái, trả bằng xu! Quái chết rơi hom hoặc rương, đem đến ta, càng hiếm càng nhiều xu!",
+      "options": [
+        { "label": "Để ta đem thử!", "next": "gac_dac_how" },
+        { "label": "Giá ra sao?", "next": "gac_dac_price" },
+        { "label": "Đi luôn", "next": null }
+      ]
+    },
+    "gac_dac_how": {
+      "text": "Đơn giản lắm: đánh quái, nhặt hom (hay rương) nó rơi, rồi bước đến cạnh ta và nhấn E. Ta cân hết, xu về túi ngươi ngay!",
+      "options": [
+        { "label": "Rồi, đi đây!", "next": null },
+        { "label": "Hỏi giá đã", "next": "gac_dac_price" }
+      ]
+    },
+    "gac_dac_price": {
+      "text": "Slime thường 3 xu/con, dơi 5 xu, càng hiếm càng cao — rương quý có khi vài chục! Cầm theo 3x Sushi, ta đổi 15 xu đây.",
+      "options": [
+        { "label": "Bán 3x Sushi = 15 xu?", "next": "gac_dac_sell" },
+        { "label": "Để sau", "next": null }
+      ]
+    },
+    "gac_dac_sell": {
+      "text": "Chốt đơn không? Bấm CÓ để bán ngay!",
+      "options": [
+        { "label": "CÓ — bán!", "next": "gac_dac_sold" },
+        { "label": "KHÔNG", "next": null }
+      ]
+    },
+    "gac_dac_sold": {
+      "text": "Xu đã vào túi! Mai lại ghé, ta để hàng tốt cho ngươi. He he!",
+      "options": [
+        { "label": "Tạm biệt", "next": null }
+      ]
+    }
+  }
+}

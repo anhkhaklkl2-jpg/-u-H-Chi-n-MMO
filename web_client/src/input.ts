@@ -10,6 +10,8 @@ export interface InputHooks {
   /** E while near a station: open the station panel (craft) with a press
    *  effect. Falls back to onToggleInventory when no station is in range. */
   onStationKey?: () => boolean;
+  /** F near an NPC: open the dialogue (true = handled, fall back to attack). */
+  onNpcKey?: () => boolean;
   onSlot: (index: number) => void;
   /** Q: throw the stack in the active hotbar slot into the world. */
   onThrowHeld?: () => void;
@@ -75,14 +77,17 @@ export class KeyboardInput {
     }
     if (e.code === "KeyE") {
       e.preventDefault();
-      // Near a station: E interacts (opens the craft panel with the press
-      // effect on the E bubble). Otherwise E stays the inventory toggle.
+      // E = inventory/station toggle (user 30/09: NPC moved to F — E conflicted
+      // with the inventory binding when standing next to an NPC).
       if (this.hooks.onStationKey?.()) return;
       this.hooks.onToggleInventory();
       return;
     }
     if (e.code === "KeyF") {
       e.preventDefault();
+      // F = NPC talk FIRST (user 30/09): near an NPC F opens the dialogue;
+      // otherwise F stays the attack key.
+      if (this.hooks.onNpcKey?.()) return;
       this.hooks.onAttack();
       return;
     }

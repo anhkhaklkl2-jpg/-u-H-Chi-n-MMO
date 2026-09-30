@@ -8,6 +8,14 @@ const WS_PATH = "/ws";
 const CONFIG_PATH = "/app-config.json"; // static file in dist/ (no env needed)
 const INPUT_SEND_INTERVAL_MS = 50; // 20 Hz max — server ticks at 20 Hz
 
+export interface NpcDialogueFrame {
+  npc: string;
+  name: string;
+  emoji: string;
+  text: string;
+  options: { label: string; next: string | null }[];
+}
+
 export interface NetHandlers {
   onWelcome: (frame: Extract<ServerFrame, { type: "welcome" }>) => void;
   onSnapshot: (frame: Extract<ServerFrame, { type: "snapshot" }>) => void;
@@ -42,6 +50,7 @@ export class Net {
   /** Extra dev hook (preview panel status) — assigned from main.ts when
    *  ?preview=1; optional so normal clients never touch it. */
   onPreviewState?: (state: Record<string, unknown>) => void;
+  onNpcDialogue?: (frame: NpcDialogueFrame) => void;
   private token = "";
   private joined = false;
   /** Monotonic input sequence (input-sequence reconciliation): every input
@@ -499,6 +508,10 @@ export class Net {
         break;
       case "push":
         this.handlers.onPush(frame.message, frame.kind);
+        break;
+      case "npc_dialogue":
+        // Structured NPC dialogue -> DialogBox overlay (dialog_box.ts).
+        this.onNpcDialogue?.(frame as unknown as NpcDialogueFrame);
         break;
       case "preview_state":
         this.onPreviewState?.(frame as unknown as Record<string, unknown>);

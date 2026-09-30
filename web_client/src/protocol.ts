@@ -339,5 +339,6 @@ export type ServerFrame =
   | { type: "action_result"; name: string; ok: boolean; reason: string; tx: number | null; ty: number | null; kind: string; target_id?: string | null; target_defeated?: boolean; needed: number | null; drops: [string, number][]; damage?: number; critical?: boolean; missed?: boolean }
   | { type: "held"; slot: number; item_id: string | null }
   | { type: "travel_begin"; map_name?: string; kind?: string }
+  | { type: "npc_dialogue"; npc: string; name: string; emoji: string; text: string; options: { label: string; next: string | null }[] }
   | { type: "error"; code: string; message?: string }
   | { type: "pong"; t: unknown };

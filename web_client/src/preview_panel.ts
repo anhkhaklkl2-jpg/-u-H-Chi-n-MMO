@@ -203,6 +203,13 @@ export class PreviewPanel {
     btn(me, "✨ Hồi sinh", () => this.send("respawn"), "#1a2a52");
     // 🎁 give: bộ demo item (potion/sword/block/giáp) để thử rich tooltip.
     btn(me, "🎁 Bộ demo", () => this.send("give", "demo"), "#2a2a1a");
+    // 💬 Hộp thoại NPC: mở overlay DialogBox (asset pack + VT323) ngay trên map.
+    btn(me, "💬 Hộp thoại demo", () => {
+      import("./dialog_box").then((m) => {
+        if (m.dialogBox.isOpen) m.dialogBox.close();
+        else m.dialogBox.open(m.demoGacDacPages());
+      });
+    }, "#1a2a3a");
     row(me);
     for (const [key, label] of STATUSES) {
       btn(me, `☣️ ${label}`, () => this.send("status", key), "#1a2a1a");

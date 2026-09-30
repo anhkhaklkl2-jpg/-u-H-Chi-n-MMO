@@ -2880,11 +2880,18 @@ export class WorldScene extends Phaser.Scene {
 
   /** Nearest NPC within Chebyshev range 1 (adjacent, like the Discord
    *  npc_adjacent rule: |dx| + |dy| == 1). */
+  /** Interact range: NPC adjacency is Manhattan == 1 on the SERVER (int
+   *  tiles), but selfX/selfY here are FLOAT tile-centers — d === 1 only
+   *  matched when the player stood pixel-perfect between 2 tiles ("lúc được
+   *  lúc không"). Round self to tile ints first, then a small tolerance for
+   *  in-between movement: still adjacency-equivalent, never far away. */
   private findNearestNpc(): { id: string; name: string; x: number; y: number } | null {
+    const sx = Math.round(this.selfX);
+    const sy = Math.round(this.selfY);
     let best: { id: string; name: string; x: number; y: number } | null = null;
     for (const [id, n] of this.npcSprites) {
-      const d = Math.abs(n.x - this.selfX) + Math.abs(n.y - this.selfY);
-      if (d === 1) {
+      const d = Math.abs(n.x - sx) + Math.abs(n.y - sy);
+      if (d <= 1) {
         best = { id, name: id, x: n.x, y: n.y };
         break;
       }
