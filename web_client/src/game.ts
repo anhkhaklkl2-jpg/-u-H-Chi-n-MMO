@@ -298,7 +298,8 @@ export class WorldScene extends Phaser.Scene {
   private stationTiles = new Set<string>();
   // ----- NPC tokens (welcome.npcs): emoji sprite + name label per NPC -----
   private npcSprites = new Map<
-    string, { container: Phaser.GameObjects.Container; x: number; y: number }
+    string, { container: Phaser.GameObjects.Container; x: number; y: number;
+              spr?: Phaser.GameObjects.Sprite }
   >();
   /** Set by main.ts: opens the NPC dialogue toast (E / click near an NPC). */
   onNpcInteract: ((npc: { id: string; name: string }) => void) | null = null;
@@ -2863,6 +2864,8 @@ export class WorldScene extends Phaser.Scene {
 
   private lastNpcs: { id: string; name: string; emoji: string; x: number; y: number;
                       sprite?: { w: number; h: number; frames: number } }[] = [];
+  /** Body sprites by npc id (breathing bob + facing flip). */
+  private npcBodySprites = new Map<string, Phaser.GameObjects.Sprite>();
 
 
   private spawnNpcs(
@@ -2870,6 +2873,7 @@ export class WorldScene extends Phaser.Scene {
             sprite?: { w: number; h: number; frames: number } }[],
   ): void {
     this.lastNpcs = npcs;
+    this.npcBodySprites.clear();
     for (const s of this.npcSprites.values()) s.container.destroy();
     this.npcSprites.clear();
     for (const n of npcs) {
@@ -2916,10 +2920,15 @@ export class WorldScene extends Phaser.Scene {
           key,
         );
         spr.setScale(dispH / n.sprite.h);
+        // BASE scales for the per-frame breathing bob (must be ABSOLUTE —
+        // multiplying the live scale compounds every frame).
+        spr.setData("npcBase", { sx: dispH / n.sprite.h, sy: dispH / n.sprite.h });
+        this.npcBodySprites.set(n.id, spr);
         // Idle.png strips in this pack are the FOUR FACING DIRECTIONS
         // (down/left/right/up), NOT animation frames — cycling them made
         // the NPC spin in place forever (user: "xoay vòng liên tục").
-        // Static frame 0 = facing the camera, like a resting NPC.
+        // Frame 0 = facing the camera; liveliness comes from a gentle
+        // breathing bob (game.ts updateNpcPrompt beat) instead.
         spr.setFrame(0);
         body = spr;
       } else {
@@ -2933,7 +2942,10 @@ export class WorldScene extends Phaser.Scene {
         new Phaser.Geom.Rectangle(0, 0, 40, 48), Phaser.Geom.Rectangle.Contains,
       );
       container.on("pointerdown", () => this.onNpcInteract?.(n));
-      this.npcSprites.set(n.id, { container, x: n.x, y: n.y });
+      this.npcSprites.set(n.id, {
+        container, x: n.x, y: n.y,
+        spr: body instanceof Phaser.GameObjects.Sprite ? body : undefined,
+      });
     }
   }
 
@@ -2950,6 +2962,21 @@ export class WorldScene extends Phaser.Scene {
   private updateNpcPrompt(): void {
     const n = this.nearestNpc;
     if (n) this.npcLastPromptPos = { x: n.x, y: n.y };
+    // LIFE: the idle strip is 4 facing-directions (no anim frames), so the
+    // NPC breathes — a small absolute squash/stretch around its BASE scale
+    // (never compound: multiplying the live scale drifted to 1.28 within
+    // seconds). The down-facing frame is symmetric — no flip.
+    for (const [, entry] of this.npcSprites) {
+      const spr = entry.spr;
+      if (!spr) continue;
+      const base = spr.getData("npcBase") as { sx: number; sy: number } | undefined;
+      if (!base) continue;
+      const breathe = Math.sin(performance.now() / 520);
+      spr.setScale(
+        base.sx * (1 - breathe * 0.03),
+        base.sy * (1 + breathe * 0.05),
+      );
+    }
     const target = n ? 1 : 0;
     this.npcPromptAlpha += (target - this.npcPromptAlpha) * Math.min(1, this.frameDtSec * 9);
     if (this.npcPromptAlpha < 0.015) {

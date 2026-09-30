@@ -1135,6 +1135,16 @@ const input = new KeyboardInput({
     // classic "lia cam đi tùm lum / giật giật" source on phones with
     // phantom key states).
     if (mobileStickActive) return;
+    // DIALOGUE FREEZE: WASD is dead while the NPC box is open — walking
+    // away mid-dialogue desynced the "adjacent NPC" gate and F closed the
+    // box as attack (user: "player không nên được di chuyển trong lúc thoại").
+    if (dialogBox.isOpen) {
+      if (dx || dy) {
+        scene.setLocalInput(0, 0, false);
+        net.setInput(0, 0, false, scene.getSelfPos());
+      }
+      return;
+    }
     // Zero-lag: prediction runs every frame locally; the network copy is
     // just the authoritative echo (20 Hz throttle in Net).
     scene.setLocalInput(dx, dy, running);
@@ -1306,6 +1316,15 @@ const mobile = new MobileControls({
     mobileInputState.dx = dx;
     mobileInputState.dy = dy;
     mobileInputState.running = running;
+    // DIALOGUE FREEZE (mobile parity): the stick is dead while the NPC box
+    // is open — same reason as the keyboard's onVector guard.
+    if (dialogBox.isOpen) {
+      if (dx || dy) {
+        scene.setLocalInput(0, 0, false);
+        net.setInput(0, 0, false, scene.getSelfPos());
+      }
+      return;
+    }
     scene.setLocalInput(dx, dy, running);
     const sp = scene.getSelfPos();
     net.setInput(dx, dy, running, sp);
