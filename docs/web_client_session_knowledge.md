@@ -1040,3 +1040,43 @@ full-rebuild.**
   tái dùng cho panel khác
 - Verify nhanh: hud.chatLine(...) với từng kind từ preview_evaluate, screenshot
   — đừng đuổi theo mob thật
+
+## 10h. 🦝 NPC HỘI THOẠI + SPRITE THẬT (session 30/09–01/10, committed CHƯA PUSH)
+
+**Trạng thái:** 7 commit local (c18255bc → 2b8b4f7a) — push GitHub = Railway deploy.
+Server files (web_api/core.py, snapshots.py, game/npc.py, overworld.npcs.json,
+assets/npcs/*.png) đã SFTP deploy — CẦN Restart panel để bot ăn code mới.
+
+- **Kiến trúc**: npcs.json (per-map, `assets/maps/<map>.npcs.json`) cho phép
+  `sprite: {w,h,frames}` (SOURCE px). Sheet `assets/npcs/<id>_idle.png` đi qua
+  LANE RELAY như mob sheets: fetchAsset("npcs/<id>_idle.png") → asset_request
+  → asset_data b64 → addSpriteSheet key "npc-<id>" (cell 16×16 hardcode trong
+  main.ts applyTexture — nâng khi thêm NPC khác size). Fallback emoji token.
+- **Render**: spawnNpcs (game.ts) — NPC cỡ player 2 ô (32×32), chân chạm đáy ô
+  (local y = tilePx/2 - dispH/2), frame TĨNH 0. **Idle.png của Ninja Adventure
+  pack là 4 HƯỚNG NHÌN (down/left/right/up), KHÔNG phải anim frames** — cycling
+  = xoay vòng. "Thở" = squash/stretch tuyệt đối quanh base scale lưu trong
+  sprite.setData("npcBase") (compounding live scale drift 2.0→1.28 — bẫy cũ).
+- **Bubble "F"**: mirror bubble "E" station (element/state RIÊNG, không đụng
+  code station). updateNpcPrompt mỗi frame trong update(); vị trí -26px trên
+  tâm ô NPC. findNearestNpc = PARITY CHÍNH XÁC với server: round-tile d<=1 OR
+  float d<=1.6 (server web_api/core.py cmd "npc" cùng luật) — không thì bubble
+  nhấp nháy khi prediction mid-step.
+- **DialogBox (dialog_box.ts)**: box 600×116 + VT323; CLICK/TAP box = advance
+  (pointer-events:auto + cursor:pointer); advance() dùng chung: đang gõ → skip;
+  có options → CHỜ BẤM NÚT (phím/click thân box không tự chuyển — trước đây
+  phím xuyên next() đóng mất lựa chọn). F trong box cũng advance.
+- **FREEZE di chuyển**: dialogBox.isOpen → onVector (bàn phím) + onMove (stick
+  mobile) đều chặn và zero input. Đi xa giữa thoại làm F thành attack.
+- **Preview "lúc được lúc không" (ĐÃ FIX)**: watchdog 2s + tab-return đều kết
+  luận NGAY khi tab tỉnh — nhưng Chromium đóng băng loop khi tab ẩn nên
+  snapshot luôn trễ → forceReconnect churn Khách mới mỗi lần Alt-tab. Fix:
+  interval skip `document.hidden`; tab-return chờ 400ms rồi chỉ reconnect khi
+  age vẫn >2s. Fullscreen/orientation gate MOBILE_UI (desktop bắn lỗi console
+  mỗi welcome). Bài học: TAB NỀN = loop đóng băng, probe preview_evaluate cần
+  s.update(0,16.7) tay nhiều nhịp; localStorage bền giữa context nhưng
+  window.__probe KHÔNG (mỗi eval 1 context mới).
+- **Local stack mirror**: cmd npc/npc_next + nhánh "turn" (thiếu turn =
+  error bad_action toast spam mỗi lần rê chuột) + serve assets/npcs/.
+- **Việc tiếp**: push GitHub (Railway), NPC đi tuần Walk.png (4 hướng × 4
+  frame), emote ❗ khi lại gần, nối bán hàng thật node "CÓ — bán!".
