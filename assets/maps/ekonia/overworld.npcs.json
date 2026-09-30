@@ -19,7 +19,7 @@
       ]
     },
     "gac_dac_how": {
-      "text": "Đơn giản lắm: đánh quái, nhặt hom (hay rương) nó rơi, rồi bước đến cạnh ta và nhấn E. Ta cân hết, xu về túi ngươi ngay!",
+      "text": "Đơn giản lắm: đánh quái, nhặt hom (hay rương) nó rơi, rồi bước đến cạnh ta và nhấn F. Ta cân hết, xu về túi ngươi ngay!",
       "options": [
         { "label": "Rồi, đi đây!", "next": null },
         { "label": "Hỏi giá đã", "next": "gac_dac_price" }
