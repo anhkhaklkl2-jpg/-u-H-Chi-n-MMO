@@ -478,9 +478,13 @@ const net = new Net({
       .__setMobileControls?.(true);
     // Landscape: the one true mechanism (see LANDSCAPE final form above) —
     // fullscreen + OS orientation lock, retried here inside the user-
-    // gesture chain where the browser allows it.
-    void (window as unknown as { __lockLandscape?: () => Promise<void> })
-      .__lockLandscape?.();
+    // gesture chain where the browser allows it. MOBILE_UI only: a desktop
+    // preview fired requestFullscreen once per WELCOME (no gesture = console
+    // error storm) with zero benefit.
+    if (MOBILE_UI) {
+      void (window as unknown as { __lockLandscape?: () => Promise<void> })
+        .__lockLandscape?.();
+    }
     // DEFER THE HEAVY BAKE until the travel veil is fully black (or idle).
     // buildWorld bakes the full-map canvas synchronously — a multi-hundred-ms
     // main-thread freeze that, when it landed DURING the iris-close tween
@@ -1778,6 +1782,14 @@ document.addEventListener("visibilitychange", () => {
     // idle socket (no onclose fired). If the last snapshot is stale (>4s —
     // normal cadence is 50ms), force a reconnect immediately instead of
     // waiting for the backoff to discover it.
+    //
+    // BACKGROUND-TAB GUARD: while the tab is hidden Chromium freezes the
+    // game loop (loop.frame stops) so NO snapshot arrives — the age grows
+    // no matter how healthy the socket is. Deciding AT the instant of
+    // return (before the queue flushes) mis-read that as a dead socket and
+    // forceReconnect churned a fresh user/world every tab switch — the
+    // preview "lúc được lúc không". Wait 400ms for the backlog to land;
+    // only a STILL-dead socket reconnects.
     if (net.isJoined && everWelcomed && lastSnapshotAgeMs() > 4000) {
       if (hud.isLoading) {
         // PC regression guard (3/0): the first big-map bake blocks the main
@@ -1786,8 +1798,12 @@ document.addEventListener("visibilitychange", () => {
         // there re-fires welcome (and ANOTHER full bake). Defer instead.
         return;
       }
-      console.warn("[WATCHDOG] tab-return forceReconnect: age=", lastSnapshotAgeMs().toFixed(0));
-      net.forceReconnect();
+      window.setTimeout(() => {
+        if (document.hidden || !net.isJoined) return;
+        if (lastSnapshotAgeMs() <= 2000) return; // backlog flushed — healthy
+        console.warn("[WATCHDOG] tab-return forceReconnect: age=", lastSnapshotAgeMs().toFixed(0));
+        net.forceReconnect();
+      }, 400);
     }
   }
 });
@@ -1813,9 +1829,14 @@ let everWelcomed = false;
 // Snapshot freshness watchdog (2s cadence): if we are joined but snapshots
 // stopped (hidden-tab socket drop, relay hiccup), show a stale ping and
 // start reconnecting. setInterval is throttled to 1 Hz in hidden tabs but
-// still fires — exactly what the watchdog needs.
+// still fires — exactly what the watchdog needs. HIDDEN TABS ARE EXEMPT:
+// Chromium freezes the loop in background tabs so the age ALWAYS grows —
+// reconnecting from the throttle tick churned a fresh world per tab switch
+// (the preview "lúc được lúc không"); the tab-return path re-checks after
+// the wake-up backlog flushes.
 window.setInterval(() => {
   if (!net.isJoined) return;
+  if (document.hidden) return;
   const age = lastSnapshotAgeMs();
   if (age > 4000) {
     // Before the first EVER snapshot this page-load the "age" is Infinity
