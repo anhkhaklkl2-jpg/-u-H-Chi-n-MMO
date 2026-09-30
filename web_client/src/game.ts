@@ -2902,19 +2902,25 @@ export class WorldScene extends Phaser.Scene {
           this.npcSprites.set(n.id, { container, x: n.x, y: n.y });
           continue;
         }
-        if (!this.anims.exists(key)) {
-          this.anims.create({
-            key,
-            frames: this.anims.generateFrameNumbers(key, {
-              start: 0, end: n.sprite.frames - 1,
-            }),
-            frameRate: 5, repeat: -1,
-          });
-        }
-        // Feet on the tile floor: sprite bottom == tile bottom (the
-        // container anchor is the tile CENTER, so shift up half a frame).
-        const spr = this.add.sprite(0, this.tilePx / 2 - (n.sprite.h * this.tilePx) / 2, key);
-        spr.play(key);
+        // CHARACTER-SCALE NPC: the source frame is 16px art but the player
+        // paperdoll stands ~2 tiles tall — render the NPC at the same
+        // 2-tile height (aspect kept), feet on the tile bottom. sprite.w/h
+        // are SOURCE pixels used for the aspect/crop math only (the old
+        // code multiplied them by tilePx AGAIN and the raccoon floated 7
+        // tiles above the F bubble; the 1-tile version after that was "chưa
+        // đủ to so với player").
+        const dispH = 2 * this.tilePx;
+        const spr = this.add.sprite(
+          0,
+          this.tilePx / 2 - dispH / 2, // feet on the tile bottom
+          key,
+        );
+        spr.setScale(dispH / n.sprite.h);
+        // Idle.png strips in this pack are the FOUR FACING DIRECTIONS
+        // (down/left/right/up), NOT animation frames — cycling them made
+        // the NPC spin in place forever (user: "xoay vòng liên tục").
+        // Static frame 0 = facing the camera, like a resting NPC.
+        spr.setFrame(0);
         body = spr;
       } else {
         body = this.add
@@ -2958,6 +2964,9 @@ export class WorldScene extends Phaser.Scene {
     const rise = (1 - this.npcPromptAlpha) * 8;
     this.npcPrompt.setPosition(
       p.x * this.tilePx + this.tilePx / 2,
+      // Hug the character-scale NPC's head (2-tile body => head top at
+      // center - 24): tail points right at the raccoon, not at the player
+      // standing south (user: "npc lệch xa cái nơi nhấn F").
       p.y * this.tilePx - 26 + bob + rise,
     );
     this.npcPrompt.setAlpha(this.npcPromptAlpha);
