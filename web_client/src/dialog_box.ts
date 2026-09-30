@@ -55,6 +55,10 @@ export class DialogBox {
   private timer: number | null = null;
   private onDone: (() => void) | null = null;
   private keyHandler = (ev: KeyboardEvent) => this.onKey(ev);
+  private clickHandler = (ev: MouseEvent) => {
+    ev.stopPropagation();
+    this.advance();
+  };
   private resizeHandler = () => this.applyScale();
 
   /** Phóng box theo be rong man hinh (max 92% viewport, scale nguyen ken pixel). */
@@ -78,10 +82,14 @@ export class DialogBox {
     this.root = el("div", [
       "position:fixed", "left:50%", "transform:translateX(-50%)",
       "transform-origin:center bottom",
-      "bottom:26px", "z-index:2500", "pointer-events:none",
+      "bottom:26px", "z-index:2500",
+      // Box ăn click (advance như Space) — không cho click xuyên xuống canvas
+      // (trước đây pointer-events:none nên click vào hộp thoại là bó tay).
+      "pointer-events:auto", "cursor:pointer",
       `width:${BOX_W}px`, `height:${BOX_H}px`,
       "image-rendering:pixelated", "user-select:none",
     ].join(";"), document.body);
+    this.root.addEventListener("click", this.clickHandler);
     window.addEventListener("resize", this.resizeHandler);
     this.applyScale();
 
@@ -146,6 +154,7 @@ export class DialogBox {
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
     window.removeEventListener("keydown", this.keyHandler);
     window.removeEventListener("resize", this.resizeHandler);
+    this.root?.removeEventListener("click", this.clickHandler);
     this.root?.remove();
     this.root = null;
     this.pages = [];
@@ -154,13 +163,19 @@ export class DialogBox {
   private onKey(ev: KeyboardEvent): void {
     if (ev.key === "Enter" || ev.key === " " || ev.key === "e" || ev.key === "f" || ev.key === "F") {
       ev.preventDefault();
-      // Khi đang có options (live NPC) thì phím KHÔNG tự chuyển trang —
-      // người chơi phải click chọn. Skip typing vẫn cho phép.
-      // "f"/"F": cùng phím F mở hộp thoại cũng phải chuyển trang — trước
-      // đây F trong box là phím chết (main.ts return true để đỡ re-open,
-      // nhưng dialogBox không hề xử lý F → không avance được trang nào).
-      this.next();
+      this.advance();
     }
+  }
+
+  /** Cùng luật cho phím (Space/Enter/E/F) VÀ click/tap vào hộp thoại:
+   *  đang gõ dở → skip tới hết; hết gõ mà có options → KHÔNG tự chuyển
+   *  (người chơi phải bấm nút chọn — trước đây phím vẫn next()/finish()
+   *  xuyên qua, đóng hộp mất lựa chọn); còn lại → trang sau / đóng. */
+  private advance(): void {
+    if (this.timer !== null) { this.next(); return; } // skip typing
+    const p = this.pages[this.pageIdx];
+    if (p?.options && p.options.length) return;       // chờ click nút options
+    this.next();
   }
 
   private clearChoiceWrap(): void {
@@ -257,7 +272,9 @@ export class DialogBox {
     } else {
       this.arrowEl!.style.display = "block";
     }
-    this.root!.style.pointerEvents = p.choices ? "auto" : "none";
+    // Box LUÔN nhận click/tap (advance như Space) — trừ khi đang có options:
+    // click vào box giữ nguyên advance() nhưng nó no-op, click nút mới chọn.
+    this.root!.style.pointerEvents = "auto";
   }
 
   private next(): void {
