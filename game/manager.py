@@ -852,6 +852,8 @@ class GameManager:
             nx_f, ny_f = rt.collision.can_move_float(
                 player.x_f, player.y_f, ux * moved, uy * moved,
             )
+            # NPC hitbox: the box never enters an NPC tile — clamp + eject.
+            nx_f, ny_f = self.clamp_move_around_npcs(rt, player.x_f, player.y_f, nx_f, ny_f)
             if (nx_f, ny_f) != (player.x_f, player.y_f):
                 player.x_f, player.y_f = nx_f, ny_f
                 moved_any = True
@@ -1055,6 +1057,10 @@ class GameManager:
                         nx_f, ny_f = rt.collision.can_move_float(
                             player.x_f, player.y_f, step_x, step_y
                         )
+                        # NPC hitbox clamp (see _converge_to_report).
+                        nx_f, ny_f = self.clamp_move_around_npcs(
+                            rt, player.x_f, player.y_f, nx_f, ny_f
+                        )
                         if (nx_f, ny_f) != (player.x_f, player.y_f):
                             player.x_f, player.y_f = nx_f, ny_f
                             moved_any = True
@@ -1229,6 +1235,38 @@ class GameManager:
                     # The new node changes the world signature -> push the
                     # resource tile delta on the next snapshot.
                     rt._res_resent = True
+
+            # --- wandering NPCs ("thương nhân lang thang") ---------------
+            # One beat per tick: every NPC with a wander config walks toward
+            # its target tile, PAUSES when a player is adjacent (talking),
+            # and its live float position rides the 20 Hz snapshot. Static
+            # NPCs (signs/doors) skip this entirely.
+            _npcs = getattr(rt.npc_map, "npcs", []) if getattr(rt, "npc_map", None) else []
+            _wanderers = [n for n in _npcs if getattr(n, "wander", None)]
+            if _wanderers:
+                _dt_npc = 1.0 / max(1.0, WEB_TICK_HZ)
+                _occupied = {
+                    (p.x, p.y) for p in rt.state.get_visible_players()
+                }
+                _player_floats = [
+                    (p.x_f, p.y_f) for p in rt.state.get_visible_players()
+                ]
+                _npc_moved = False
+                for _npc in _wanderers:
+                    from game.npc import wander_step as _wander_step
+
+                    if _wander_step(
+                        _npc,
+                        rt.map_data.is_walkable,
+                        _occupied,
+                        _player_floats,
+                        _dt_npc,
+                        self.zombie_rng,
+                    ):
+                        _npc_moved = True
+                if _npc_moved:
+                    moved_any = True
+                print(f"[NPCWANDER] wanderers={len(_wanderers)} moved={_npc_moved} pos={[(n.id, round(n.x_f,2), round(n.y_f,2)) for n in _wanderers]}", flush=True)
         if moved_any:
             self._touch_web_activity(rt)
         if zombie_touched:
@@ -1236,6 +1274,29 @@ class GameManager:
             # Discord coalescer work is scheduled here (that was the "cắn là
             # giật" cause — every web bite re-rendered chat screens).
             pass
+
+    # ---- NPC hitbox: player-vs-NPC -------------------------------------
+
+    @staticmethod
+    def clamp_move_around_npcs(rt: "ScenarioRuntime", x_f: float, y_f: float,
+                               nx_f: float, ny_f: float) -> tuple:
+        """Clamp a web player's swept move so its box never ENTERS an NPC's
+        tile (the NPC hitbox — player gets pushed OUT, never through).
+
+        Applied after the normal wall sweep: if the destination overlaps an
+        NPC tile (box half 0.3), the axis with the smaller penetration is
+        pushed back to the tile edge (+/-0.85 from the NPC center). Static
+        NPCs block exactly the same as moving ones — the tile is the hitbox.
+        """
+        npcs = getattr(rt.npc_map, "npcs", []) if getattr(rt, "npc_map", None) else []
+        if not npcs:
+            return nx_f, ny_f
+        from game.npc import npc_push_out as _push
+
+        # Only clamp when the MOVE crossed into an NPC overlap (a player
+        # already standing overlapped — spawned inside — still gets pushed,
+        # which is the desired ejection).
+        return _push(npcs, nx_f, ny_f)
 
     # ---- stamina -------------------------------------------------------
 
@@ -1323,7 +1384,15 @@ class GameManager:
 
             player.visible = False
             player.dead_until = _t2.time() + 5.0
-            player.death_reason = "chết vì hiệu ứng độc/thối rửa"
+            # Reason from the KILLING effect (infection/poison), not a canned
+            # string — the death overlay shows what actually killed us.
+            from game.death_reasons import (
+                death_reason_for_status as _status_reason,
+                stamp as _stamp,
+            )
+
+            killer = landed[-1][0] if landed else ""
+            _stamp(player, _status_reason(killer), kind="status")
             self._schedule_respawn(rt, player.user_id)
 
     def _touch_web_activity(self, rt: ScenarioRuntime) -> None:
@@ -1682,8 +1751,12 @@ class GameManager:
                 return {"ok": False, "reason": "bad_slot"}
             target = inv.slots[slot]
             if target and target[0] == res["id"]:
-                # Same kind: merge onto the stack.
+                # Same kind: merge onto the stack. The result slot is now
+                # EMPTY — bug 30/09: missing pop let the crafted item STAY
+                # parked on the result slot while its copy went to the bag
+                # (infinite dup: craft -> collect-merge -> collect again).
                 inv.set_slot(slot, res["id"], target[1] + res["qty"])
+                rt.craft_results.pop(user_id, None)
             elif target:
                 # DIFFERENT kind: plain SWAP (same as a bag-to-bag drag) —
                 # the result lands on the chosen cell and the displaced
@@ -3116,6 +3189,8 @@ class GameManager:
             player.visible = True
             player.dead_until = None
             player.death_reason = None
+            player.death_kind = None
+            player.died_at = None
             # Respawn is tile-based: re-centre the continuous position so a
             # connected web client sees the player at the new tile's centre.
             player.sync_float_from_int()

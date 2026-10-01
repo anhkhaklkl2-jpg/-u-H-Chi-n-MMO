@@ -7,7 +7,8 @@
       "x": 137,
       "y": 104,
       "dialogue": "gac_dac_intro",
-      "sprite": { "w": 16, "h": 16, "frames": 4 }
+      "sprite": { "w": 16, "h": 16, "frames": 4 },
+      "wander": { "radius": 3, "speed": 1.2, "pause": 1.5 }
     }
   ],
   "dialogues": {

@@ -130,9 +130,12 @@ export interface WelcomePayload {
   // Self's equipped Kaetram armor (same shape as players[].armor).
   armor?: Record<string, string>;
   // Interactive NPCs of this map (emoji tokens; E/click chats). Absent on
-  // older servers — client renders nothing extra then.
+  // older servers — client renders nothing extra then. Wandering NPCs also
+  // carry xf/yf (live float pos) + facing.
   npcs?: { id: string; name: string; emoji: string; x: number; y: number;
-           sprite?: { w: number; h: number; frames: number } }[];
+           sprite?: { w: number; h: number; frames: number };
+           xf?: number; yf?: number; facing?: string; moving?: boolean;
+           walks?: boolean }[];
   // Paperdoll manifest (frame grid + animation rows/speeds) for the player
   // sheets in assets/players/. Absent on older servers — client falls back
   // to the plan-A square body in that case.
@@ -259,6 +262,9 @@ export interface SnapshotPayload {
   // Meteor shower events (game/meteors.py, night bigmap only):
   // [id, tx, ty, dir("left"|"right"), impact_in_seconds].
   meteors?: [number, number, number, string, number][];
+  // Wandering NPCs ("thương nhân lang thang") — only MOVERS ride the 20 Hz
+  // snapshot: [id, xf, yf, facing, moving]. Static NPCs come with welcome.
+  npc_moves?: [string, number, number, string, boolean][];
 }
 
 export interface PlayerPayload {

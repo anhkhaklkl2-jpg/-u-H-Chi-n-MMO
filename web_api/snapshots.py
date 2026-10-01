@@ -751,10 +751,13 @@ def _blocks_catalog_payload() -> List[dict]:
 
 def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
     """Interactive NPCs of this map for the web client (id/name/emoji/pos
-    + optional real-sprite geometry for the sprite renderer)."""
+    + optional real-sprite geometry for the sprite renderer). Wandering NPCs
+    carry their LIVE float position + facing so the client animates them
+    like players."""
     npc_map = getattr(rt, "npc_map", None)
-    return [
-        {
+    out = []
+    for n in (npc_map.npcs if npc_map else []):
+        row = {
             "id": n.id,
             "name": n.name,
             "emoji": n.emoji,
@@ -762,8 +765,17 @@ def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
             "y": n.y,
             **({"sprite": n.sprite} if n.sprite else {}),
         }
-        for n in (npc_map.npcs if npc_map else [])
-    ]
+        if getattr(n, "wander", None):
+            n.init_float()
+            row["xf"] = round(n.x_f, 3)
+            row["yf"] = round(n.y_f, 3)
+            row["facing"] = getattr(n, "facing", "down")
+            row["moving"] = n.target is not None
+            # walks=true tells the client to fetch npcs/<id>_walk.png (16px
+            # cells, 4 facing rows x 4 walk frames) for the patrol animation.
+            row["walks"] = True
+        out.append(row)
+    return out
 
 
 def _web_session_of(rt: ScenarioRuntime, user_id: int):
@@ -985,6 +997,15 @@ def build_snapshot(rt: ScenarioRuntime, user_id: int, seq: int) -> dict:
         # impact_in_s] rows. Empty most of the time — a 3-element list is
         # invisible on the wire at 20 Hz.
         "meteors": _meteors_payload(rt),
+        # Wandering NPCs ("thương nhân lang thang"): only the MOVERS ride
+        # the 20 Hz snapshot (id + live float pos + facing) — static NPCs
+        # already came with the welcome and never change. A missing/empty
+        # key means "nothing moved" for the client.
+        "npc_moves": [
+            [n.id, round(n.x_f, 3), round(n.y_f, 3), n.facing, n.target is not None]
+            for n in (getattr(rt, "npc_map", None).npcs if getattr(rt, "npc_map", None) else [])
+            if getattr(n, "wander", None)
+        ],
     }
     # PERF (world-delta model — how MMOs ship static world state): the
     # resource tile list (~5 KB) used to ride along on EVERY 20 Hz snapshot

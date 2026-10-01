@@ -315,8 +315,8 @@ function applyTexture(name: string, b64: string): void {
       game.textures.addSpriteSheet(key, img, { frameWidth: fw, frameHeight: fh });
     } else if (name.startsWith("npcs/")) {
       // NPC idle strips (Ninja Adventure pack): register as a SPRITESHEET
-      // with the geometry from the npc's welcome payload (16px frames here).
-      // A blanket cell size mis-crops differently-sized strips.
+      // with 16px cells: the idle strip is 4 facing cells, the walk strip is
+      // 4 facing rows x 4 walk frames — same cell geometry, one branch.
       game.textures.addSpriteSheet(key, img, {
         frameWidth: 16, frameHeight: 16,
       });
@@ -578,6 +578,9 @@ const net = new Net({
       keep.forEach((k) => seenDamageKeys.add(k));
     }
     scene.applySnapshot(frame);
+    // Wandering NPCs ("thương nhân lang thang"): server positions ride the
+    // 20 Hz snapshot — feed the scene's glide + hitbox tracking.
+    if (frame.npc_moves?.length) scene.onNpcMoves(frame.npc_moves);
     // Worn armor echo (20 Hz): equipment panel + paperdoll converge to the
     // server truth after every equip/unequip op (frame.self.armor rides
     // every snapshot from web_api/snapshots.py).

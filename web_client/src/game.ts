@@ -301,6 +301,14 @@ export class WorldScene extends Phaser.Scene {
     string, { container: Phaser.GameObjects.Container; x: number; y: number;
               spr?: Phaser.GameObjects.Sprite }
   >();
+  // WANDERING NPCs ("thương nhân lang thang"): live server float pos (the
+  // lerp TARGET — the sprite glides toward it each frame) + facing + moving
+  // flag. Static NPCs never enter this map. Tiles the wanderers currently
+  // occupy act as PLAYER hitbox (solidAt + resolveSolidOverlap push out).
+  private npcLive = new Map<string,
+    { xf: number; yf: number; tx: number; ty: number; facing: string; moving: boolean }>();
+  /** Tiles occupied by wandering NPCs right now — player-solid. */
+  private npcSolidTiles = new Set<string>();
   /** Set by main.ts: opens the NPC dialogue toast (E / click near an NPC). */
   onNpcInteract: ((npc: { id: string; name: string }) => void) | null = null;
   /** Nearest NPC within interact range (F-key gate). */
@@ -2120,9 +2128,15 @@ export class WorldScene extends Phaser.Scene {
     }
     // NPC proximity is recomputed per frame (cheap — a handful of tokens).
     this.nearestNpc = this.findNearestNpc();
+    // Wandering NPCs glide toward their last server position every frame.
+    this.updateNpcWalkPose(nowT);
     // NPC "F" bubble: same fade/bob pattern as the station "E" bubble, but
     // its own element + own suppression so the craft flow stays untouched.
     this.updateNpcPrompt();
+    // Wandering NPCs ("thương nhân lang thang"): glide toward the latest
+    // server position + walk-anim frame + hitbox tiles refresh. Runs BEFORE
+    // stepSelf so the prediction sees THIS frame's NPC solid tiles.
+    this.updateNpcWalkPose(performance.now());
     // --- client-side prediction: move SELF instantly every frame ---
     // Server speed: walk 4 tiles/s, run 6 tiles/s (config.WEB_*_SPEED).
     this.stepSelf();
@@ -2863,19 +2877,34 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private lastNpcs: { id: string; name: string; emoji: string; x: number; y: number;
-                      sprite?: { w: number; h: number; frames: number } }[] = [];
+                      sprite?: { w: number; h: number; frames: number };
+                      walks?: boolean }[] = [];
   /** Body sprites by npc id (breathing bob + facing flip). */
   private npcBodySprites = new Map<string, Phaser.GameObjects.Sprite>();
 
 
   private spawnNpcs(
     npcs: { id: string; name: string; emoji: string; x: number; y: number;
-            sprite?: { w: number; h: number; frames: number } }[],
+            sprite?: { w: number; h: number; frames: number };
+            xf?: number; yf?: number; facing?: string; moving?: boolean;
+            walks?: boolean }[],
   ): void {
     this.lastNpcs = npcs;
     this.npcBodySprites.clear();
     for (const s of this.npcSprites.values()) s.container.destroy();
     this.npcSprites.clear();
+    // WANDERER SEED: a live float position from the welcome (absent on old
+    // servers / static NPCs) starts the per-frame glide + hitbox tracking.
+    this.npcLive.clear();
+    for (const n of npcs) {
+      if (typeof n.xf === "number" && typeof n.yf === "number") {
+        this.npcLive.set(n.id, {
+          xf: n.xf, yf: n.yf, tx: n.xf, ty: n.yf,
+          facing: n.facing ?? "down", moving: n.moving ?? false,
+        });
+      }
+    }
+    this.rebuildNpcSolidTiles();
     for (const n of npcs) {
       const container = this.add.container(n.x * this.tilePx + this.tilePx / 2, n.y * this.tilePx + this.tilePx / 2);
       const label = this.add
@@ -2895,6 +2924,16 @@ export class WorldScene extends Phaser.Scene {
         if (!this.textures.exists(key)) {
           // Same relay pipe as mob sheets (license-safe: bytes stay on bot).
           this.assetFetch?.(`npcs/${n.id}_idle.png`);
+        }
+        // Wanderers also fetch the WALK sheet (4 facing rows x 4 frames,
+        // 16px cells) for the patrol animation — fetched once, registered by
+        // main.ts under `npc-<id>_walk` (missing file answers b64 null, no
+        // retry spam).
+        const walkKey = `npc-${n.id}_walk`;
+        if (n.walks && !this.textures.exists(walkKey)) {
+          this.assetFetch?.(`npcs/${n.id}_walk.png`);
+        }
+        if (!this.textures.exists(key)) {
           // Emoji stand-in keeps the NPC clickable while the sheet flies.
           const standIn = this.add.text(0, 0, n.emoji, { fontSize: "26px" }).setOrigin(0.5);
           container.add([standIn, label]);
@@ -2946,6 +2985,71 @@ export class WorldScene extends Phaser.Scene {
         container, x: n.x, y: n.y,
         spr: body instanceof Phaser.GameObjects.Sprite ? body : undefined,
       });
+      // A wanderer's container starts at its LIVE position, not the spawn
+      // tile (the welcome may arrive after the NPC has wandered off).
+      const live = this.npcLive.get(n.id);
+      if (live) container.setPosition(live.xf * this.tilePx + this.tilePx / 2, live.yf * this.tilePx + this.tilePx / 2);
+    }
+    this.updateNpcWalkPose(performance.now());
+  }
+
+  /** Tiles of the current wanderer positions -> npcSolidTiles (player
+   *  hitbox). Called on every npc_moves snapshot + spawn. */
+  private rebuildNpcSolidTiles(): void {
+    this.npcSolidTiles.clear();
+    for (const [, l] of this.npcLive) {
+      this.npcSolidTiles.add(`${Math.round(l.xf)},${Math.round(l.yf)}`);
+    }
+  }
+
+  /** Server push (applySnapshot lane, main.ts): wandering NPC positions.
+   *  Only MOVERS appear here — updates the lerp targets + hitbox tiles. */
+  onNpcMoves(moves: [string, number, number, string, boolean][]): void {
+    if (!moves || moves.length === 0) return;
+    for (const [id, xf, yf, facing, moving] of moves) {
+      const live = this.npcLive.get(id);
+      if (live) {
+        live.xf = xf; live.yf = yf;
+        live.facing = facing; live.moving = moving;
+      } else {
+        this.npcLive.set(id, { xf, yf, tx: xf, ty: yf, facing, moving });
+      }
+    }
+    this.rebuildNpcSolidTiles();
+  }
+
+  /** Per-frame: glide each wanderer container toward its server position
+   *  (update loop calls this every frame), flip the sprite to the facing
+   *  frame. While MOVING and the walk sheet is loaded, cycles the 4 walk
+   *  frames of the facing row (Ninja Adventure pack: 64x64 = 4 facing rows
+   *  x 4 frames, 16px cells) instead of the idle facing cell. */
+  private updateNpcWalkPose(now: number): void {
+    for (const [id, entry] of this.npcSprites) {
+      const live = this.npcLive.get(id);
+      if (!live) continue;
+      const px = live.xf * this.tilePx + this.tilePx / 2;
+      const py = live.yf * this.tilePx + this.tilePx / 2;
+      entry.container.setPosition(px, py);
+      entry.x = live.xf; entry.y = live.yf;
+      const spr = entry.spr;
+      if (!spr) continue;
+      // Row = facing (down/left/right/up — Ninja Adventure pack order),
+      // frame = the 4-step walk cycle (~280ms per step matches the slow
+      // 1.2 tiles/s wander pace so feet don't slide). Falls back to the
+      // idle strip's facing cells when the walk sheet hasn't landed (or
+      // the NPC is static — the walk sheet is only fetched for wanderers).
+      const walkKey = `npc-${id}_walk`;
+      if (live.moving && this.textures.exists(walkKey)) {
+        const row = { down: 0, left: 1, right: 2, up: 3 }[live.facing] ?? 0;
+        const f = Math.floor(now / 280) % 4;
+        spr.setTexture(walkKey, row * 4 + f);
+      } else {
+        // Idle.png strip = 4 DIRECTION cells (down/left/right/up in this
+        // order for the Ninja Adventure pack) — pick by facing.
+        const frameByFacing: Record<string, number> = { down: 0, left: 1, right: 2, up: 3 };
+        spr.setTexture(`npc-${id}`, frameByFacing[live.facing] ?? 0);
+        spr.setFrame(frameByFacing[live.facing] ?? 0);
+      }
     }
   }
 
@@ -2965,12 +3069,14 @@ export class WorldScene extends Phaser.Scene {
     // LIFE: the idle strip is 4 facing-directions (no anim frames), so the
     // NPC breathes — a small absolute squash/stretch around its BASE scale
     // (never compound: multiplying the live scale drifted to 1.28 within
-    // seconds). The down-facing frame is symmetric — no flip.
-    for (const [, entry] of this.npcSprites) {
+    // seconds). Wanderers SKIP the bob while moving (the glide + facing
+    // frame reads as walking; breathing mid-stride looked wobbly).
+    for (const [id, entry] of this.npcSprites) {
       const spr = entry.spr;
       if (!spr) continue;
       const base = spr.getData("npcBase") as { sx: number; sy: number } | undefined;
       if (!base) continue;
+      if (this.npcLive.get(id)?.moving) continue;
       const breathe = Math.sin(performance.now() / 520);
       spr.setScale(
         base.sx * (1 - breathe * 0.03),
@@ -4563,9 +4669,20 @@ export class WorldScene extends Phaser.Scene {
    * the server's ``is_walkable`` (inverted): out-of-bounds, static collision,
    * placed blocks and standing resource nodes block; felled nodes don't. */
   private solidAt(tx: number, ty: number): boolean {
+    // WANDERING/STATIC NPC hitbox: a tile an NPC currently occupies blocks
+    // the player box — the sweep stops at the tile edge (server parity:
+    // clamp_move_around_npcs) and resolveSolidOverlap pushes the player OUT
+    // when an NPC steps ONTO the box (npc_push_out). Checked FIRST: an NPC
+    // standing on a felled-node tile is still solid.
+    if (this.npcSolidTiles.has(`${tx},${ty}`)) return true;
     // A FELLED node's tile walks free even though the static grid still
     // lists it as blocked (the standing-tree blocker): server parity.
     if (this.felledTiles.has(`${tx},${ty}`)) return false;
+    // WANDERING NPC hitbox: a tile an NPC currently occupies blocks the
+    // player box — resolveSolidOverlap pushes the player OUT (server parity:
+    // clamp_move_around_npcs ejects to the tile edge). Static NPCs (signs,
+    // doors) already sit behind the map's static collision.
+    if (this.npcSolidTiles.has(`${tx},${ty}`)) return true;
     // Mask-refined tiles are ENTERABLE for the sweep (server parity:
     // Collision._mask_passable) — the opaque-pixel correction
     // (correctMaskOverlap, mirrored server-side in can_move_float) does the
