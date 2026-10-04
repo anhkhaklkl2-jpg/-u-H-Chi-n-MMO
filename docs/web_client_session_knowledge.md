@@ -1,6 +1,23 @@
 # Web Client — Kiến thức tổng hợp (session 09/2026)
 
 # ╔══════════════════════════════════════════════════════════════════╗
+# ║  🚨🚨🚨  RAILWAY ĐÃ MIGRATE SANG ACC MỚI (05/10/2026)  🚨🚨🚨          ║
+# ║                                                                  ║
+# ║  URL CŨ web-production-19398.up.railway.app = CHẾT.               ║
+# ║  Acc cũ hết free $5 → project chuyển sang acc Railway mới.        ║
+# ║                                                                  ║
+# ║  • Repo GitHub chính: anhkhaklkl2-jpg/-u-H-Chi-n-MMO              ║
+# ║    → git remote `kha2` (HTTPS, credential acc mới đã lưu máy).    ║
+# ║    Push web client LUÔN LUÔN: `git push kha2 main` + `git push origin main`.║
+# ║  • URL production MỚI: xem `web_client/relay/relay-config.json`   ║
+# ║    (WEB_REDIRECT_URI) — đó là nguồn sự thật duy nhất.             ║
+# ║  • Đổi domain trong tương lai: đọc docs/migration_railway_new_account.md║
+# ║    (4 chỗ: relay-config.json, relay/dist/app-config.json,         ║
+# ║    .env RELAY_URL trên panel bot, vite.config.ts). Bỏ sót 1 =     ║
+# ║    login Discord vỡ (redirect_uri mismatch 400 invalid_grant).    ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
+# ╔══════════════════════════════════════════════════════════════════╗
 # ║  🚨🚨🚨  DISCORD CLIENT ĐANG TẠM NGƯNG PHÁT TRIỂN  🚨🚨🚨          ║
 # ║                                                                  ║
 # ║  TẤT CẢ các thay đổi UI / rendering / tính năng MỚI chỉ nhắm     ║

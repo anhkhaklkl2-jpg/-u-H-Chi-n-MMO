@@ -132,6 +132,12 @@ thêm 1 handler `_cmd_*` + 1 nút panel.
 # then Restart bot on the panel. Details: docs/web_client_session_knowledge.md
 
 # Web client (TypeScript) — Railway auto-deploys on git push:
+# ⚠️ RAILWAY ACC MỚI (05/10/2026 — acc cũ hết free $5, đã migrate):
+#   repo GitHub chính = anhkhaklkl2-jpg/-u-H-Chi-n-MMO → git remote `kha2`
+#   (HTTPS; credential GitHub acc mới đã lưu trong Windows Credential Manager).
+#   origin (acc cũ conist-z) vẫn push song song. Chi tiết migration:
+#   docs/migration_railway_new_account.md. KHÔNG tin URL cũ
+#   web-production-19398.up.railway.app — dead.
 # ⚠️ Mouse input MUST bind to `game.canvas` (Phaser) — NEVER `querySelector("#game-root canvas")`:
 # the weather-fx canvas mounts into #game-root BEFORE Phaser, so that selector grabs the wrong
 # (pointer-events: none) canvas → hover box + clicks silently die, right-click leaks Chrome menu.
@@ -143,7 +149,7 @@ thêm 1 handler `_cmd_*` + 1 nút panel.
 cd web_client; npm run build
 rm -rf relay/dist; cp -r dist relay/dist
 # recreate web_client/relay/dist/app-config.json (client_id + redirect_uri) if wiped
-cd ..; git add ...; git commit; git push github-dauhu main; git push origin main
+cd ..; git add ...; git commit; git push kha2 main; git push origin main
 ```
 
 ### Gotchas (runtime errors NOT caught by py_compile — do not repeat)
@@ -211,6 +217,13 @@ cd ..; git add ...; git commit; git push github-dauhu main; git push origin main
 Do not proceed to the next phase until the current acceptance tests pass.
 
 ## Luật cứng (hard rules — always apply)
+0. **🚨 WEB PRODUCTION = RAILWAY ACC MỚI (05/10/2026)** — acc Railway cũ hết
+   free $5 và project đã migrate. URL cũ `web-production-19398.up.railway.app`
+   **CHẾT** — đừng dùng/probe nó. Push web client PHẢI đi cả 2 remote:
+   `git push kha2 main` (acc mới — Railway mới build từ đây) + `git push origin main`.
+   Khi đổi domain trong tương lai: đọc `docs/migration_railway_new_account.md`
+   (4 chỗ phải đổi: relay-config.json, relay/dist/app-config.json, .env RELAY_URL
+   trên panel bot, vite.config.ts) — bỏ sót 1 trong 4 = login Discord vỡ.
 
 1. **LUÔN trả lời bằng tiếng Việt** — mọi câu trả lời, giải thích, báo cáo cho
    người dùng đều bằng tiếng Việt (code, log, comment giữ nguyên tiếng Anh).
