@@ -3045,13 +3045,19 @@ export class WorldScene extends Phaser.Scene {
     if (!this.mobSilhouette) {
       const img = this.add.image(0, 0, z.body.texture.key, z.body.frame.name);
       img.setTintFill(0xff3b30); // SOLID red — the silhouette IS the coat
-      img.setAlpha(0.92);
+      img.setAlpha(0.7); // user: trong suốt thêm ~30%
+      img.setOrigin(0.5, 1); // scale around the FEET (bottom-center)
       z.container.addAt(img, 0); // behind the body, inside the container
       this.mobSilhouette = { id, img };
     }
     const img = this.mobSilhouette.img;
-    // Mirror the body's live transform (position + walk-bob scale + flip):
-    img.setPosition(z.body.x, z.body.y);
+    // Mirror the body's live transform. FEET ANCHOR (user: "viền lệch xuống
+    // dưới góc trái"): the art sits feet-anchored at the cell bottom, so a
+    // center-origin 1.14 scale spilled red BELOW the feet and off the
+    // head-side edge. Origin (0.5,1) + position at the body's bottom line
+    // grows the coat UP and sideways from the feet instead — even wrap.
+    const bodyBottom = z.body.y + (z.body as Phaser.GameObjects.Image).displayHeight / 2;
+    img.setPosition(z.body.x, bodyBottom);
     img.setScale(z.body.scaleX * 1.14, z.body.scaleY * 1.14);
     // ANIMATION PARITY (user 05/10: "mob đổi frame thì nền không theo —
     // trông kì"): the body's frame advances every animation tick; the
