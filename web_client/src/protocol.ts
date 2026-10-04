@@ -81,6 +81,10 @@ export interface WelcomePayload {
     room_fx?: {
       fires?: [number, number][];
       windows?: [number, number][];
+      fire_scale?: number;
+      fire_speed?: number;
+      window_scale?: number;
+      window_speed?: number;
     } | null;
   };
   self: {

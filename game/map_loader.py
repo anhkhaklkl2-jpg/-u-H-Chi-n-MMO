@@ -37,6 +37,10 @@ class MapData:
     # Empty for maps without a y-sorted layer set (Kaetram/bigmap).
     ysort_cells: Tuple[Tuple[int, int], ...] = ()
     display_name: str = ""
+    # Room-FX anchors (fireplace fires + window shafts) harvested from the
+    # map's fx marker layers at load (game coords). Marker layers are then
+    # DROPPED from tile_layers so their paint never renders into the bake.
+    fx_markers: Dict = field(default_factory=dict)
 
     def is_walkable(self, x: int, y: int) -> bool:
         if not self.collision:
@@ -175,6 +179,40 @@ def _layers_from_tiled(data: dict) -> List[Tuple[str, List[List[int]]]]:
         flat = layer.get("data", [])
         grid = [flat[r * w : (r + 1) * w] for r in range(h)]
         out.append((layer.get("name", ""), grid))
+    return out
+
+
+def _fx_fine_from_tiled(data: dict) -> dict:
+    """Read the map root property "fx_fine" (pixel-fine room-fx anchors,
+    written by the preview drag-align tool). Accepts BOTH Tiled list form
+    ( [{name, type, value}] — value may be a JSON string or an object) and
+    a plain dict form. Returns {} when absent/malformed."""
+    props = data.get("properties")
+    raw = None
+    if isinstance(props, dict):
+        raw = props.get("fx_fine")
+    elif isinstance(props, list):
+        for p in props:
+            if isinstance(p, dict) and p.get("name") == "fx_fine":
+                raw = p.get("value")
+                break
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for kind in ("fires", "windows"):
+        vals = raw.get(kind)
+        if isinstance(vals, list) and vals:
+            out[kind] = vals
+    # Look-tuning keys (fire_scale / fire_speed / window_scale /
+    # window_speed) ride along so the loader can ship them to the client.
+    for k, v in raw.items():
+        if k not in out and isinstance(v, (int, float)):
+            out[k] = v
     return out
 
 
@@ -604,6 +642,14 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
     tile_width = data.get("tilewidth", 32)
     tile_height = data.get("tileheight", 32)
     tile_layers = _layers_from_tiled(data)
+    # FX marker layers are METADATA (fireplace/window anchors), never art:
+    # split them off BEFORE the bbox so a stray marker can never resize the
+    # map, leak paint into the bake, or match collision rules. Anchors are
+    # harvested back into game coords after the remap below.
+    from game.room_fx import is_fx_marker_layer as _is_fx_layer
+
+    fx_raw = [(n, g) for n, g in tile_layers if _is_fx_layer(n)]
+    tile_layers = [(n, g) for n, g in tile_layers if not _is_fx_layer(n)]
     bbox = _bbox_from_layers(tile_layers)
     ox = oy = 0
     if bbox is not None:
@@ -624,6 +670,33 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
         width = max_x - min_x + 1
         height = max_y - min_y + 1
         tile_layers = _remap_layers(tile_layers, ox, oy, width, height)
+    # Harvest FX anchors into game coords (same bbox shift as the art).
+    from game.room_fx import detect_room_fx as _detect_fx
+
+    fx_markers = _detect_fx(_remap_layers(fx_raw, ox, oy, width, height)) if fx_raw else {}
+    # Pixel-fine FX anchors (preview drag-align): the map root property
+    # "fx_fine" = {"fires": [[x,y],...], "windows": [[x,y],...]} holds
+    # FRACTIONAL game coords. They override the harvested cell centers so
+    # a hand-dragged anchor keeps its exact px position. Only applied when
+    # the anchor COUNT still matches — Tiled edits that add/remove marker
+    # cells silently fall back to cell centers (stale offsets never apply).
+    _fine = _fx_fine_from_tiled(data)
+    if _fine:
+        for _kind, _vals in _fine.items():
+            _cells = fx_markers.get(_kind)
+            if (
+                isinstance(_vals, list) and _cells and len(_vals) == len(_cells)
+                and all(isinstance(v, (list, tuple)) and len(v) >= 2 for v in _vals)
+            ):
+                fx_markers[_kind] = [[float(v[0]), float(v[1])] for v in _vals]
+        # Look tuning (fire_scale / fire_speed / window_scale / window_speed)
+        # rides along in the same dict — the welcome payload ships it and the
+        # client's RoomFx.setup applies it.
+        for _k, _v in _fine.items():
+            if _k in ("fires", "windows"):
+                continue
+            if isinstance(_v, (int, float)) and 0.1 <= float(_v) <= 4.0:
+                fx_markers[_k] = float(_v)
     collision = _collision_from_layers(tile_layers, width, height)
     # OR in the Ekonia solids (already absolute tile coords): shift by the
     # same bbox origin so grid space matches.
@@ -1032,6 +1105,7 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
         tileset=tileset,
         tilesets=tilesets,
         tile_layers=tile_layers,
+        fx_markers=fx_markers,
         tile_masks=tile_masks,
         stair_walkable=tuple(stair_overrides),
         # Godot y-sorted canopy cells (bbox-shifted into grid space).

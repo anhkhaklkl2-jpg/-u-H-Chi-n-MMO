@@ -263,6 +263,48 @@ export class PreviewPanel {
       scene.setFxAlign(fxAlignOn);
       fxBtn.textContent = `🎯 Kéo căn FX: ${fxAlignOn ? "BẬT — kéo chấm sáng, thả để lưu" : "TẮT"}`;
     }, "#3a2a12");
+    // 🎚️ FX look tuning: size + speed per kind (fire/window), live-applied
+    // and auto-saved (debounced) through the same fx_align channel.
+    const fxScene = () => (window as unknown as {
+      gameScene?: {
+        setFxParams(p: Record<string, number>): void;
+        commitFxAlign(): void;
+        welcome?: { map?: { room_fx?: Record<string, number> | null } };
+      };
+    }).gameScene;
+    let fxSaveTimer: number | null = null;
+    const fxSave = () => {
+      if (fxSaveTimer !== null) window.clearTimeout(fxSaveTimer);
+      fxSaveTimer = window.setTimeout(() => fxScene()?.commitFxAlign(), 700);
+    };
+    const fxSlider = (label: string, key: string, min: number, max: number): void => {
+      const cur = fxScene()?.welcome?.map?.room_fx?.[key] ?? 1;
+      const line = document.createElement("div");
+      line.style.cssText = "display:flex;align-items:center;gap:5px;margin:2px 0";
+      const cap = document.createElement("span");
+      cap.textContent = label;
+      cap.style.cssText = "font:10px monospace;color:#9fb0d8;min-width:64px";
+      const inp = document.createElement("input");
+      inp.type = "range";
+      inp.min = String(min); inp.max = String(max); inp.step = "0.05";
+      inp.value = String(cur);
+      inp.style.cssText = "flex:1";
+      const val = document.createElement("span");
+      val.textContent = Number(cur).toFixed(2);
+      val.style.cssText = "font:10px monospace;color:#dfe6ff;min-width:32px;text-align:right";
+      inp.oninput = () => {
+        const v = parseFloat(inp.value);
+        val.textContent = v.toFixed(2);
+        fxScene()?.setFxParams({ [key]: v });
+        fxSave();
+      };
+      line.append(cap, inp, val);
+      mapSec.appendChild(line);
+    };
+    fxSlider("🔥 cỡ", "fire_scale", 0.5, 2.5);
+    fxSlider("🔥 tốc độ", "fire_speed", 0.25, 3);
+    fxSlider("🪟 cỡ", "window_scale", 0.5, 2.5);
+    fxSlider("🪟 tốc độ", "window_speed", 0.25, 3);
 
     // ---- 📡 status + log ----
     const st = details("📡 Trạng thái & log", true);

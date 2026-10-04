@@ -23,6 +23,11 @@ import { perf } from "./perf";
 export interface RoomFxAnchors {
   fires?: [number, number][];
   windows?: [number, number][];
+  /** Per-kind look tuning (preview drag-align tool). Defaults 1. */
+  fire_scale?: number;
+  fire_speed?: number;
+  window_scale?: number;
+  window_speed?: number;
 }
 
 export const FIRE_SHEET = "fx/fire_12.png";
@@ -73,6 +78,11 @@ export class RoomFx {
   private shafts: Shaft[] = [];
   private tw = 32;
   private fireAsked = false;
+  // Look tuning (persisted via the map's "fx_fine" property).
+  private fireScale = 1;
+  private fireSpeed = 1;
+  private winScale = 1;
+  private winSpeed = 1;
 
   // ---- DRAG-ALIGN (preview-only tool, user request 05/10) ----
   // When enabled, the user grabs a fire's warm HALO ("ánh sáng") or a
@@ -86,6 +96,24 @@ export class RoomFx {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+  }
+
+  /** Apply look tuning live (panel sliders). */
+  applyParams(p: {
+    fire_scale?: number; fire_speed?: number;
+    window_scale?: number; window_speed?: number;
+  }): void {
+    const cl = (v: number | undefined, lo: number, hi: number) =>
+      typeof v === "number" && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined;
+    const fs = cl(p.fire_scale, 0.3, 3); if (fs !== undefined) this.fireScale = fs;
+    const fv = cl(p.fire_speed, 0.25, 3); if (fv !== undefined) this.fireSpeed = fv;
+    const ws = cl(p.window_scale, 0.3, 3); if (ws !== undefined) this.winScale = ws;
+    const wv = cl(p.window_speed, 0.25, 3); if (wv !== undefined) this.winSpeed = wv;
+  }
+
+  /** Public persist trigger (panel sliders auto-save). */
+  commitFx(): void {
+    this.commitAlign();
   }
 
   /** Toggle the drag-align mode (preview panel "🎯 Căn FX"). */
@@ -103,7 +131,7 @@ export class RoomFx {
     }
     if (this.alignLabel) {
       this.alignLabel.setVisible(on);
-      this.alignLabel.setText(on ? "🎯 Kéo chấm sáng lửa / dải cửa sổ…" : "");
+      this.alignLabel.setText(on ? "🎯 Kéo chấm sáng (theo px) — thả để lưu" : "");
     }
     for (const f of this.flames) this.wireDrag(f.halo, on);
     for (const sh of this.shafts) this.wireDrag(sh.img, on);
@@ -127,37 +155,54 @@ export class RoomFx {
 
   private onDrag(g: Phaser.GameObjects.Image, wx: number, wy: number): void {
     if (!this.alignOn) return;
-    const tx = Math.floor(wx / this.tw);
-    const ty = Math.floor(wy / this.tw);
+    // PIXEL-FREE drag (user 05/10 "kéo theo từng px thay vì theo từng
+    // block"): the anchor keeps the raw float position; the label shows
+    // the base tile + the pixel offset so the user knows what will save.
     const fl = this.flames.find((f) => f.halo === g);
     if (fl) {
-      fl.cx = (tx + 0.5) * this.tw;
-      fl.cy = (ty + 0.5) * this.tw;
-      fl.halo.setPosition(fl.cx, fl.cy - this.tw * 0.35);
+      fl.cx = wx;
+      fl.cy = wy + this.tw * 0.35; // halo rides 0.35 tile above the anchor
+      fl.halo.setPosition(wx, wy);
       fl.spr?.setPosition(fl.cx, fl.cy - 9);
       fl.spr2?.setPosition(fl.cx + 4, fl.cy - 8);
-      // embers/halo flicker re-read cx/cy every update() — no extra work.
-      this.alignLabel?.setText(`🔥 lửa → ô (${tx},${ty})`);
+      // embers re-read cx/cy every update() — no extra work.
+      const tx = Math.floor(fl.cx / this.tw);
+      const ty = Math.floor(fl.cy / this.tw);
+      const ox = Math.round(fl.cx - (tx + 0.5) * this.tw);
+      const oy = Math.round(fl.cy - (ty + 0.5) * this.tw);
+      this.alignLabel?.setText(`🔥 lửa → ô (${tx},${ty}) ${ox >= 0 ? "+" : ""}${ox},${oy >= 0 ? "+" : ""}${oy}px`);
       return;
     }
     const sh = this.shafts.find((s) => s.img === g);
     if (!sh) return;
-    sh.cx = (tx + 0.5) * this.tw;
-    sh.top = ty * this.tw;
-    sh.img.setPosition(sh.cx, sh.top);
-    this.alignLabel?.setText(`🪟 cửa sổ → ô (${tx},${ty})`);
+    sh.cx = wx;
+    sh.top = wy;
+    sh.img.setPosition(wx, wy);
+    const tx = Math.floor(sh.cx / this.tw);
+    const ty = Math.floor(sh.top / this.tw);
+    const ox = Math.round(sh.cx - (tx + 0.5) * this.tw);
+    const oy = Math.round(sh.top - ty * this.tw);
+    this.alignLabel?.setText(`🪟 cửa sổ → ô (${tx},${ty}) ${ox >= 0 ? "+" : ""}${ox},${oy >= 0 ? "+" : ""}${oy}px`);
   }
 
-  /** Drop -> snap already applied; report the whole anchor set. */
+  /** Drop -> report the WHOLE anchor set as FRACTIONAL game coords
+   *  (2 decimals) plus the look tuning. The server keeps the exact px
+   *  position + tuning in the map's "fx_fine" property and the base cell
+   *  in the marker layer. */
   private commitAlign(): void {
-    if (!this.alignOn || !this.onAlignCommit) return;
+    if (!this.onAlignCommit) return;
+    const fine = (v: number) => Math.round(v * 100) / 100;
     this.onAlignCommit({
       fires: this.flames.map(
-        (f) => [Math.round(f.cx / this.tw - 0.5), Math.round(f.cy / this.tw - 0.5)] as [number, number],
+        (f) => [fine(f.cx / this.tw - 0.5), fine(f.cy / this.tw - 0.5)] as [number, number],
       ),
       windows: this.shafts.map(
-        (s) => [Math.round(s.cx / this.tw - 0.5), Math.round(s.top / this.tw)] as [number, number],
+        (s) => [fine(s.cx / this.tw - 0.5), fine(s.top / this.tw)] as [number, number],
       ),
+      fire_scale: fine(this.fireScale),
+      fire_speed: fine(this.fireSpeed),
+      window_scale: fine(this.winScale),
+      window_speed: fine(this.winSpeed),
     });
   }
 
@@ -167,6 +212,7 @@ export class RoomFx {
     if (!perf.room) return;
     if (!anchors || ((anchors.fires ?? []).length === 0 && (anchors.windows ?? []).length === 0)) return;
     this.tw = tilePx || 32;
+    this.applyParams(anchors);
     this.ensureSharedTextures();
     for (const [fx, fy] of anchors.fires ?? []) this.addFire((fx + 0.5) * this.tw, (fy + 0.5) * this.tw);
     for (const [wx, wy] of anchors.windows ?? []) this.addShaft((wx + 0.5) * this.tw, wy * this.tw);
@@ -176,6 +222,11 @@ export class RoomFx {
       fetchAsset(FIRE_SHEET);
     }
     if (this.flames.length > 0 && this.scene.textures.exists(FIRE_KEY)) this.attachFlames();
+    // Align mode survived a re-setup (welcome refresh): re-wire drags.
+    if (this.alignOn) {
+      for (const f of this.flames) this.wireDrag(f.halo, true);
+      for (const sh of this.shafts) this.wireDrag(sh.img, true);
+    }
   }
 
   /** The fire strip arrived (main.ts fx/ lane) — attach flame sprites. */
@@ -190,46 +241,56 @@ export class RoomFx {
     for (const f of this.flames) {
       // Flame strip frames (0..7 loop) + gentle scale breathing.
       // Scaled DOWN + slower burn so the fire stays INSIDE the hearth
-      // (user: "lửa cháy ra cả ngoài lò").
+      // (user: "lửa cháy ra cả ngoài lò"). fireSpeed scales the tempo,
+      // fireScale the size (preview drag-align sliders).
+      const ft = nowMs * this.fireSpeed;
       if (f.spr) {
-        f.spr.setFrame(Math.floor(nowMs / 175 + f.phase) % 8);
-        const s = 1.8 + 0.12 * Math.sin(nowMs / 340 + f.phase);
+        f.spr.setFrame(Math.floor(ft / 175 + f.phase) % 8);
+        const s = (1.8 + 0.12 * Math.sin(ft / 340 + f.phase)) * this.fireScale;
         f.spr.setScale(s);
       }
       if (f.spr2) {
-        f.spr2.setFrame(Math.floor(nowMs / 150 + f.phase * 1.7 + 3) % 8);
-        const s2 = 1.1 + 0.1 * Math.sin(nowMs / 290 + f.phase * 2.1);
+        f.spr2.setFrame(Math.floor(ft / 150 + f.phase * 1.7 + 3) % 8);
+        const s2 = (1.1 + 0.1 * Math.sin(ft / 290 + f.phase * 2.1)) * this.fireScale;
         f.spr2.setScale(s2);
       }
+      // Halo: size tracks fireScale (live), flicker tracks fireSpeed.
+      f.halo.setScale(((this.tw * 1.7 * 2) / 128) * this.fireScale);
       // Halo flicker: two detuned sines read as candle chaos, never periodic.
       const flick =
         0.30 +
-        0.05 * Math.sin(nowMs / 310 + f.phase) +
-        0.03 * Math.sin(nowMs / 113 + f.phase * 1.7);
+        0.05 * Math.sin(ft / 310 + f.phase) +
+        0.03 * Math.sin(ft / 113 + f.phase * 1.7);
       f.halo.setAlpha(Math.max(0.12, flick * nightBoost));
       // Embers rise ~1.5 tiles, wobble, fade.
       for (const e of f.embers) {
-        const t = (nowMs / 1500 + e.seed) % 1;
+        const t = (ft / 1500 + e.seed) % 1;
         e.spr.setPosition(
-          f.cx + Math.sin(nowMs / 480 + e.seed * 9) * 7 * t,
+          f.cx + Math.sin(ft / 480 + e.seed * 9) * 7 * t,
           f.cy - 12 - t * this.tw * 1.5,
         );
         e.spr.setAlpha((1 - t) * 0.75);
-        const es = 0.5 + t * 0.9;
+        const es = (0.5 + t * 0.9) * this.fireScale;
         e.spr.setScale(es);
       }
     }
     for (const sh of this.shafts) {
+      // Size + tempo follow the window sliders (preview drag-align).
+      const wt = nowMs * this.winSpeed;
+      sh.img.setScale(
+        ((this.tw * 1.25) / 64) * this.winScale,
+        ((this.tw * 3.5) / 128) * this.winScale,
+      );
       // Day: bright cool shaft; night: dim moon-blue wash.
       const a = 0.05 + 0.09 * dayF;
       sh.img.setAlpha(a);
       sh.img.setTint(dayF > 0.45 ? 0xcfe0ff : 0x8fa8ff);
       for (const m of sh.motes) {
         m.spr.setPosition(
-          sh.cx + Math.sin(nowMs / 1700 + m.seed * 7) * this.tw * 0.45,
-          sh.top + ((nowMs / 5200 + m.seed) % 1) * this.tw * 3.2,
+          sh.cx + Math.sin(wt / 1700 + m.seed * 7) * this.tw * 0.45 * this.winScale,
+          sh.top + ((wt / 5200 + m.seed) % 1) * this.tw * 3.2 * this.winScale,
         );
-        m.spr.setAlpha(0.10 + 0.14 * (0.5 + 0.5 * Math.sin(nowMs / 900 + m.seed * 5)));
+        m.spr.setAlpha(0.10 + 0.14 * (0.5 + 0.5 * Math.sin(wt / 900 + m.seed * 5)));
       }
     }
   }
