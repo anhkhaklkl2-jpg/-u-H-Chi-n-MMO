@@ -2996,7 +2996,7 @@ export class WorldScene extends Phaser.Scene {
     const ring = this.mobTargetOutline;
     // Candidate mob: the locked mobile aim tile's mob first (sticky lock),
     // else the live mouse tile's mob.
-    let hit: { id: string; el: { x: number; y: number; w: number; h: number } } | null = null;
+    let hit: { id: string; box: { x: number; y: number; w: number; h: number } } | null = null;
     const tilesToTry: { x: number; y: number }[] = [];
     if (this.mobileAimTile) tilesToTry.push(this.mobileAimTile);
     if (this.mouseTile) tilesToTry.push(this.mouseTile);
@@ -3005,17 +3005,17 @@ export class WorldScene extends Phaser.Scene {
       if (!id) continue;
       const z = this.zombies.get(id);
       if (!z) continue;
-      const b = z.body.getBounds();
-      const pad = this.mobFramePad(b.height);
+      const b = this.mobBodyBox(z);
+      const pad = this.mobFramePad(b.h);
       hit = {
         id,
-        el: { x: b.x - pad, y: b.y - pad, w: b.width + pad * 2, h: b.height + pad * 2 },
+        box: { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 },
       };
       break;
     }
     if (hit) {
-      ring.setPosition(hit.el.x + hit.el.w / 2, hit.el.y + hit.el.h / 2)
-        .setSize(hit.el.w, hit.el.h)
+      ring.setPosition(hit.box.x + hit.box.w / 2, hit.box.y + hit.box.h / 2)
+        .setSize(hit.box.w, hit.box.h)
         .setVisible(true)
         .setActive(true);
       this.mobHoverId = hit.id;
@@ -3025,20 +3025,39 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** The mob whose CURRENT lerped position covers `tx,ty` (body rect
-   *  hit-test, topmost last — stable enough for hover). */
+  /** WORLD-space body box of one mob: the body lives INSIDE a Container
+   *  (child getBounds() returns LOCAL bounds — the container transform is
+   *  NOT included, the old hit-test silently missed every mob), so the
+   *  world box = container pos + body local pos ± display size. The
+   *  container pos is the live lerped position, so the box tracks a
+   *  walking mob frame-by-frame. */
+  private mobBodyBox(z: {
+    container: Phaser.GameObjects.Container;
+    body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
+  }): { x: number; y: number; w: number; h: number } {
+    const w = (z.body as Phaser.GameObjects.Image).displayWidth || 22;
+    const h = (z.body as Phaser.GameObjects.Image).displayHeight || 26;
+    return {
+      x: z.container.x + z.body.x - w / 2,
+      y: z.container.y + z.body.y - h / 2,
+      w,
+      h,
+    };
+  }
+
+  /** The mob whose CURRENT lerped position covers `tx,ty` (world body box
+   *  hit-test, prefer the visually nearest/lowest box). */
   private mobIdAtTile(tx: number, ty: number): string | null {
+    const tileL = tx * this.tilePx;
+    const tileT = ty * this.tilePx;
+    const tileR = tileL + this.tilePx;
+    const tileB = tileT + this.tilePx;
     let best: string | null = null;
     let bestTop = -Infinity;
     for (const [id, z] of this.zombies) {
       if (z.dieT0 !== 0) continue; // dying/dead mobs are not targets
-      const b = z.body.getBounds();
-      if (
-        tx * this.tilePx + this.tilePx >= b.x &&
-        tx * this.tilePx <= b.x + b.width &&
-        ty * this.tilePx + this.tilePx >= b.y &&
-        ty * this.tilePx <= b.y + b.height
-      ) {
+      const b = this.mobBodyBox(z);
+      if (tileR > b.x && tileL < b.x + b.w && tileB > b.y && tileT < b.y + b.h) {
         // Tile rect intersects the body box: prefer the mob whose box
         // top is LOWEST (closest to the ground line) — visually nearest.
         if (b.y > bestTop) { bestTop = b.y; best = id; }
