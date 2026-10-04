@@ -629,13 +629,12 @@ export class WorldScene extends Phaser.Scene {
   private mobTargetOutline: Phaser.GameObjects.Rectangle | null = null;
   /** Mob id the outline currently hugs (null = no hover target). */
   private mobHoverId: string | null = null;
-  /** BODY SILHOUETTE (user 05/10: "bao bọc cơ thể mob như 1 lớp phủ" —
-   *  KHÔNG phải ô chữ nhật): a clone of the mob's sprite filled SOLID red
-   *  (setTintFill) and scaled ~14%, inserted BEHIND the body inside the
-   *  same container. The red sticks out around every edge of the ART
-   *  itself (ears, tail, legs) — a body-shaped outline that follows the
-   *  mob, impossible with a rect. Destroyed when hover moves away. */
-  private mobSilhouette: { id: string; img: Phaser.GameObjects.Image } | null = null;
+  /** BODY SILHOUETTE v2 (user 05/10: scale-clone bị lệch về phía bụng vì
+   *  phóng to quanh 1 điểm khiến viền dày mỏng không đều theo hình art).
+   *  Kỹ thuật outline 8 hướng: 8 bản clone CÙNG kích thước chính xác với
+   *  body, dời ±2px theo 8 hướng, tô đỏ đặc — viền đỏ dày ĐỀU 2px quanh
+   *  mọi đường viền của art (tai, đuôi, chân). Alpha 0.7. */
+  private mobSilhouettes: { id: string; imgs: Phaser.GameObjects.Image[] } | null = null;
   private phaserPointerBound = false;
   private aimCursor: { dx: number; dy: number } | null = null;
   // Mouse tile cache — written by refreshMouseTile() each frame from the
@@ -3036,45 +3035,50 @@ export class WorldScene extends Phaser.Scene {
    *  included) and mirrors the body's live position + scale (walk bob),
    *  so the red coat hugs the moving body. Placeholder rect bodies (sheet
    *  not loaded yet) fall back to the rect ring. */
+  /** 8 hướng × 2px cho outline đều nhau. */
+  private static readonly SIL_OUTLINE_PX = 2;
+  private static readonly SIL_DIRS: [number, number][] = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-1, -1], [1, -1], [-1, 1], [1, 1],
+  ];
+
   private syncMobSilhouette(
     id: string,
     z: { container: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle },
   ): void {
-    if (this.mobSilhouette && this.mobSilhouette.id !== id) this.clearMobSilhouette();
-    if (!(z.body instanceof Phaser.GameObjects.Image)) return; // placeholder: ring covers it
-    if (!this.mobSilhouette) {
-      const img = this.add.image(0, 0, z.body.texture.key, z.body.frame.name);
-      img.setTintFill(0xff3b30); // SOLID red — the silhouette IS the coat
-      img.setAlpha(0.7); // user: trong suốt thêm ~30%
-      img.setOrigin(0.5, 1); // scale around the FEET (bottom-center)
-      z.container.addAt(img, 0); // behind the body, inside the container
-      this.mobSilhouette = { id, img };
+    if (this.mobSilhouettes && this.mobSilhouettes.id !== id) this.clearMobSilhouette();
+    if (!(z.body instanceof Phaser.GameObjects.Image)) return; // placeholder: không có art
+    const body = z.body;
+    if (!this.mobSilhouettes) {
+      const imgs: Phaser.GameObjects.Image[] = [];
+      for (let i = 0; i < WorldScene.SIL_DIRS.length; i++) {
+        const img = this.add.image(0, 0, body.texture.key, body.frame.name);
+        img.setTintFill(0xff3b30); // đỏ đặc — outline
+        img.setAlpha(0.7);         // user: độ mờ 30%
+        z.container.addAt(img, i); // sau lưng body, trong cùng container
+        imgs.push(img);
+      }
+      this.mobSilhouettes = { id, imgs };
     }
-    const img = this.mobSilhouette.img;
-    // Mirror the body's live transform. FEET ANCHOR (user: "viền lệch xuống
-    // dưới góc trái"): the art sits feet-anchored at the cell bottom, so a
-    // center-origin 1.14 scale spilled red BELOW the feet and off the
-    // head-side edge. Origin (0.5,1) + position at the body's bottom line
-    // grows the coat UP and sideways from the feet instead — even wrap.
-    const bodyBottom = z.body.y + (z.body as Phaser.GameObjects.Image).displayHeight / 2;
-    img.setPosition(z.body.x, bodyBottom);
-    img.setScale(z.body.scaleX * 1.14, z.body.scaleY * 1.14);
-    // ANIMATION PARITY (user 05/10: "mob đổi frame thì nền không theo —
-    // trông kì"): the body's frame advances every animation tick; the
-    // silhouette must re-cut its texture from the SAME frame each pass or
-    // the red coat freezes on the old pose. Texture key too (bodies swap
-    // sheets on upgrades). setFrame on a same-key texture is ~free.
-    if (img.texture.key !== z.body.texture.key) img.setTexture(z.body.texture.key, z.body.frame.name);
-    else if (img.frame.name !== z.body.frame.name) img.setFrame(z.body.frame.name);
-    // Flip parity (facing left/right mirrors X).
-    img.setFlipX(z.body.flipX);
-    img.setVisible(true);
+    // Đồng bộ đầy đủ transform body cho TẤT CẢ các bản clone (viền bám
+    // theo frame animation + hướng + walk-bob), mỗi bản lệch 1 hướng 2px:
+    for (let i = 0; i < this.mobSilhouettes.imgs.length; i++) {
+      const img = this.mobSilhouettes.imgs[i];
+      const [dx, dy] = WorldScene.SIL_DIRS[i];
+      const o = WorldScene.SIL_OUTLINE_PX;
+      img.setPosition(body.x + dx * o, body.y + dy * o);
+      img.setScale(body.scaleX, body.scaleY);
+      if (img.texture.key !== body.texture.key) img.setTexture(body.texture.key, body.frame.name);
+      else if (img.frame.name !== body.frame.name) img.setFrame(body.frame.name);
+      img.setFlipX(body.flipX);
+      img.setVisible(true);
+    }
   }
 
   private clearMobSilhouette(): void {
-    if (this.mobSilhouette) {
-      this.mobSilhouette.img.destroy();
-      this.mobSilhouette = null;
+    if (this.mobSilhouettes) {
+      for (const img of this.mobSilhouettes.imgs) img.destroy();
+      this.mobSilhouettes = null;
     }
   }
 
@@ -4473,10 +4477,11 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Brief hit-jitter on a node's sprites (user: "lắc nhẹ khi đc đập").
-   *  Shakes each tile image ±1.5px horizontally, ~120ms, then restores the
-   *  canonical x. Overlapping shakes kill the previous tween first so the
-   *  sprite never drifts from its base position. */
+  /** Subtle hit-nudge on a node's sprites (user: "lắc nhẹ khi đc đập",
+   *  then "rung quá kinh khủng" — the ±1.5px double-yoyo read as an
+   *  earthquake). Now: ONE tiny ±0.75px sway, ~90ms total, then restores
+   *  the canonical x. Overlapping shakes kill the previous tween first so
+   *  the sprite never drifts from its base position. */
   private shakeNodeTiles(bbox: number[][]): void {
     if (!bbox || bbox.length === 0) return;
     const imgs: Phaser.GameObjects.Image[] = [];
@@ -4490,10 +4495,9 @@ export class WorldScene extends Phaser.Scene {
       img.x = base;
       this.tweens.add({
         targets: img,
-        x: { from: base + 1.5, to: base - 1.5 },
+        x: { from: base + 0.75, to: base - 0.75 },
         yoyo: true,
-        repeat: 2,
-        duration: 40,
+        duration: 45,
         ease: "Sine.InOut",
         onComplete: () => {
           img.x = base;
