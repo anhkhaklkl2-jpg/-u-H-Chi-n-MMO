@@ -620,6 +620,15 @@ export class WorldScene extends Phaser.Scene {
   private pendingTurnDir: string | null = null;
   private selfWasMoving = false;
   private hoverSquare: Phaser.GameObjects.Rectangle | null = null;
+  /** MOB TARGET OUTLINE (user 30/09): a light-red frame that hugs the
+   *  mob under the cursor, replacing the plain blue tile box. Data-driven
+   *  padding per kind: bodies are 32px sheets displayed at different sizes,
+   *  so the frame inset/outset is tuned per display size (see
+   *  syncMobTargetOutline below). Kept alive while hover persists —
+   *  hidden when the cursor moves off or onto plain ground. */
+  private mobTargetOutline: Phaser.GameObjects.Rectangle | null = null;
+  /** Mob id the outline currently hugs (null = no hover target). */
+  private mobHoverId: string | null = null;
   private phaserPointerBound = false;
   private aimCursor: { dx: number; dy: number } | null = null;
   // Mouse tile cache — written by refreshMouseTile() each frame from the
@@ -2912,8 +2921,10 @@ export class WorldScene extends Phaser.Scene {
 
   private updateHoverSquare(): void {
     this.ensureHoverSquare();
+    this.syncMobTargetOutline();
     const sq = this.hoverSquare;
     if (!sq) return; // ensureHoverSquare guarantees construction; belt+braces
+    const mobHovered = this.mobHoverId !== null;
     // SIZE PARITY ACROSS MAPS: the box matches the tile cell (tilePx - 2).
     // On 32px maps that is ~30px; on Ekonia's 16px tiles it shrank to 14px
     // — half the on-screen size of the bigmap box at the same zoom, which
@@ -2937,6 +2948,14 @@ export class WorldScene extends Phaser.Scene {
         .setStrokeStyle(2, 0x6fe08c, 0.95);
       return;
     }
+    // MOB HOVER: the red mob frame owns the cursor — the plain tile box
+    // hides completely (user: "bỏ cái box target xanh ... hiển thị viền đỏ
+    // nhẹ bao quanh kẻ địch"). Any other hover (ground/blocks) keeps the
+    // blue tile box as before.
+    if (mobHovered) {
+      sq.setVisible(false);
+      return;
+    }
     if (!this.mouseTile) {
       sq.setVisible(false);
       return;
@@ -2949,6 +2968,83 @@ export class WorldScene extends Phaser.Scene {
       .setAlpha(1)
       .setFillStyle(0x8fd4ff, 0.05) // default blue: hover
       .setStrokeStyle(2, 0x8fd4ff, 0.9);
+  }
+
+  /** Frame padding per mob display size (px, world): the frame hugs the
+   *  BODY box with a light outset so the outline reads as a "target ring"
+   *  around the mob rather than a rect glued to its pixels. Keyed by the
+   *  displayed body height — wider/narrower kinds land in the same band. */
+  private mobFramePad(displayH: number): number {
+    if (displayH <= 26) return 5;   // small tokens (rat, bat)
+    if (displayH <= 40) return 7;   // standard 32px sheets
+    return 10;                      // large mobs (boss-like)
+  }
+
+  /** Create/position/hide the red mob-target outline. Runs EVERY FRAME
+   *  (after mouseTile refresh, before the hover square draw): hits the
+   *  body rect of the mob under the cursor, hides when nothing matches.
+   *  MOBILE AIM LOCK: a locked tile over a mob tile keeps the frame up
+   *  ("tap 1 = khóa đỏ, tap 2 = đánh"). */
+  private syncMobTargetOutline(): void {
+    if (!this.mobTargetOutline) {
+      this.mobTargetOutline = this.add.rectangle(0, 0, 1, 1)
+        .setStrokeStyle(2, 0xff5544, 0.9)
+        .setFillStyle(0xff5544, 0.06)
+        .setVisible(false)
+        .setDepth(99); // just under the tile box layer, above the world
+    }
+    const ring = this.mobTargetOutline;
+    // Candidate mob: the locked mobile aim tile's mob first (sticky lock),
+    // else the live mouse tile's mob.
+    let hit: { id: string; el: { x: number; y: number; w: number; h: number } } | null = null;
+    const tilesToTry: { x: number; y: number }[] = [];
+    if (this.mobileAimTile) tilesToTry.push(this.mobileAimTile);
+    if (this.mouseTile) tilesToTry.push(this.mouseTile);
+    for (const tile of tilesToTry) {
+      const id = this.mobIdAtTile(tile.x, tile.y);
+      if (!id) continue;
+      const z = this.zombies.get(id);
+      if (!z) continue;
+      const b = z.body.getBounds();
+      const pad = this.mobFramePad(b.height);
+      hit = {
+        id,
+        el: { x: b.x - pad, y: b.y - pad, w: b.width + pad * 2, h: b.height + pad * 2 },
+      };
+      break;
+    }
+    if (hit) {
+      ring.setPosition(hit.el.x + hit.el.w / 2, hit.el.y + hit.el.h / 2)
+        .setSize(hit.el.w, hit.el.h)
+        .setVisible(true)
+        .setActive(true);
+      this.mobHoverId = hit.id;
+    } else {
+      ring.setVisible(false);
+      this.mobHoverId = null;
+    }
+  }
+
+  /** The mob whose CURRENT lerped position covers `tx,ty` (body rect
+   *  hit-test, topmost last — stable enough for hover). */
+  private mobIdAtTile(tx: number, ty: number): string | null {
+    let best: string | null = null;
+    let bestTop = -Infinity;
+    for (const [id, z] of this.zombies) {
+      if (z.dieT0 !== 0) continue; // dying/dead mobs are not targets
+      const b = z.body.getBounds();
+      if (
+        tx * this.tilePx + this.tilePx >= b.x &&
+        tx * this.tilePx <= b.x + b.width &&
+        ty * this.tilePx + this.tilePx >= b.y &&
+        ty * this.tilePx <= b.y + b.height
+      ) {
+        // Tile rect intersects the body box: prefer the mob whose box
+        // top is LOWEST (closest to the ground line) — visually nearest.
+        if (b.y > bestTop) { bestTop = b.y; best = id; }
+      }
+    }
+    return best;
   }
 
   // ===== NPC tokens: emoji sprite + label + E/click dialogue =====
@@ -2974,8 +3070,24 @@ export class WorldScene extends Phaser.Scene {
     this.roomFx?.setAlignMode(on);
   }
 
-  onFxAlign: ((anchors: { fires?: [number, number][]; windows?: [number, number][] }) => void) | null =
-    null;
+  onFxAlign: ((anchors: {
+    fires?: [number, number][]; windows?: [number, number][];
+    fire_scale?: number; fire_speed?: number;
+    window_scale?: number; window_speed?: number;
+  }) => void) | null = null;
+
+  /** Preview sliders: live look tuning for room FX. */
+  setFxParams(p: {
+    fire_scale?: number; fire_speed?: number;
+    window_scale?: number; window_speed?: number;
+  }): void {
+    this.roomFx?.applyParams(p);
+  }
+
+  /** Preview sliders: persist the current tuning + anchors. */
+  commitFxAlign(): void {
+    this.roomFx?.commitFx();
+  }
 
   /** Fire strip arrived through the asset pipe — attach flame sprites. */
   onFxTexture(_name: string): void {
