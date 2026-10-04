@@ -45,12 +45,25 @@ export interface NetHandlers {
   onSeqInput?: (seq: number, dx: number, dy: number, running: boolean) => void;
 }
 
+export interface ShopOpenFrame {
+  type: "shop_open";
+  key: string;
+  currency: string;
+  gold: number;
+  items: { key: string; name: string; count: number; price: number }[];
+  /** Bag rows [slot, item_id, qty] for the sell tab. */
+  bag: [number, string, number][];
+  /** Client UI style: "kaetram" (Shop 1) | "rbcat" (Shop 2). */
+  style?: string;
+}
+
 export class Net {
   private ws: WebSocket | null = null;
   /** Extra dev hook (preview panel status) — assigned from main.ts when
    *  ?preview=1; optional so normal clients never touch it. */
   onPreviewState?: (state: Record<string, unknown>) => void;
   onNpcDialogue?: (frame: NpcDialogueFrame) => void;
+  onShopOpen?: (frame: ShopOpenFrame) => void;
   private token = "";
   private joined = false;
   /** Monotonic input sequence (input-sequence reconciliation): every input
@@ -512,6 +525,10 @@ export class Net {
       case "npc_dialogue":
         // Structured NPC dialogue -> DialogBox overlay (dialog_box.ts).
         this.onNpcDialogue?.(frame as unknown as NpcDialogueFrame);
+        break;
+      case "shop_open":
+        // NPC shop panel (shop_ui.ts) — style picks Kaetram vs Rainbow layout.
+        this.onShopOpen?.(frame as unknown as ShopOpenFrame);
         break;
       case "preview_state":
         this.onPreviewState?.(frame as unknown as Record<string, unknown>);

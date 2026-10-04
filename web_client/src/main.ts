@@ -7,6 +7,7 @@ import { KeyboardInput } from "./input";
 import { MobileControls } from "./mobile_controls";
 import { Net } from "./net";
 import { dialogBox, DialogPage } from "./dialog_box";
+import { openShop, closeShop } from "./shop_ui";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { weatherFx } from "./weather";
@@ -262,6 +263,20 @@ const game = new Phaser.Game({
 });
 game.scene.add("world", scene, true);
 
+// Per-NPC dialogue faces (npcs/<id>_face.png, 38x38 facesets) — the box
+// used to hardcode Gac Dac's face for EVERYONE. Blob URLs cached per npc;
+// fetched once per session through the same asset pipe as idle sheets.
+const npcFaceUrls = new Map<string, string>();
+const npcFaceAsked = new Set<string>();
+let lastDialogNpc = "";
+
+function b64ToObjectUrl(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+}
+
 function applyTexture(name: string, b64: string): void {
   // Block faces register under "block-<id>" — the key game.ts looks up in
   // buildBlocks. Mob sheets register under "mob-<id>". Tilesets register
@@ -276,9 +291,11 @@ function applyTexture(name: string, b64: string): void {
     : name.startsWith("mobs/")
       ? `mob-${name.slice("mobs/".length).replace(/\.png$/i, "")}`
       : name.startsWith("npcs/")
-        ? `npc-${name.slice("npcs/".length).replace(/_idle\.png$/i, "")}`
+        ? `npc-${name.slice("npcs/".length).replace(/_idle\.png$/i, "").replace(/\.png$/i, "")}`
         : name.startsWith("node/")
           ? `node-${name.slice("node/".length).replace(/\.png$/i, "").replace(/\//g, "-")}`
+          : name.startsWith("fx/")
+          ? `fx-${name.slice("fx/".length).replace(/\.png$/i, "").replace(/\//g, "-")}`
           : bareTileset.replace(/\.png$/i, "");
   if (assetTextures.has(key) || !game.textures) return;
   const binary = atob(b64);
@@ -314,11 +331,29 @@ function applyTexture(name: string, b64: string): void {
       const [fw, fh] = MOB_CELLS[mobId] ?? [32, 32];
       game.textures.addSpriteSheet(key, img, { frameWidth: fw, frameHeight: fh });
     } else if (name.startsWith("npcs/")) {
+      // NPC dialogue face (npcs/<id>_face.png, 38x38 faceset): NOT a world
+      // texture — cache a blob URL and live-swap the open dialogue box.
+      // Missing file answers b64 null (onAssetData skips us) so old NPCs
+      // without a face keep the default portrait, untouched.
+      if (/_face\.png$/i.test(name)) {
+        const npcId = name.slice("npcs/".length).replace(/_face\.png$/i, "");
+        const url = b64ToObjectUrl(b64);
+        npcFaceUrls.set(npcId, url);
+        if (dialogBox.isOpen && lastDialogNpc === npcId) dialogBox.setLiveFace(url);
+        assetTextures.set(key, key);
+        return;
+      }
       // NPC idle strips (Ninja Adventure pack): register as a SPRITESHEET
       // with 16px cells: the idle strip is 4 facing cells, the walk strip is
       // 4 facing rows x 4 walk frames — same cell geometry, one branch.
       game.textures.addSpriteSheet(key, img, {
         frameWidth: 16, frameHeight: 16,
+      });
+    } else if (name.startsWith("fx/")) {
+      // Room-FX strips register under "fx-<stem>" (fire_12: 8 frames of
+      // 12px Ninja particles) — same confined pipe as npcs/mobs.
+      game.textures.addSpriteSheet(key, img, {
+        frameWidth: 12, frameHeight: 12,
       });
     } else {
       game.textures.addImage(key, img);
@@ -368,6 +403,11 @@ function applyTexture(name: string, b64: string): void {
       // for the emoji stand-in (spawnNpcs no-ops the re-fetch — texture
       // now exists under "npc-<id>").
       scene.respawnNpcs();
+      return;
+    }
+    if (name.startsWith("fx/")) {
+      // Room-FX strip arrived (fireplace flames): attach to the anchors.
+      scene.onFxTexture(name);
       return;
     }
     // Tileset image arrived (blocking asset) — tick the loading overlay.
@@ -581,6 +621,9 @@ const net = new Net({
     // Wandering NPCs ("thương nhân lang thang"): server positions ride the
     // 20 Hz snapshot — feed the scene's glide + hitbox tracking.
     if (frame.npc_moves?.length) scene.onNpcMoves(frame.npc_moves);
+    // Session merchants leaving the world: hide their sprites (the server
+    // already stopped sending them in npcs/npc_moves).
+    if (frame.npc_gone?.length) scene.onNpcGone(frame.npc_gone);
     // Worn armor echo (20 Hz): equipment panel + paperdoll converge to the
     // server truth after every equip/unequip op (frame.self.armor rides
     // every snapshot from web_api/snapshots.py).
@@ -1741,6 +1784,11 @@ game.events.once("ready", () => {
   scene.onNpcInteract = (npc) => {
     net.chatCommand(`/npc ${npc.id}`);
   };
+  // Dialogue face lock release: when the conversation truly ends (box
+  // closed), hand facing back to the mouse. Follow-up npc_dialogue frames
+  // re-assert the lock inside the handler below, so mid-talk re-opens
+  // never lose the facing.
+  dialogBox.onClose = () => scene.clearNpcFace();
   // Live NPC dialogue: server answers with options; clicking an option asks
   // the next node ("npc_next <id>") and the reply re-opens the box.
   net.onNpcDialogue = (frame) => {
@@ -1760,16 +1808,45 @@ game.events.once("ready", () => {
     }
     if (cur.trim()) chunks.push(cur.trim());
     const opts = frame.options ?? [];
+    // Per-NPC face: cached blob URL wins, else default portrait + one
+    // background fetch (arrival live-swaps via setLiveFace + cache).
+    lastDialogNpc = frame.npc ?? "";
+    // Keep facing the speaker through follow-up nodes (open() clears+rebuilds
+    // the box but the internal pre-close does NOT fire onClose).
+    if (lastDialogNpc) scene.faceNpc(lastDialogNpc);
+    const faceUrl = npcFaceUrls.get(lastDialogNpc);
+    if (!faceUrl && lastDialogNpc && !npcFaceAsked.has(lastDialogNpc)) {
+      npcFaceAsked.add(lastDialogNpc);
+      net.fetchAsset(`npcs/${lastDialogNpc}_face.png`);
+    }
     const pages: DialogPage[] = chunks.map((chunk, i) => ({
       who: frame.name,
       lines: [chunk],
+      face: faceUrl,
       options: i === chunks.length - 1 ? opts : [],
       onPick: (_label, next) => {
-        if (next) net.chatCommand(`/npc_next ${next}`);
+        // Pass the speaker id along so follow-up nodes keep the NPC's
+        // name/emoji (server falls back to node-id guessing without it).
+        if (next) net.chatCommand(`/npc_next ${next} ${frame.npc ?? ""}`.trim());
         else dialogBox.close();
       },
     }));
     dialogBox.open(pages);
+  };
+  // NPC SHOP: a dialogue option with next == "shop:<key>[:<style>]" arrives
+  // here as a shop_open frame. Server re-sends the frame after every
+  // buy/sell, so the panel re-renders from authoritative data.
+  net.onShopOpen = (frame) => {
+    dialogBox.close();
+    openShop(frame, {
+      // style is echoed back so the server's shop_open refresh keeps the
+      // SAME panel layout the player opened (kaetram vs rbcat).
+      buy: (index, count) =>
+        net.chatCommand(`/shop_buy ${frame.key} ${index} ${count} ${frame.style ?? "kaetram"}`),
+      sell: (itemId, qty) =>
+        net.chatCommand(`/shop_sell ${frame.key} ${itemId} ${qty} ${frame.style ?? "kaetram"}`),
+      close: () => closeShop(),
+    });
   };
   // Mouse-facing sync: the scene's 8-way facing label (driven by the blue
   // hover-box tile) forwards as a server "turn" action so remote players

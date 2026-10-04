@@ -8,6 +8,7 @@ import { PaperdollBody, b64ToBytes, registerArmorSheet, registerPaperdollTexture
 import { WEAPON_SHEETS as WEAPON_SHEET_BY_ITEM, weapon_sheet_for } from "./appearance_client";
 import { ICON_ITEM_IDS } from "./pixel_ui";
 import { perf } from "./perf";
+import { RoomFx } from "./room_fx";
 import { dayNightPhaser } from "./daynight_phaser";
 import { meteorFxBusyNear } from "./meteors";
 
@@ -299,7 +300,7 @@ export class WorldScene extends Phaser.Scene {
   // ----- NPC tokens (welcome.npcs): emoji sprite + name label per NPC -----
   private npcSprites = new Map<
     string, { container: Phaser.GameObjects.Container; x: number; y: number;
-              spr?: Phaser.GameObjects.Sprite }
+              spr?: Phaser.GameObjects.Sprite; reach?: number }
   >();
   // WANDERING NPCs ("thương nhân lang thang"): live server float pos (the
   // lerp TARGET — the sprite glides toward it each frame) + facing + moving
@@ -321,7 +322,40 @@ export class WorldScene extends Phaser.Scene {
 
   /** E-key path: fire the dialogue handler for the adjacent NPC. */
   requestNpcDialogue(): void {
-    if (this.nearestNpc) this.onNpcInteract?.(this.nearestNpc);
+    if (this.nearestNpc) this.interactNpc(this.nearestNpc);
+  }
+
+  /** DIALOGUE FACE LOCK (user 05/10 "cho player quay mặt về hướng của npc
+  * khi nói chuyện chứ không phải nhìn theo hướng chuột"): while set,
+  * updateFacing() aims at the NPC instead of the mouse hover tile, and
+  * selfDir is re-stamped each frame so paperdoll + server turn agree.
+  * Cleared when the dialog box closes (main.ts onClose hook). */
+  private dialogueFace: { dx: number; dy: number } | null = null;
+
+  /** Lock self facing onto the NPC tile (static pos; wanderers use the live
+  * float pos when present). Called on interact + every npc_dialogue frame. */
+  faceNpc(id: string): void {
+    const rec = this.npcSprites.get(id);
+    if (!rec) return;
+    const live = this.npcLive.get(id);
+    const x = live ? live.xf : rec.x;
+    const y = live ? live.yf : rec.y;
+    const dx = x + 0.5 - this.selfX;
+    const dy = y + 0.5 - this.selfY;
+    this.dialogueFace = { dx, dy };
+    this.selfDir = this.dominantDir(dx, dy);
+  }
+
+  /** Release the dialogue face lock (dialog box closed). */
+  clearNpcFace(): void {
+    this.dialogueFace = null;
+  }
+
+  /** Single NPC-interact entry: turn to the NPC first, then fire the
+  * dialogue handler (E-key and click paths both route here). */
+  private interactNpc(n: { id: string; name: string; x: number; y: number }): void {
+    this.faceNpc(n.id);
+    this.onNpcInteract?.(n);
   }
   /** The "E" prompt bubble above the nearest in-range station. */
   private stationPrompt: Phaser.GameObjects.Container | null = null;
@@ -597,6 +631,10 @@ export class WorldScene extends Phaser.Scene {
   private resourceLayer: Phaser.GameObjects.Layer | null = null;
   /** Above-player bake (roofs/canopies) — drawn OVER actors. */
   private mapAbove: Phaser.GameObjects.Image | null = null;
+  /** Hearth-frame bake ("lớp thành lò" layers): the hearth front drawn OVER
+   *  the room-fx flames (33 > flame 32) so fire only shows through the
+   *  frame's transparent center — user-designed hearth masking. */
+  private mapFrame: Phaser.GameObjects.Image | null = null;
   /** Per-cell y-sorted canopy membership (Ekonia parity): "x,y" -> tile
    *  bakes into the OVER-player canvas. Rebuilt on every buildWorld. */
   private ysortCells: Set<string> = new Set();
@@ -845,6 +883,10 @@ export class WorldScene extends Phaser.Scene {
     // GPU day/night tint (daynight_phaser.ts): attach once per scene, before
     // any snapshot can try to update it. Idempotent on re-welcome.
     if (perf.daynight) dayNightPhaser.attach(this);
+    // Indoor trade maps: no day/night indoors — always evenly lit.
+    dayNightPhaser.setIndoor(
+      welcome.map.id === "montertradebase" || welcome.map.id === "lobbytrade",
+    );
     // Paperdoll: stash manifest, fetch base + every mapped weapon sheet
     // once through the same relay pipe as blocks/mobs (license-safe).
     if (welcome.players_manifest && !this.paperdollAsked) {
@@ -923,6 +965,9 @@ export class WorldScene extends Phaser.Scene {
     // Cave ambience (darkness + glowing mushrooms) — independent canvases,
     // safe to (re)build right after the map bake.
     if (perf.cave) this.setupCaveAmbience(welcome);
+    // Room FX (fireplace fire + window shafts on indoor fx-marker maps).
+    if (!this.roomFx) this.roomFx = new RoomFx(this);
+    this.roomFx.setup(welcome.map.room_fx ?? null, this.tilePx, fetchAsset);
 
     // --- physics-less world: positions are authoritative from the server ---
     this.cameras.main.setBounds(0, 0, map.width * map.tile_width, map.height * map.tile_height);
@@ -1341,6 +1386,19 @@ export class WorldScene extends Phaser.Scene {
       aboveCanvas.height = map.height * th;
     }
     const aboveCtx = aboveCanvas ? aboveCanvas.getContext("2d") : null;
+    // Hearth-frame layers ("lớp thành lò", name folds to contain "thanh
+    // lo"): baked to their OWN canvas ABOVE the room-fx flames — the frame
+    // masks the fire so it only shows through the layer's transparent
+    // center (user's hearth design; maps without such layers skip this).
+    const hasFrameLayers = map.layers.some((l) =>
+      foldName(l.name || "").includes("thanh lo"),
+    );
+    const frameCanvas = hasFrameLayers ? document.createElement("canvas") : null;
+    if (frameCanvas) {
+      frameCanvas.width = map.width * tw;
+      frameCanvas.height = map.height * th;
+    }
+    const frameCtx = frameCanvas ? frameCanvas.getContext("2d") : null;
     for (const layer of map.layers) {
       // Resource layers bake only tiles WITHOUT a live server node (those
       // render as choppable sprites instead). Node-less tiles (lobbytrade's
@@ -1349,6 +1407,8 @@ export class WorldScene extends Phaser.Scene {
       // Above-player tiles go to the OVER canvas (never the base bake):
       // whole roof/canopy layers, or single y-sorted cells (Ekonia trees).
       const isAboveLayer = aboveSet.has(foldName(layer.name || ""));
+      const isFrameLayer = frameCanvas !== null
+        && foldName(layer.name || "").includes("thanh lo");
       for (let y = 0; y < map.height; y++) {
         const row = layer.data[y];
         if (!row) continue;
@@ -1375,8 +1435,11 @@ export class WorldScene extends Phaser.Scene {
           const tileW = ts.tilewidth ?? tw;
           const tileH = th;
           if (col * tileW >= src.width) continue;
-          const dest =
-            isAboveLayer || this.ysortCells.has(`${x},${y}`) ? aboveCtx : ctx;
+          const dest = isFrameLayer
+            ? frameCtx
+            : isAboveLayer || this.ysortCells.has(`${x},${y}`)
+            ? aboveCtx
+            : ctx;
           if (!dest) continue;
           dest.drawImage(
             src, col * tileW, rowIdx * tileH, tileW, tileH,
@@ -1428,6 +1491,20 @@ export class WorldScene extends Phaser.Scene {
       }
     } else if (this.mapAbove) {
       this.mapAbove.setVisible(false);
+    }
+    // Hearth-frame bake: register + draw OVER the room-fx flames (33 > 32).
+    const fkey = "map-frame";
+    if (frameCanvas && frameCtx) {
+      if (this.textures.exists(fkey)) this.textures.remove(fkey);
+      this.textures.addCanvas(fkey, frameCanvas);
+      if (this.mapFrame) {
+        this.mapFrame.setTexture(fkey);
+        this.mapFrame.setVisible(true);
+      } else {
+        this.mapFrame = this.add.image(0, 0, fkey).setOrigin(0, 0).setDepth(33);
+      }
+    } else if (this.mapFrame) {
+      this.mapFrame.setVisible(false);
     }
   }
   private buildBlocks(blocks: [number, number, string][]): void {
@@ -2133,6 +2210,8 @@ export class WorldScene extends Phaser.Scene {
     // NPC "F" bubble: same fade/bob pattern as the station "E" bubble, but
     // its own element + own suppression so the craft flow stays untouched.
     this.updateNpcPrompt();
+    // Room FX (fire flicker/embers/shafts drift) — numeric updates only.
+    this.roomFx?.update(nowT);
     // Wandering NPCs ("thương nhân lang thang"): glide toward the latest
     // server position + walk-anim frame + hitbox tiles refresh. Runs BEFORE
     // stepSelf so the prediction sees THIS frame's NPC solid tiles.
@@ -2877,15 +2956,24 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private lastNpcs: { id: string; name: string; emoji: string; x: number; y: number;
-                      sprite?: { w: number; h: number; frames: number };
+                      sprite?: { w: number; h: number; frames: number; scale?: number };
+                      reach?: number;
                       walks?: boolean }[] = [];
   /** Body sprites by npc id (breathing bob + facing flip). */
   private npcBodySprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /** Indoor room FX (fireplace/window anchors from welcome.map.room_fx). */
+  private roomFx: RoomFx | null = null;
+
+  /** Fire strip arrived through the asset pipe — attach flame sprites. */
+  onFxTexture(_name: string): void {
+    this.roomFx?.onFireTexture();
+  }
 
 
   private spawnNpcs(
     npcs: { id: string; name: string; emoji: string; x: number; y: number;
-            sprite?: { w: number; h: number; frames: number };
+            sprite?: { w: number; h: number; frames: number; scale?: number };
+            reach?: number;
             xf?: number; yf?: number; facing?: string; moving?: boolean;
             walks?: boolean }[],
   ): void {
@@ -2907,12 +2995,8 @@ export class WorldScene extends Phaser.Scene {
     this.rebuildNpcSolidTiles();
     for (const n of npcs) {
       const container = this.add.container(n.x * this.tilePx + this.tilePx / 2, n.y * this.tilePx + this.tilePx / 2);
-      const label = this.add
-        .text(0, -30, n.name, {
-          fontFamily: "Verdana, sans-serif", fontSize: "10px",
-          color: "#ffe9a8", stroke: "#1a1208", strokeThickness: 3,
-        })
-        .setOrigin(0.5);
+      // NAME LABEL REMOVED (user 05/10 "ẩn tên Skull: trên đầu NPC"): the
+      // name already shows in the dialog nameplate — no floating text.
       // REAL SPRITE when the NPC carries sprite geometry (Ninja Adventure
       // pack, e.g. Gạc Đặc): npcs/<id>_idle.png arrives through the SAME
       // relay pipe as mob sheets (fetchAsset -> asset_request -> asset_data
@@ -2936,13 +3020,13 @@ export class WorldScene extends Phaser.Scene {
         if (!this.textures.exists(key)) {
           // Emoji stand-in keeps the NPC clickable while the sheet flies.
           const standIn = this.add.text(0, 0, n.emoji, { fontSize: "26px" }).setOrigin(0.5);
-          container.add([standIn, label]);
+          container.add([standIn]);
           container.setDepth(20);
           container.setInteractive(
             new Phaser.Geom.Rectangle(0, 0, 40, 48), Phaser.Geom.Rectangle.Contains,
           );
-          container.on("pointerdown", () => this.onNpcInteract?.(n));
-          this.npcSprites.set(n.id, { container, x: n.x, y: n.y });
+          container.on("pointerdown", () => this.interactNpc(n));
+          this.npcSprites.set(n.id, { container, x: n.x, y: n.y, reach: n.reach });
           continue;
         }
         // CHARACTER-SCALE NPC: the source frame is 16px art but the player
@@ -2952,7 +3036,11 @@ export class WorldScene extends Phaser.Scene {
         // code multiplied them by tilePx AGAIN and the raccoon floated 7
         // tiles above the F bubble; the 1-tile version after that was "chưa
         // đủ to so với player").
-        const dispH = 2 * this.tilePx;
+        // Per-NPC display scale (shopkeepers behind counters sit at ~0.65
+        // so they don't tower over the furniture; default 1 = full
+        // 2-tile character height like wandering merchants).
+        const npcScale = (n.sprite && n.sprite.scale) || 1;
+        const dispH = 2 * this.tilePx * npcScale;
         const spr = this.add.sprite(
           0,
           this.tilePx / 2 - dispH / 2, // feet on the tile bottom
@@ -2975,14 +3063,14 @@ export class WorldScene extends Phaser.Scene {
           .text(0, 0, n.emoji, { fontSize: "26px" })
           .setOrigin(0.5);
       }
-      container.add([body, label]);
+      container.add([body]);
       container.setDepth(20);
       container.setInteractive(
         new Phaser.Geom.Rectangle(0, 0, 40, 48), Phaser.Geom.Rectangle.Contains,
       );
-      container.on("pointerdown", () => this.onNpcInteract?.(n));
+      container.on("pointerdown", () => this.interactNpc(n));
       this.npcSprites.set(n.id, {
-        container, x: n.x, y: n.y,
+        container, x: n.x, y: n.y, reach: n.reach,
         spr: body instanceof Phaser.GameObjects.Sprite ? body : undefined,
       });
       // A wanderer's container starts at its LIVE position, not the spawn
@@ -3007,6 +3095,12 @@ export class WorldScene extends Phaser.Scene {
   onNpcMoves(moves: [string, number, number, string, boolean][]): void {
     if (!moves || moves.length === 0) return;
     for (const [id, xf, yf, facing, moving] of moves) {
+      // Re-entering session merchant: the sprite was hidden on npc_gone —
+      // any fresh server position brings it back into the world.
+      const entry = this.npcSprites.get(id);
+      if (entry && !entry.container.visible) {
+        entry.container.setVisible(true);
+      }
       const live = this.npcLive.get(id);
       if (live) {
         live.xf = xf; live.yf = yf;
@@ -3016,6 +3110,21 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.rebuildNpcSolidTiles();
+  }
+
+  /** SESSION MERCHANTS out of the world: hide their sprites (welcome/
+   *  snapshot no longer list them; the sprite comes back on re-spawn). */
+  onNpcGone(ids: string[]): void {
+    for (const id of ids) {
+      const entry = this.npcSprites.get(id);
+      if (entry) {
+        entry.container.setVisible(false);
+        entry.container.setPosition(-9999, -9999); // off-camera, no overlap
+      }
+      this.npcLive.delete(id);
+      this.npcSolidTiles.clear();
+      this.rebuildNpcSolidTiles();
+    }
   }
 
   /** Per-frame: glide each wanderer container toward its server position
@@ -3033,22 +3142,37 @@ export class WorldScene extends Phaser.Scene {
       entry.x = live.xf; entry.y = live.yf;
       const spr = entry.spr;
       if (!spr) continue;
-      // Row = facing (down/left/right/up — Ninja Adventure pack order),
-      // frame = the 4-step walk cycle (~280ms per step matches the slow
-      // 1.2 tiles/s wander pace so feet don't slide). Falls back to the
-      // idle strip's facing cells when the walk sheet hasn't landed (or
+      // TALKING OVERRIDE (user: "xoay mặt về player lúc nói chuyện"): a
+      // standing NPC with a player adjacent (float d <= 1.6 — same gate as
+      // the F bubble) turns its face toward THAT player, overriding the
+      // server facing (which only updates at 20 Hz / when the wander tick
+      // notices; the client knows instantly).
+      let facing = live.facing;
+      if (!live.moving) {
+        const dx = this.selfX - live.xf;
+        const dy = this.selfY - live.yf;
+        if (Math.hypot(dx, dy) <= 1.6 && (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05)) {
+          facing = Math.abs(dx) >= Math.abs(dy)
+            ? (dx > 0 ? "right" : "left")
+            : (dy > 0 ? "down" : "up");
+        }
+      }
+      // SHEET GEOMETRY (pixel-verified on the Ninja Adventure pack —
+      // gac_dac_idle 64x16 and gac_dac_walk 64x64): the COLUMN is the
+      // facing, in the order down(0) / up(1) / left(2) / right(3); the walk
+      // sheet's ROW is the 4-step walk cycle (~280ms per step matches the
+      // slow 1.2 tiles/s wander pace so feet don't slide). Falls back to
+      // the idle strip's facing cell when the walk sheet hasn't landed (or
       // the NPC is static — the walk sheet is only fetched for wanderers).
+      const colByFacing: Record<string, number> = { down: 0, up: 1, left: 2, right: 3 };
+      const col = colByFacing[facing] ?? 0;
       const walkKey = `npc-${id}_walk`;
       if (live.moving && this.textures.exists(walkKey)) {
-        const row = { down: 0, left: 1, right: 2, up: 3 }[live.facing] ?? 0;
         const f = Math.floor(now / 280) % 4;
-        spr.setTexture(walkKey, row * 4 + f);
+        spr.setTexture(walkKey, col + f * 4);
       } else {
-        // Idle.png strip = 4 DIRECTION cells (down/left/right/up in this
-        // order for the Ninja Adventure pack) — pick by facing.
-        const frameByFacing: Record<string, number> = { down: 0, left: 1, right: 2, up: 3 };
-        spr.setTexture(`npc-${id}`, frameByFacing[live.facing] ?? 0);
-        spr.setFrame(frameByFacing[live.facing] ?? 0);
+        spr.setTexture(`npc-${id}`, col);
+        spr.setFrame(col);
       }
     }
   }
@@ -3077,11 +3201,13 @@ export class WorldScene extends Phaser.Scene {
       const base = spr.getData("npcBase") as { sx: number; sy: number } | undefined;
       if (!base) continue;
       if (this.npcLive.get(id)?.moving) continue;
-      const breathe = Math.sin(performance.now() / 520);
-      spr.setScale(
-        base.sx * (1 - breathe * 0.03),
-        base.sy * (1 + breathe * 0.05),
-      );
+      // GENTLE idle breath as INTEGER-pixel position bob (slow ~2.4s
+      // cycle, ±1px): scaling by fractional factors re-samples texels and
+      // breaks pixels ("lỗi pixel"). Whole-pixel shifts stay crisp.
+      const b = base as { sx: number; sy: number; y?: number };
+      if (b.y === undefined) b.y = spr.y;
+      spr.setScale(b.sx, b.sy);
+      spr.setY(b.y + Math.round(Math.sin(performance.now() / 1600)));
     }
     const target = n ? 1 : 0;
     this.npcPromptAlpha += (target - this.npcPromptAlpha) * Math.min(1, this.frameDtSec * 9);
@@ -3134,16 +3260,18 @@ export class WorldScene extends Phaser.Scene {
    *  lúc không"). Round self to tile ints first, then a small tolerance for
    *  in-between movement: still adjacency-equivalent, never far away. */
   private findNearestNpc(): { id: string; name: string; x: number; y: number } | null {
-    // EXACT server parity (web_api/core.py "npc"): rounded-tile Manhattan
-    // d<=1 OR true float distance<=1.6 — prediction mid-step must not make
-    // the F bubble/interact flicker while the server would accept the talk.
+    // EXACT server parity (game/npc.py npc_in_reach): per-NPC reach
+    // (rounded-tile Manhattan d<=reach OR float d<=reach+0.6) — prediction
+    // mid-step must not make the F bubble flicker while the server accepts.
+    // reach=2 lets shopkeepers talk THROUGH one counter layer.
     const px = this.selfX, py = this.selfY;
     let best: { id: string; name: string; x: number; y: number } | null = null;
     let bestD = Infinity;
     for (const [id, n] of this.npcSprites) {
+      const r = Math.max(1, Math.floor(n.reach ?? 1));
       const dInt = Math.abs(n.x - Math.round(px)) + Math.abs(n.y - Math.round(py));
       const dFloat = Math.hypot(n.x - px, n.y - py);
-      if ((dInt <= 1 || dFloat <= 1.6) && dFloat < bestD) {
+      if ((dInt <= r || dFloat <= r + 0.6) && dFloat < bestD) {
         bestD = dFloat;
         best = { id, name: id, x: n.x, y: n.y };
       }
@@ -3354,7 +3482,13 @@ export class WorldScene extends Phaser.Scene {
     if (!this.selfMarker) return;
     let targetX = this.lastMoveX;
     let targetY = this.lastMoveY;
-    if (this.aimCursor) {
+    if (this.dialogueFace) {
+      // Talking to an NPC: the lock beats BOTH the build cursor and the
+      // mouse hover tile — the player keeps facing the NPC while chatting.
+      targetX = this.dialogueFace.dx;
+      targetY = this.dialogueFace.dy;
+      this.selfDir = this.dominantDir(targetX, targetY);
+    } else if (this.aimCursor) {
       // Build-Mode cursor keeps top precedence.
       targetX = this.aimCursor.dx;
       targetY = this.aimCursor.dy;

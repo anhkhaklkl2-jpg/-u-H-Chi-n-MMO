@@ -9,6 +9,7 @@
 //   ?fx=weather  keep ONLY weather
 //   ?fx=daynight keep ONLY the day/night tint
 //   ?fx=cave     keep ONLY cave ambience + canopy fade
+//   ?fx=room     keep ONLY room FX (fireplace + window shafts)
 // F3 prints `fx=...` so the tester can verify what is live.
 
 const raw = typeof window !== "undefined"
@@ -28,6 +29,7 @@ export const perf = {
   weather: raw === "0" || raw === "off" ? false : flag("weather"),
   daynight: raw === "0" || raw === "off" ? false : flag("daynight"),
   cave: raw === "0" || raw === "off" ? false : flag("cave"),
+  room: raw === "0" || raw === "off" ? false : flag("room"),
   /** Human-readable tag for the F3 debug line. */
   get label(): string {
     if (raw === "0" || raw === "off") return "fx=OFF";

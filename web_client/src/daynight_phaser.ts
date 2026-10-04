@@ -74,6 +74,14 @@ export class DayNightPhaser {
   /** Per-frame refresh (called from WorldScene.update — cheap: 2 GPU rects). */
   update(): void {
     if (!this.scene || !this.dark || !this.cast) return;
+    // INDOOR maps (trade house / lobby): no day/night exists indoors — the
+    // room stays evenly lit ("luôn sáng vừa đủ"), night tint never applies.
+    if (this.indoor) {
+      this.dark.setVisible(false);
+      this.cast.setVisible(false);
+      this.ambientNorm = 1;
+      return;
+    }
     const sec = this.currentSec();
     if (sec < 0) {
       this.dark.setVisible(false);
@@ -127,6 +135,13 @@ export class DayNightPhaser {
   get ambientFactor(): number {
     return this.ambientNorm;
   }
+
+  /** Indoor flag: true kills the day/night tint entirely (trade maps). */
+  setIndoor(v: boolean): void {
+    this.indoor = v;
+  }
+
+  private indoor = false;
 
   /** Same interpolation contract as DayNightFx.currentSec(). */
   private currentSec(): number {

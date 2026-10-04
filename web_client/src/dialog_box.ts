@@ -54,6 +54,10 @@ export class DialogBox {
   private pageIdx = 0;
   private timer: number | null = null;
   private onDone: (() => void) | null = null;
+  /** Fired ONCE when the box truly closes (user path or programmatic) —
+      NOT on the internal pre-close at the start of open() (re-opened
+      follow-up nodes must not reset scene state mid-conversation). */
+  onClose: (() => void) | null = null;
   private keyHandler = (ev: KeyboardEvent) => this.onKey(ev);
   private clickHandler = (ev: MouseEvent) => {
     ev.stopPropagation();
@@ -73,8 +77,17 @@ export class DialogBox {
     return this.root !== null;
   }
 
+  /** Swap the portrait of the OPEN box (async NPC face arrival). No-op
+      when closed — the next open() picks the cached url via page.face. */
+  setLiveFace(url: string): void {
+    if (this.faceImg && this.root) this.faceImg.src = url;
+  }
+
   open(pages: DialogPage[], onDone?: () => void): void {
+    const closeCb = this.onClose;
+    this.onClose = null; // internal pre-close must not fire the user hook
     this.close();
+    this.onClose = closeCb;
     ensureFont();
     this.pages = pages;
     this.pageIdx = 0;
@@ -116,7 +129,7 @@ export class DialogBox {
 
     // nameplate tab
     this.nameEl = el("div", [
-      "position:absolute", "left:22px", "bottom:" + (BOX_H - 12) + "px",
+      "position:absolute", "left:10px", "bottom:" + (BOX_H - 20) + "px",
       "transform:translateY(0)", "padding:1px 10px 3px",
       "background:#141b1b", "border:2px solid #f0b050",
       "color:#f0b050", "font:24px/1 'VT323',monospace",
@@ -151,6 +164,7 @@ export class DialogBox {
   }
 
   close(): void {
+    const wasOpen = this.root !== null;
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
     window.removeEventListener("keydown", this.keyHandler);
     window.removeEventListener("resize", this.resizeHandler);
@@ -158,6 +172,7 @@ export class DialogBox {
     this.root?.remove();
     this.root = null;
     this.pages = [];
+    if (wasOpen) this.onClose?.();
   }
 
   private onKey(ev: KeyboardEvent): void {

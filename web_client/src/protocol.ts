@@ -76,6 +76,12 @@ export interface WelcomePayload {
       darkness: number;
       lights: [number, number, number][];
     } | null;
+    /** Room FX anchors (fireplace fires + window shafts), game-coord
+     *  cells from the map's fx marker layers. Absent on unmarked maps. */
+    room_fx?: {
+      fires?: [number, number][];
+      windows?: [number, number][];
+    } | null;
   };
   self: {
     id: number;
@@ -133,7 +139,9 @@ export interface WelcomePayload {
   // older servers — client renders nothing extra then. Wandering NPCs also
   // carry xf/yf (live float pos) + facing.
   npcs?: { id: string; name: string; emoji: string; x: number; y: number;
-           sprite?: { w: number; h: number; frames: number };
+           sprite?: { w: number; h: number; frames: number; scale?: number };
+           // Talk range override (shopkeeper through-counter: 2). Absent = 1.
+           reach?: number;
            xf?: number; yf?: number; facing?: string; moving?: boolean;
            walks?: boolean }[];
   // Paperdoll manifest (frame grid + animation rows/speeds) for the player
@@ -265,6 +273,8 @@ export interface SnapshotPayload {
   // Wandering NPCs ("thương nhân lang thang") — only MOVERS ride the 20 Hz
   // snapshot: [id, xf, yf, facing, moving]. Static NPCs come with welcome.
   npc_moves?: [string, number, number, string, boolean][];
+  /** Session merchants currently OUT of the world (remove their sprites). */
+  npc_gone?: string[];
 }
 
 export interface PlayerPayload {
@@ -347,5 +357,6 @@ export type ServerFrame =
   | { type: "held"; slot: number; item_id: string | null }
   | { type: "travel_begin"; map_name?: string; kind?: string }
   | { type: "npc_dialogue"; npc: string; name: string; emoji: string; text: string; options: { label: string; next: string | null }[] }
+  | { type: "shop_open"; key: string; currency: string; gold: number; items: { key: string; name: string; count: number; price: number }[]; bag: [number, string, number][]; style?: string }
   | { type: "error"; code: string; message?: string }
   | { type: "pong"; t: unknown };
