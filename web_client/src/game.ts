@@ -3051,9 +3051,10 @@ export class WorldScene extends Phaser.Scene {
     this.clearMobSilhouette();
     const body = z.body;
     if (!(body instanceof Phaser.GameObjects.Image) || !body.preFX) return;
-    // GPU outline: red glow hugging the art. outerStrength 2 + inner 0:
-    // NHẠT hơn (user: "viền nhạt lại, bớt aura") — mỏng, sát viền art.
-    body.preFX.addGlow(0xff3b30, 2, 0);
+    // GPU outline: red glow hugging the art. outerStrength 1: VIỀN CỰC
+    // MỎNG (user: "không cần hiệu ứng aura, thu nhỏ độ dày thêm nữa") —
+    // chỉ còn ~1px red rim sát viền art, gần như không còn quầng.
+    body.preFX.addGlow(0xff3b30, 1, 0);
     this.mobGlowId = id;
   }
 
