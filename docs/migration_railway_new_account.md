@@ -1,5 +1,10 @@
 # 🚚 Chuyển Railway sang account mới (domain mới) — CHECKLIST
 
+> ✅ **ĐÃ HOÀN TẤT 05/10/2026.** URL mới: `https://web-production-f53c5.up.railway.app`
+> (đã đổi đủ relay-config.json, relay/dist/app-config.json, .env RELAY_URL,
+> vite.config.ts, config.py fallback). Checklist giữ lại làm tài liệu tham khảo
+> cho lần đổi domain sau.
+
 > Bối cảnh: account Railway cũ hết free $5. Project chuyển sang account Railway
 > mới để dùng tiếp $5 free. URL production sẽ ĐỔI từ
 > `https://web-production-19398.up.railway.app` → `https://<URL-MỚI>`.

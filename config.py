@@ -72,7 +72,7 @@ SESSION_REPAIR_RETRY_DELAY_SEC = float(os.getenv("SESSION_REPAIR_RETRY_DELAY_SEC
 WEB_API_ENABLED = os.getenv("WEB_API_ENABLED", "1") == "1"
 # Fallback defaults: some panels drop/.mangle .env vars, so the Railway relay
 # coordinates are also baked in here (token matches relay-config; rotate both).
-RELAY_URL = os.getenv("RELAY_URL") or "wss://web-production-19398.up.railway.app/bot"
+RELAY_URL = os.getenv("RELAY_URL") or "wss://web-production-f53c5.up.railway.app/bot"
 RELAY_TOKEN = os.getenv("RELAY_TOKEN") or "bd3b9c716b74a4abc782a0166de9f9959af83170e00f0493"
 # Discord OAuth2 (the bot's own application). Client id is public; the
 # secret never leaves the server env.

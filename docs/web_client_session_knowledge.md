@@ -3,14 +3,16 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  🚨🚨🚨  RAILWAY ĐÃ MIGRATE SANG ACC MỚI (05/10/2026)  🚨🚨🚨          ║
 # ║                                                                  ║
-# ║  URL CŨ web-production-19398.up.railway.app = CHẾT.               ║
+# ║  URL CŨ web-production-f53c5.up.railway.app = CHẾT.               ║
 # ║  Acc cũ hết free $5 → project chuyển sang acc Railway mới.        ║
 # ║                                                                  ║
 # ║  • Repo GitHub chính: anhkhaklkl2-jpg/-u-H-Chi-n-MMO              ║
 # ║    → git remote `kha2` (HTTPS, credential acc mới đã lưu máy).    ║
 # ║    Push web client LUÔN LUÔN: `git push kha2 main` + `git push origin main`.║
-# ║  • URL production MỚI: xem `web_client/relay/relay-config.json`   ║
-# ║    (WEB_REDIRECT_URI) — đó là nguồn sự thật duy nhất.             ║
+# ║  • URL production HIỆN TẠI (đã migrate xong):                     ║
+# ║    https://web-production-f53c5.up.railway.app                    ║
+# ║    (nguồn sự thật duy nhất = web_client/relay/relay-config.json — ║
+# ║    WEB_REDIRECT_URI; relay serve runtime qua /config.json)        ║
 # ║  • Đổi domain trong tương lai: đọc docs/migration_railway_new_account.md║
 # ║    (4 chỗ: relay-config.json, relay/dist/app-config.json,         ║
 # ║    .env RELAY_URL trên panel bot, vite.config.ts). Bỏ sót 1 =     ║
@@ -208,7 +210,7 @@ rm -rf relay/dist; cp -r dist relay/dist
 # ⚠️ BẮT BUỘC tạo lại web_client/relay/dist/app-config.json (lệnh rm -rf + cp
 # xoá nó biến mất — thiếu/sai file này = Discord OAuth "Invalid OAuth2"):
 # { "client_id": "965153822861307914",
-#   "redirect_uri": "https://web-production-19398.up.railway.app/" }
+#   "redirect_uri": "https://web-production-f53c5.up.railway.app/" }
 # redirect_uri = URL TRANG WEB, KHÔNG PHẢI URL discord.com/authorize!
 cd ..; .venv\Scripts\python scripts\deploy_files.py web_api\core.py   # nếu đổi Python
 git add … ; git commit; git push github-dauhu main; git push origin main

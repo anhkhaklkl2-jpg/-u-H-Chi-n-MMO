@@ -138,6 +138,13 @@ thêm 1 handler `_cmd_*` + 1 nút panel.
 #   origin (acc cũ conist-z) vẫn push song song. Chi tiết migration:
 #   docs/migration_railway_new_account.md. KHÔNG tin URL cũ
 #   web-production-19398.up.railway.app — dead.
+#   ⚠️ MIGRATION CHƯA HOÀN TẤT: URL mới CHƯA được ghi lại — relay-config.json,
+#   relay/dist/app-config.json, .env RELAY_URL, vite.config.ts, config.py:75
+#   vẫn trỏ URL cũ → login Discord VỠ cho tới khi user cung cấp URL mới và
+#   cả 4(+1) chỗ được đổi. Nguồn sự thật của URL hiện tại = relay-config.json.
+#   Lỗi deploy Railway kiểu ModuleNotFoundError lúc Restart = THIẾU FILE, không
+#   phải "Railway chưa build" — soát file local untracked trước (见 gotcha
+#   UNTRACKED-DEPLOY bên dưới).
 # ⚠️ Mouse input MUST bind to `game.canvas` (Phaser) — NEVER `querySelector("#game-root canvas")`:
 # the weather-fx canvas mounts into #game-root BEFORE Phaser, so that selector grabs the wrong
 # (pointer-events: none) canvas → hover box + clicks silently die, right-click leaks Chrome menu.
@@ -190,6 +197,21 @@ cd ..; git add ...; git commit; git push kha2 main; git push origin main
   assets with `scripts/convert_weather_fx.py` (one-time, source pack path inside); preview with
   `scripts/_preview_fx.py`. Admin/test commands: `/setweather` (admin; incl. "Tự Động" = resume
   real weather), `/weatherfetch` (admin), `/weatherinfo` (reports gate state).
+- UNTRACKED-DEPLOY TRAP (crash `ModuleNotFoundError` trên cloud): một module chỉ
+  tồn tại local-untracked (vd `game/room_fx.py`) mà bị file khác import → sau
+  deploy/Restart cloud nổ ngay lúc startup (khi khôi phục scenario). Trước khi
+  deploy/bấm Restart: (1) `git status --short` soi file untracked/modified mà
+  import chain cần; (2) commit hoặc upload CÙNG LÚC; (3) verify import chain
+  local chạy sạch (`python -c "import bot"`). Log "deploy OK" của deploy_files.py
+  KHÔNG đảm bảo mọi dependency đã từng được upload.
+- PHASER CONTAINER BOUNDS (web client): `child.getBounds()` của object nằm
+  trong Container trả TỌA ĐỘ LOCAL (không gồm vị trí container trong world)
+  → mọi hit-test/outline so với tile world phải TỰ tính world box từ
+  `container.x/y + body position + display size` (tham khảo
+  `syncMobTargetOutline` / `mobIdAtTile` trong web_client/src/game.ts — viền
+  đỏ target mob, bám theo lerp position mỗi frame). Dùng getBounds() trực tiếp
+  = hit-test không bao giờ trúng → feature "im lặng không chạy", user nhìn
+  vào sẽ thấy "không có gì thay đổi".
 - Screen+hub pair coupling & auto-refresh (`discord_ui/refresh.py`): the hub ALWAYS lives
   directly under a live screen. A dead screen drops its hub + clears both persisted ids
   (`clear_pair`); a dead/stale hub id is forgotten and re-created under the same screen
@@ -224,6 +246,11 @@ Do not proceed to the next phase until the current acceptance tests pass.
    Khi đổi domain trong tương lai: đọc `docs/migration_railway_new_account.md`
    (4 chỗ phải đổi: relay-config.json, relay/dist/app-config.json, .env RELAY_URL
    trên panel bot, vite.config.ts) — bỏ sót 1 trong 4 = login Discord vỡ.
+   TRẠNG THÁI: URL mới CHƯA có trong repo — khi user cung cấp, đổi đủ 4 chỗ
+   + fallback `config.py:75`, rebuild client, push cả 2 remote, upload .env.
+   Luật debug deploy: khi cloud lỗi sau push, SOÁT CODE CỦA MÌNH TRƯỚC
+   (file thiếu, import sai, version lệch) — KHÔNG kết luận "Railway chưa
+   update" nếu chưa có bằng chứng từ log Railway.
 
 1. **LUÔN trả lời bằng tiếng Việt** — mọi câu trả lời, giải thích, báo cáo cho
    người dùng đều bằng tiếng Việt (code, log, comment giữ nguyên tiếng Anh).

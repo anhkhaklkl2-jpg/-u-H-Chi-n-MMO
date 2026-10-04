@@ -17,7 +17,7 @@
 cd web_client && npm run build && cd ..
 rm -rf web_client/relay/dist && cp -r web_client/dist web_client/relay/dist
 # ⚠️ tạo lại app-config.json (bị rm xoá):
-echo '{ "client_id": "965153822861307914", "redirect_uri": "https://web-production-19398.up.railway.app/" }' \
+echo '{ "client_id": "965153822861307914", "redirect_uri": "https://web-production-f53c5.up.railway.app/" }' \
   > web_client/relay/dist/app-config.json
 
 # 2. (nếu chưa chạy keeper ở bước 0) chạy stack thẳng:

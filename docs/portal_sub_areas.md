@@ -202,7 +202,7 @@ tốc độ ⇒ phải báo từng bước nhỏ ~0.05 ô/frame):
 
 ```python
 import asyncio, json, aiohttp
-RELAY = "wss://web-production-19398.up.railway.app/ws"
+RELAY = "wss://web-production-f53c5.up.railway.app/ws"
 async def main():
     async with aiohttp.ClientSession() as s:
         ws = await s.ws_connect(RELAY)
@@ -265,7 +265,7 @@ multiplayer, sprite, va chạm bằng chuột/phím — thì phải **vào game 
 đăng nhập nhiều guest cùng lúc và thấy player của nhau trên map:
 
 1. Mở **nhiều tab/cửa sổ trình duyệt** (hoặc 1 tab thường + 1 tab ẩn danh).
-2. Mỗi tab vào `https://web-production-19398.up.railway.app/`, bấm login guest
+2. Mỗi tab vào `https://web-production-f53c5.up.railway.app/`, bấm login guest
    (guest_id tự sinh, mỗi tab một id riêng ⇒ mỗi tab là 1 player).
 3. Cả các tab join **cùng một channel** (cùng scenario) → thấy player của nhau,
    chat với nhau, đánh chung quái.

@@ -11,8 +11,8 @@ export default defineConfig({
     port: 5173,
     // Dev proxy: /ws + /config.json forwarded to a locally running relay.
     proxy: {
-      "/ws": { target: "https://web-production-19398.up.railway.app", ws: true, secure: true, changeOrigin: true },
-      "/config.json": "https://web-production-19398.up.railway.app",
+      "/ws": { target: "https://web-production-f53c5.up.railway.app", ws: true, secure: true, changeOrigin: true },
+      "/config.json": "https://web-production-f53c5.up.railway.app",
     },
   },
 });
