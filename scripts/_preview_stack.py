@@ -159,6 +159,10 @@ class PreviewStack(LocalStack):
             "status": self._cmd_status,
             "tp": self._cmd_tp,
             "give": self._cmd_give,
+            # Reusable FX-align framework (any map, any preview stack):
+            # pixel-fine room-FX anchors + look tuning, persisted into the
+            # CURRENT map's Tiled JSON (see _cmd_fx_align).
+            "fx_align": self._cmd_fx_align,
         }.get(cmd)
         if handler is None:
             await self._send(cid, {"type": "push", "message": f"[preview] Lệnh lạ: {cmd}"})
@@ -462,6 +466,124 @@ class PreviewStack(LocalStack):
             return
         inv.add(item_id, max(1, qty))
         await self._send(cid, {"type": "push", "message": f"[preview] 🎁 +{qty} {item_id}."})
+
+    # ---- reusable FX-align framework (any Tiled map) ----
+
+    async def _cmd_fx_align(self, cid: int, uid: int, rt, value) -> None:
+        """Preview framework: persist hand-dragged room-FX anchors + look
+        tuning into the CURRENT map's Tiled JSON. value = JSON string
+        {fires, windows, fire_scale, fire_speed, window_scale,
+        window_speed} in FRACTIONAL GAME coords from the web client's
+        drag-align tool (room_fx.ts).
+
+        Writes BOTH:
+        - base cells (floored) into the map's fx marker tile layers
+          ("fx lua" / "fx cua so" name family), and
+        - the exact px anchors + tuning into the map root property
+          "fx_fine" (Tiled list property, stringified JSON) which
+          game/map_loader reads back at load time to override cell
+          centers.
+
+        The game->Tiled origin is derived from the target map's own art
+        bbox — no per-map hard-coding, works for every map."""
+        import json
+        import math
+        from pathlib import Path
+
+        map_id = rt.map_data.map_id
+        try:
+            anchors = json.loads(str(value or "{}"))
+            fires = [(float(a[0]), float(a[1])) for a in anchors.get("fires", [])]
+            windows = [(float(a[0]), float(a[1])) for a in anchors.get("windows", [])]
+        except Exception as exc:
+            await self._send(cid, {"type": "push", "message": f"[fx_align] JSON loi: {exc}"})
+            return
+
+        def _num(key: str, lo: float, hi: float, default: float) -> float:
+            try:
+                v = float(anchors.get(key, default))
+            except (TypeError, ValueError):
+                return default
+            return round(min(hi, max(lo, v)), 2)
+
+        fine = {
+            "fires": [[round(x, 2), round(y, 2)] for x, y in fires],
+            "windows": [[round(x, 2), round(y, 2)] for x, y in windows],
+            "fire_scale": _num("fire_scale", 0.3, 3, 1.0),
+            "fire_speed": _num("fire_speed", 0.25, 3, 1.0),
+            "window_scale": _num("window_scale", 0.3, 3, 1.0),
+            "window_speed": _num("window_speed", 0.25, 3, 1.0),
+        }
+        # 1) Live runtimes on THIS map: the client already renders the
+        # dragged position — feed fine coords + tuning so a re-welcome keeps
+        # everything without a re-join.
+        for other in set(self.joined.values()):
+            ort = self.gm.get_runtime(other)
+            if ort is not None and ort.map_data.map_id == map_id:
+                ort.map_data.fx_markers = {
+                    "fires": [list(c) for c in fine["fires"]],
+                    "windows": [list(c) for c in fine["windows"]],
+                    "fire_scale": fine["fire_scale"],
+                    "fire_speed": fine["fire_speed"],
+                    "window_scale": fine["window_scale"],
+                    "window_speed": fine["window_speed"],
+                }
+        # 2) Persist into the Tiled JSON (source of truth).
+        from game.map_loader import (_bbox_from_layers, _layers_from_tiled,
+                                     _normalize_layer_name)
+        from game.room_fx import _MARKERS, is_fx_marker_layer
+
+        map_path = Path(self.gm.assets_dir) / f"{map_id}.json"
+        try:
+            data = json.loads(map_path.read_text(encoding="utf-8"))
+            art = [(n, g) for n, g in _layers_from_tiled(data) if not is_fx_marker_layer(n)]
+            bbox = _bbox_from_layers(art)
+            ox, oy = (bbox[0], bbox[1]) if bbox else (0, 0)
+            # marker layers live in the RAW tiled dict (with width/height +
+            # flat data) — iterate the original layer dicts, not the grids.
+            for layer in data.get("layers", []):
+                if layer.get("type") != "tilelayer" or not is_fx_marker_layer(layer.get("name", "")):
+                    continue
+                nl = _normalize_layer_name(layer.get("name", ""))
+                kind = next((k for k, names in _MARKERS
+                             if any(nl == m or nl.startswith(m + " ") for m in names)), None)
+                if kind is None:
+                    continue
+                w = int(layer.get("width", 0))
+                h = int(layer.get("height", 0))
+                grid = [0] * (w * h)
+                cells = fine[kind]
+                gid = next((g for g in (layer.get("data") or []) if g), 1)
+                for gx, gy in cells:
+                    ix, iy = int(math.floor(gx)) + ox, int(math.floor(gy)) + oy
+                    if 0 <= ix < w and 0 <= iy < h:
+                        grid[iy * w + ix] = gid
+                layer["data"] = grid
+            # fx_fine root property (Tiled list form; string value keeps
+            # Tiled compatibility — map_loader json.loads it back).
+            props = data.get("properties")
+            if not isinstance(props, list):
+                props = []
+            entry = {"name": "fx_fine", "type": "string",
+                     "value": json.dumps(fine, ensure_ascii=False)}
+            props = [p for p in props if not (isinstance(p, dict) and p.get("name") == "fx_fine")]
+            props.append(entry)
+            data["properties"] = props
+            # indent=1 keeps the file Tiled-friendly + diff-compact.
+            map_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8",
+            )
+        except Exception as exc:  # report, never swallow
+            await self._send(cid, {"type": "push", "message": f"[fx_align] Ghi map loi: {exc}"})
+            return
+        msg = (f"[fx_align] DA LUU {map_id}: lua={fine['fires']} "
+               f"cua so={fine['windows']} fire={fine['fire_scale']}x/{fine['fire_speed']}x "
+               f"window={fine['window_scale']}x/{fine['window_speed']}x")
+        try:
+            print(msg, flush=True)
+        except UnicodeEncodeError:  # cp1252 console — never crash on a log
+            print("[fx_align] saved (console cannot print vietnamese)", flush=True)
+        await self._send(cid, {"type": "push", "message": msg})
 
     async def _cmd_tp(self, cid: int, uid: int, rt, value) -> None:
         player = self._player_or_msg(cid, uid, rt)
