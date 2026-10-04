@@ -1220,6 +1220,7 @@ const input = new KeyboardInput({
   onStationKey: () => {
     // E = station/craft only now (NPC moved to F — user 30/09).
     if (!scene.nearStation()) return false;
+    scene.faceNearestStation(); // face the station you interact with
     scene.stationInteract();
     return true;
   },
@@ -1262,10 +1263,15 @@ const input = new KeyboardInput({
       if (!target) {
         // Genuinely out of range: send the raw click — the server answers
         // out_of_range honestly ("Quá xa."), no optimistic state involved.
+        scene.faceTile(tile.x, tile.y); // still face what you reached for
         net.actionAt("chop", tile.x, tile.y);
         scene.swingSelfHand();
         return;
       }
+      // INTERACTION FACING: every click-action turns the avatar toward its
+      // target (user 05/10 — "khi tương tác với vật thể thì xoay mặt vào
+      // vật thể đó").
+      scene.faceTile(target.x, target.y);
       // COMBAT FIRST: a zombie near the click is an ATTACK, never a chop —
       // left click on a mob must damage it (melee resolves in a radius
       // server-side; tile targeting only picks the swing direction).
@@ -1295,6 +1301,7 @@ const input = new KeyboardInput({
     // crafting table in range opens/toggles the craft panel (left-click
     // stays free for breaking the table). Then: place the block in hand.
     if (tile && scene.hoveringStation()) {
+      scene.faceTile(tile.x, tile.y); // face the station you interact with
       scene.stationInteract();
       return;
     }
@@ -1311,9 +1318,11 @@ const input = new KeyboardInput({
     if (!target) {
       // Too far: still send so the server answers "Quá xa." honestly — but
       // NO optimistic state (the block will not appear).
+      scene.faceTile(tile.x, tile.y);
       net.placeAt(tile.x, tile.y, held);
       return;
     }
+    scene.faceTile(target.x, target.y); // face where you build
     net.placeAt(target.x, target.y, held);
     // Same hand-swing feedback as breaking a block — placing is an arm
     // motion too (the doll plays its one-shot atk rows).
@@ -1327,9 +1336,12 @@ const input = new KeyboardInput({
     // Store the raw cursor position; the scene re-derives the tile every
     // frame (camera moves under a still cursor — cached tiles go stale).
     scene.setMouseTile(sx < 0 ? null : { x: sx, y: sy });
-    // Cursor swap: over a player -> pointer (profile-clickable), else default.
+    // Cursor swap: over a player -> pointer (profile-clickable), else
+    // default. NOTE: the mob-hover SWORD cursor is owned by the scene's
+    // per-frame updateHoverSquare (game.ts) — never overwrite it here when
+    // a mob is hovered (mob hover wins: attacking beats profiling).
     const canvas = game.canvas;
-    if (canvas) {
+    if (canvas && !scene.isMobHovered()) {
       canvas.style.cursor =
         sx >= 0 && scene.pointerOverRemotePlayerAt(sx, sy) ? "pointer" : "";
     }
@@ -1415,6 +1427,7 @@ const mobile = new MobileControls({
     if (!sameLock) scene.lockAimTarget(target);
     // Act immediately either way — rapid taps on a locked tile chop at
     // full speed; a fresh lock also acts at once (tap-to-hit = instant).
+    scene.faceTile(target.x, target.y); // face the tap target
     if (scene.zombieNear(target)) {
       if (!swingGateOpen()) return;
       markSwingSent();
@@ -1437,6 +1450,7 @@ const mobile = new MobileControls({
     scene.consumeAimTarget();
     const tile = scene.screenToTile(sx, sy);
     if (tile && scene.hoveringStation(tile)) {
+      scene.faceTile(tile.x, tile.y);
       scene.stationInteract();
       return;
     }
@@ -1450,9 +1464,11 @@ const mobile = new MobileControls({
     if (!placeable.has(held)) return;
     const target = scene.clampClickTile(tile);
     if (!target) {
+      scene.faceTile(tile.x, tile.y);
       net.placeAt(tile.x, tile.y, held);
       return;
     }
+    scene.faceTile(target.x, target.y);
     net.placeAt(target.x, target.y, held);
     scene.combatSwing();
     scene.optimisticPlace(target.x, target.y);

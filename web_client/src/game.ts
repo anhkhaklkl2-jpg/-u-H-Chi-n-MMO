@@ -1117,22 +1117,12 @@ export class WorldScene extends Phaser.Scene {
     }
     // Keep the 8-way facing label in sync with the raw input (used by
     // getSelfDir for actions); rendering blends the vector separately.
-    // MOUSE-FACING PRIORITY (user 28/09 "fix lại cho target arrow box thôi"):
-    // while a valid hover/aim tile exists (NOT the tile we stand on) the box
-    // is the ONLY facing authority — setLocalInput must NOT re-stamp
-    // selfDir from the movement vector, or the two writers fight every
-    // frame and the avatar twitches between cursor-facing and move-facing
-    // (the reported "lúc đây lúc kia" jitter). Movement facing only wins
-    // when there is no box target at all.
+    // MOVE-FACING (user 05/10 "di qua phải xoay qua phải, di xuống nhìn
+    // xuống"): the D-pad/movement vector is the ONLY facing authority.
+    // The old mouse-facing priority made the avatar stare at the blue
+    // hover box constantly — now facing follows the legs, Minecraft-style.
     if (dx !== 0 || dy !== 0) {
-      const dir = this.dominantDir(dx, dy);
-      const aimTile = this.mobileAimTile ?? this.mouseTile;
-      const boxOwnsFacing = !!aimTile &&
-        (aimTile.x !== Math.floor(this.selfX) ||
-         aimTile.y !== Math.floor(this.selfY));
-      if (!boxOwnsFacing) {
-        this.selfDir = dir;
-      }
+      this.selfDir = this.dominantDir(dx, dy);
     }
   }
 
@@ -3024,11 +3014,28 @@ export class WorldScene extends Phaser.Scene {
       ring.setVisible(false);
       this.mobHoverId = hit.id;
       this.syncMobSilhouette(hit.id, this.zombies.get(hit.id)!);
+      // Kaetram parity: the OS cursor becomes the SWORD over a mob.
+      if (!this.hoverMobCursor) {
+        this.hoverMobCursor = true;
+        this.game.canvas.style.cursor = "url('ui/cursors/sword.png') 4 10, pointer";
+      }
     } else {
       ring.setVisible(false);
       this.mobHoverId = null;
       this.clearMobSilhouette();
+      if (this.hoverMobCursor) {
+        this.hoverMobCursor = false;
+        this.game.canvas.style.cursor = "";
+      }
     }
+  }
+
+  private hoverMobCursor = false;
+
+  /** True while the OS cursor hovers a mob (sword cursor active). main.ts
+   *  consults this so its player-hover pointer never fights the sword. */
+  isMobHovered(): boolean {
+    return this.hoverMobCursor;
   }
 
   /** Create/sync/destroy the red body silhouette. Runs every frame while
@@ -3637,6 +3644,14 @@ export class WorldScene extends Phaser.Scene {
     return this.nearestStation !== null;
   }
 
+  /** Face the nearest in-range station (E-key path — the click path faces
+   *  via faceTile on the clicked tile instead). */
+  faceNearestStation(): void {
+    if (this.nearestStation) {
+      this.faceTile(this.nearestStation.x, this.nearestStation.y);
+    }
+  }
+
   /** True when the CURRENT hover tile is a station in range (click router). */
   hoveringStation(tile?: { x: number; y: number } | null): boolean {
     // Optional tile param: the mobile long-press passes the ACTUAL pressed
@@ -3673,31 +3688,48 @@ export class WorldScene extends Phaser.Scene {
    * NOT the tile we stand on. Legs are untouched — update() picks the
    * walk/idle row from the movement input alone, so the body can walk
    * while facing the cursor and stands with idle legs when motionless.
-   */
+   */  /** Turn the avatar toward a world point (tile centre or float pos).
+   *  INTERACTION FACING (user 05/10): interacting with something — a chop
+   *  swing, an attack, a block place, an NPC talk, a station open — makes
+   *  the player FACE that target (Minecraft parity). Movement still owns
+   *  facing while walking (setLocalInput stamps selfDir from the D-pad). */
+  faceTowards(wx: number, wy: number): void {
+    const dx = wx - this.selfX;
+    const dy = wy - this.selfY;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+    this.selfDir = this.dominantDir(dx, dy);
+    this.faceVec = { x: dx, y: dy };
+    const len = Math.hypot(dx, dy) || 1;
+    this.lastMoveX = dx / len;
+    this.lastMoveY = dy / len;
+    this.syncTurnToServer();
+  }
+
+  /** Tile-centre convenience wrapper (interactions target whole tiles). */
+  faceTile(tx: number, ty: number): void {
+    this.faceTowards(tx + 0.5, ty + 0.5);
+  }
+
   private updateFacing(): void {
     if (!this.selfMarker) return;
     let targetX = this.lastMoveX;
     let targetY = this.lastMoveY;
     if (this.dialogueFace) {
-      // Talking to an NPC: the lock beats BOTH the build cursor and the
-      // mouse hover tile — the player keeps facing the NPC while chatting.
+      // Talking to an NPC: the lock beats the build cursor — the player
+      // keeps facing the NPC while chatting.
       targetX = this.dialogueFace.dx;
       targetY = this.dialogueFace.dy;
       this.selfDir = this.dominantDir(targetX, targetY);
     } else if (this.aimCursor) {
-      // Build-Mode cursor keeps top precedence.
+      // Build-Mode cursor keeps top precedence (explicit aiming mode).
       targetX = this.aimCursor.dx;
       targetY = this.aimCursor.dy;
-    } else {
-      const aimTile = this.mobileAimTile ?? this.mouseTile;
-      if (aimTile &&
-          (aimTile.x !== Math.floor(this.selfX) ||
-           aimTile.y !== Math.floor(this.selfY))) {
-        targetX = aimTile.x + 0.5 - this.selfX;
-        targetY = aimTile.y + 0.5 - this.selfY;
-        this.selfDir = this.dominantDir(targetX, targetY);
-      }
     }
+    // NOTE: the mouse hover tile NO LONGER steers facing (user 05/10 —
+    // "player không luôn nhìn theo target box và chuột nữa"). While the
+    // body stands still the avatar keeps its LAST direction (lastMoveX/Y);
+    // it re-aims only through the explicit interactions that call
+    // faceTowards() (chop/attack/place/station) — see those call sites.
     const targetLen = Math.hypot(targetX, targetY) || 1;
     targetX /= targetLen;
     targetY /= targetLen;
