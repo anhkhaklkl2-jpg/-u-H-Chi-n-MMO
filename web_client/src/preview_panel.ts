@@ -137,12 +137,13 @@ export class PreviewPanel {
       parent.appendChild(d);
       return d;
     };
-    const btn = (parent: HTMLElement, label: string, fn: () => void, color = "#2a3352"): void => {
+    const btn = (parent: HTMLElement, label: string, fn: () => void, color = "#2a3352"): HTMLButtonElement => {
       const b = document.createElement("button");
       b.textContent = label;
       b.style.cssText = btnStyle(color);
       b.onclick = fn;
       parent.appendChild(b);
+      return b;
     };
 
     // ---- 🌍 Thế giới: giờ / thiên thạch / thời tiết ----
@@ -248,6 +249,19 @@ export class PreviewPanel {
       }).gameScene;
       const on = !(scene?.getCollisionDebug() ?? false);
       window.dispatchEvent(new CustomEvent("toggle-collision", { detail: on }));
+    }, "#3a2a12");
+    // 🎯 Căn FX: kéo chấm sáng lửa / dải cửa sổ bằng tay trên canvas;
+    // thả ra là client gửi toạ độ ô về server (fx_align) — server ghi
+    // thẳng vào marker layers của map JSON (preview-only tool).
+    let fxAlignOn = false;
+    const fxBtn = btn(mapSec, "🎯 Kéo căn FX: TẮT", () => {
+      const scene = (window as unknown as {
+        gameScene?: { setFxAlign(on: boolean): void };
+      }).gameScene;
+      if (!scene) return;
+      fxAlignOn = !fxAlignOn;
+      scene.setFxAlign(fxAlignOn);
+      fxBtn.textContent = `🎯 Kéo căn FX: ${fxAlignOn ? "BẬT — kéo chấm sáng, thả để lưu" : "TẮT"}`;
     }, "#3a2a12");
 
     // ---- 📡 status + log ----

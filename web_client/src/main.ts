@@ -1789,6 +1789,11 @@ game.events.once("ready", () => {
   // re-assert the lock inside the handler below, so mid-talk re-opens
   // never lose the facing.
   dialogBox.onClose = () => scene.clearNpcFace();
+  // Preview drag-align of room FX (fire/window anchors): the demo server
+  // persists the dropped tiles into the map's fx marker layers.
+  scene.onFxAlign = (anchors) => {
+    net.sendRaw({ type: "preview_cmd", cmd: "fx_align", value: JSON.stringify(anchors) });
+  };
   // Live NPC dialogue: server answers with options; clicking an option asks
   // the next node ("npc_next <id>") and the reply re-opens the box.
   net.onNpcDialogue = (frame) => {

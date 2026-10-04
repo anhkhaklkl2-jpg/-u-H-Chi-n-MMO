@@ -966,7 +966,11 @@ export class WorldScene extends Phaser.Scene {
     // safe to (re)build right after the map bake.
     if (perf.cave) this.setupCaveAmbience(welcome);
     // Room FX (fireplace fire + window shafts on indoor fx-marker maps).
-    if (!this.roomFx) this.roomFx = new RoomFx(this);
+    if (!this.roomFx) {
+      this.roomFx = new RoomFx(this);
+      // Drag-align commits (preview tool) ride out through main.ts.
+      this.roomFx.onAlignCommit = (a) => this.onFxAlign?.(a);
+    }
     this.roomFx.setup(welcome.map.room_fx ?? null, this.tilePx, fetchAsset);
 
     // --- physics-less world: positions are authoritative from the server ---
@@ -2963,6 +2967,15 @@ export class WorldScene extends Phaser.Scene {
   private npcBodySprites = new Map<string, Phaser.GameObjects.Sprite>();
   /** Indoor room FX (fireplace/window anchors from welcome.map.room_fx). */
   private roomFx: RoomFx | null = null;
+
+  /** Preview drag-align of room FX: panel button toggles; committed anchor
+  * lists (game coords) flow out via onFxAlign. */
+  setFxAlign(on: boolean): void {
+    this.roomFx?.setAlignMode(on);
+  }
+
+  onFxAlign: ((anchors: { fires?: [number, number][]; windows?: [number, number][] }) => void) | null =
+    null;
 
   /** Fire strip arrived through the asset pipe — attach flame sprites. */
   onFxTexture(_name: string): void {

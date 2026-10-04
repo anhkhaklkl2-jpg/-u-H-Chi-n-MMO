@@ -74,8 +74,91 @@ export class RoomFx {
   private tw = 32;
   private fireAsked = false;
 
+  // ---- DRAG-ALIGN (preview-only tool, user request 05/10) ----
+  // When enabled, the user grabs a fire's warm HALO ("ánh sáng") or a
+  // window shaft on the canvas and drags it; every drop snaps to a tile
+  // and commits the FULL anchor list (game coords) via onAlignCommit
+  // (game.ts -> preview_cmd "fx_align" -> demo server writes the map's
+  // fx marker layers). Code never changes — only the Tiled JSON data.
+  onAlignCommit: ((anchors: RoomFxAnchors) => void) | null = null;
+  private alignOn = false;
+  private alignLabel: Phaser.GameObjects.Text | null = null;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+  }
+
+  /** Toggle the drag-align mode (preview panel "🎯 Căn FX"). */
+  setAlignMode(on: boolean): void {
+    this.alignOn = on;
+    const sc = this.scene;
+    if (on && !this.alignLabel) {
+      this.alignLabel = sc.add
+        .text(8, 8, "", {
+          fontFamily: "Verdana, sans-serif", fontSize: "12px",
+          color: "#7fff9f", stroke: "#0a0d12", strokeThickness: 3,
+        })
+        .setDepth(4000)
+        .setScrollFactor(0);
+    }
+    if (this.alignLabel) {
+      this.alignLabel.setVisible(on);
+      this.alignLabel.setText(on ? "🎯 Kéo chấm sáng lửa / dải cửa sổ…" : "");
+    }
+    for (const f of this.flames) this.wireDrag(f.halo, on);
+    for (const sh of this.shafts) this.wireDrag(sh.img, on);
+  }
+
+  /** (Un)register drag on one fx grab-target. Handlers guard on alignOn. */
+  private wireDrag(g: Phaser.GameObjects.Image, on: boolean): void {
+    if (on) {
+      g.setInteractive({ useHandCursor: true });
+      this.scene.input.setDraggable(g);
+      g.off("drag").on(
+        "drag",
+        (_p: Phaser.Input.Pointer, dx: number, dy: number) => this.onDrag(g, dx, dy),
+      );
+      g.off("dragend").on("dragend", () => this.commitAlign());
+    } else {
+      g.disableInteractive();
+      (this.scene.input as unknown as { setDraggable: (o: Phaser.GameObjects.Image, v: boolean) => void }).setDraggable(g, false);
+    }
+  }
+
+  private onDrag(g: Phaser.GameObjects.Image, wx: number, wy: number): void {
+    if (!this.alignOn) return;
+    const tx = Math.floor(wx / this.tw);
+    const ty = Math.floor(wy / this.tw);
+    const fl = this.flames.find((f) => f.halo === g);
+    if (fl) {
+      fl.cx = (tx + 0.5) * this.tw;
+      fl.cy = (ty + 0.5) * this.tw;
+      fl.halo.setPosition(fl.cx, fl.cy - this.tw * 0.35);
+      fl.spr?.setPosition(fl.cx, fl.cy - 9);
+      fl.spr2?.setPosition(fl.cx + 4, fl.cy - 8);
+      // embers/halo flicker re-read cx/cy every update() — no extra work.
+      this.alignLabel?.setText(`🔥 lửa → ô (${tx},${ty})`);
+      return;
+    }
+    const sh = this.shafts.find((s) => s.img === g);
+    if (!sh) return;
+    sh.cx = (tx + 0.5) * this.tw;
+    sh.top = ty * this.tw;
+    sh.img.setPosition(sh.cx, sh.top);
+    this.alignLabel?.setText(`🪟 cửa sổ → ô (${tx},${ty})`);
+  }
+
+  /** Drop -> snap already applied; report the whole anchor set. */
+  private commitAlign(): void {
+    if (!this.alignOn || !this.onAlignCommit) return;
+    this.onAlignCommit({
+      fires: this.flames.map(
+        (f) => [Math.round(f.cx / this.tw - 0.5), Math.round(f.cy / this.tw - 0.5)] as [number, number],
+      ),
+      windows: this.shafts.map(
+        (s) => [Math.round(s.cx / this.tw - 0.5), Math.round(s.top / this.tw)] as [number, number],
+      ),
+    });
   }
 
   /** (Re)build from welcome anchors. Null/empty tears everything down. */
