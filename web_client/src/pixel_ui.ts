@@ -210,6 +210,7 @@ export const EQUIP_WORN_SLOTS: { slot: "helmet" | "chest" | "legs"; x: number; y
 export const ITEM_ICONS: Record<string, string> = Object.fromEntries(
   [
     "apple", "charcoal", "coal", "coin", "cooked_meat", "crafting_table",
+    "copper_ingot", "copper_ore",
     "dirt", "floor", "furnace", "gold_axe", "gold_ingot", "gold_ore",
     "gold_pickaxe", "gold_sword", "hide", "iron_axe", "iron_ingot", "iron_ore",
     "iron_pickaxe", "iron_sword", "key_stone", "leatherchest", "leatherhelmet",

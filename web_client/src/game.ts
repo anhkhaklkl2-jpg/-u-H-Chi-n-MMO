@@ -4384,6 +4384,15 @@ export class WorldScene extends Phaser.Scene {
     // neighbor standing near MY tree got animated as the harvester).
     // Actor swings arrive as server "swing" echoes keyed by uid
     // (swingRemoteHandAt) + the client-optimistic self swing.
+    // Node HIT-SHAKE (user: "quặng không lắc nhẹ khi đc đập"): a hit
+    // INCREASES a node's counter — jitter that node's sprites briefly.
+    // Bar-sync runs on every snapshot; only real increases shake.
+    for (const [key, entry] of Object.entries(progress)) {
+      const prev = this.lastProgressRaw.get(key);
+      if (prev && entry[0] > prev[0]) {
+        this.shakeNodeTiles(entry[2]);
+      }
+    }
     this.lastProgressRaw = new Map(Object.entries(progress));
     this.lastProgressBbox.clear();
     for (const [anchor, entry] of this.lastProgressRaw) {
@@ -4455,6 +4464,35 @@ export class WorldScene extends Phaser.Scene {
           ease: "Quad.Out",
         });
       }
+    }
+  }
+
+  /** Brief hit-jitter on a node's sprites (user: "lắc nhẹ khi đc đập").
+   *  Shakes each tile image ±1.5px horizontally, ~120ms, then restores the
+   *  canonical x. Overlapping shakes kill the previous tween first so the
+   *  sprite never drifts from its base position. */
+  private shakeNodeTiles(bbox: number[][]): void {
+    if (!bbox || bbox.length === 0) return;
+    const imgs: Phaser.GameObjects.Image[] = [];
+    for (const [bx, by] of bbox) {
+      const img = this.resourceTiles.get(`${bx},${by}`);
+      if (img && !imgs.includes(img)) imgs.push(img);
+    }
+    for (const img of imgs) {
+      const base = img.x;
+      this.tweens.killTweensOf(img);
+      img.x = base;
+      this.tweens.add({
+        targets: img,
+        x: { from: base + 1.5, to: base - 1.5 },
+        yoyo: true,
+        repeat: 2,
+        duration: 40,
+        ease: "Sine.InOut",
+        onComplete: () => {
+          img.x = base;
+        },
+      });
     }
   }
 
