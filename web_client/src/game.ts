@@ -629,12 +629,13 @@ export class WorldScene extends Phaser.Scene {
   private mobTargetOutline: Phaser.GameObjects.Rectangle | null = null;
   /** Mob id the outline currently hugs (null = no hover target). */
   private mobHoverId: string | null = null;
-  /** BODY SILHOUETTE v2 (user 05/10: scale-clone bị lệch về phía bụng vì
-   *  phóng to quanh 1 điểm khiến viền dày mỏng không đều theo hình art).
-   *  Kỹ thuật outline 8 hướng: 8 bản clone CÙNG kích thước chính xác với
-   *  body, dời ±2px theo 8 hướng, tô đỏ đặc — viền đỏ dày ĐỀU 2px quanh
-   *  mọi đường viền của art (tai, đuôi, chân). Alpha 0.7. */
-  private mobSilhouettes: { id: string; imgs: Phaser.GameObjects.Image[] } | null = null;
+  /** BODY GLOW (user 05/10: "cần 1 cái trail hẳn hoi"): Phaser's built-in
+   *  PreFX.Glow shader on the hovered mob's OWN sprite — a GPU outline
+   *  hugging every pixel of the art, ZERO per-frame JS (no delay, no
+   *  frame-sync code, no color shift — the glow lives OUTSIDE the body).
+   *  The 8-clone approach was killed: build cost + per-frame sync lagged
+   *  and read messy. Destroyed by clearFX on hover-out. */
+  private mobGlowId: string | null = null;
   private phaserPointerBound = false;
   private aimCursor: { dx: number; dy: number } | null = null;
   // Mouse tile cache — written by refreshMouseTile() each frame from the
@@ -3035,50 +3036,30 @@ export class WorldScene extends Phaser.Scene {
    *  included) and mirrors the body's live position + scale (walk bob),
    *  so the red coat hugs the moving body. Placeholder rect bodies (sheet
    *  not loaded yet) fall back to the rect ring. */
-  /** 8 hướng × 2px cho outline đều nhau. */
-  private static readonly SIL_OUTLINE_PX = 2;
-  private static readonly SIL_DIRS: [number, number][] = [
-    [0, -1], [0, 1], [-1, 0], [1, 0],
-    [-1, -1], [1, -1], [-1, 1], [1, 1],
-  ];
-
   private syncMobSilhouette(
     id: string,
     z: { container: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle },
   ): void {
-    if (this.mobSilhouettes && this.mobSilhouettes.id !== id) this.clearMobSilhouette();
-    if (!(z.body instanceof Phaser.GameObjects.Image)) return; // placeholder: không có art
+    if (this.mobGlowId === id) return; // already glowing — nothing per-frame
+    this.clearMobSilhouette();
     const body = z.body;
-    if (!this.mobSilhouettes) {
-      const imgs: Phaser.GameObjects.Image[] = [];
-      for (let i = 0; i < WorldScene.SIL_DIRS.length; i++) {
-        const img = this.add.image(0, 0, body.texture.key, body.frame.name);
-        img.setTintFill(0xff3b30); // đỏ đặc — outline
-        img.setAlpha(0.7);         // user: độ mờ 30%
-        z.container.addAt(img, i); // sau lưng body, trong cùng container
-        imgs.push(img);
-      }
-      this.mobSilhouettes = { id, imgs };
-    }
-    // Đồng bộ đầy đủ transform body cho TẤT CẢ các bản clone (viền bám
-    // theo frame animation + hướng + walk-bob), mỗi bản lệch 1 hướng 2px:
-    for (let i = 0; i < this.mobSilhouettes.imgs.length; i++) {
-      const img = this.mobSilhouettes.imgs[i];
-      const [dx, dy] = WorldScene.SIL_DIRS[i];
-      const o = WorldScene.SIL_OUTLINE_PX;
-      img.setPosition(body.x + dx * o, body.y + dy * o);
-      img.setScale(body.scaleX, body.scaleY);
-      if (img.texture.key !== body.texture.key) img.setTexture(body.texture.key, body.frame.name);
-      else if (img.frame.name !== body.frame.name) img.setFrame(body.frame.name);
-      img.setFlipX(body.flipX);
-      img.setVisible(true);
-    }
+    if (!(body instanceof Phaser.GameObjects.Image) || !body.preFX) return;
+    // GPU outline: red glow hugging the art. outerStrength 4 = clearly
+    // visible at 2x camera zoom without smearing small sprites.
+    body.preFX.addGlow(0xff3b30, 4, 0);
+    this.mobGlowId = id;
   }
 
   private clearMobSilhouette(): void {
-    if (this.mobSilhouettes) {
-      for (const img of this.mobSilhouettes.imgs) img.destroy();
-      this.mobSilhouettes = null;
+    if (this.mobGlowId) {
+      const z = this.zombies.get(this.mobGlowId);
+      if (z && z.body instanceof Phaser.GameObjects.Image) {
+        const b = z.body as Phaser.GameObjects.Image;
+        if (b.preFX) {
+          for (const fx of [...b.preFX.list]) b.preFX.remove(fx);
+        }
+      }
+      this.mobGlowId = null;
     }
   }
 
