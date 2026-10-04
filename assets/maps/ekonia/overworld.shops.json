@@ -1,0 +1,28 @@
+{
+  "gac_dac": {
+    "currency": "coin",
+    "items": [
+      { "key": "potion_hp", "price": 25, "count": -1 },
+      { "key": "potion_mp", "price": 30, "count": -1 },
+      { "key": "apple", "price": 12, "count": -1 },
+      { "key": "cooked_meat", "price": 40, "count": 8 },
+      { "key": "wood_pickaxe", "price": 120, "count": 2 }
+    ]
+  },
+  "thuong_nhan": {
+    "currency": "coin",
+    "items": [
+      { "key": "potion_hp", "price": 22, "count": -1 },
+      { "key": "potion_mp", "price": 28, "count": -1 },
+      { "key": "cooked_meat", "price": 35, "count": -1 },
+      { "key": "apple", "price": 10, "count": -1 },
+      { "key": "iron_ore", "price": 60, "count": 3 },
+      { "key": "iron_ingot", "price": 110, "count": 2 },
+      { "key": "steel_ingot", "price": 260, "count": 2 },
+      { "key": "iron_sword", "price": 450, "count": 1 },
+      { "key": "steel_sword", "price": 900, "count": 1 },
+      { "key": "leatherchest", "price": 380, "count": 1 },
+      { "key": "key_stone", "price": 700, "count": 1 }
+    ]
+  }
+}

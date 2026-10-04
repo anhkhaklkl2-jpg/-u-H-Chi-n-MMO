@@ -1,0 +1,92 @@
+[
+ {
+  "kind": "copper_ore",
+  "x": 80,
+  "y": 13
+ },
+ {
+  "kind": "copper_ore",
+  "x": 61,
+  "y": 14
+ },
+ {
+  "kind": "copper_ore",
+  "x": 51,
+  "y": 37
+ },
+ {
+  "kind": "copper_ore",
+  "x": 62,
+  "y": 22
+ },
+ {
+  "kind": "copper_ore",
+  "x": 55,
+  "y": 16
+ },
+ {
+  "kind": "copper_ore",
+  "x": 14,
+  "y": 13
+ },
+ {
+  "kind": "copper_ore",
+  "x": 43,
+  "y": 24
+ },
+ {
+  "kind": "copper_ore",
+  "x": 89,
+  "y": 38
+ },
+ {
+  "kind": "copper_ore",
+  "x": 81,
+  "y": 9
+ },
+ {
+  "kind": "copper_ore",
+  "x": 65,
+  "y": 15
+ },
+ {
+  "kind": "iron_ore",
+  "x": 59,
+  "y": 23
+ },
+ {
+  "kind": "iron_ore",
+  "x": 75,
+  "y": 37
+ },
+ {
+  "kind": "iron_ore",
+  "x": 32,
+  "y": 11
+ },
+ {
+  "kind": "iron_ore",
+  "x": 7,
+  "y": 30
+ },
+ {
+  "kind": "iron_ore",
+  "x": 4,
+  "y": 26
+ },
+ {
+  "kind": "iron_ore",
+  "x": 22,
+  "y": 11
+ },
+ {
+  "kind": "iron_ore",
+  "x": 14,
+  "y": 25
+ },
+ {
+  "kind": "iron_ore",
+  "x": 38,
+  "y": 19
+ }
+]
