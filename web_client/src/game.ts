@@ -629,6 +629,13 @@ export class WorldScene extends Phaser.Scene {
   private mobTargetOutline: Phaser.GameObjects.Rectangle | null = null;
   /** Mob id the outline currently hugs (null = no hover target). */
   private mobHoverId: string | null = null;
+  /** BODY SILHOUETTE (user 05/10: "bao bọc cơ thể mob như 1 lớp phủ" —
+   *  KHÔNG phải ô chữ nhật): a clone of the mob's sprite filled SOLID red
+   *  (setTintFill) and scaled ~14%, inserted BEHIND the body inside the
+   *  same container. The red sticks out around every edge of the ART
+   *  itself (ears, tail, legs) — a body-shaped outline that follows the
+   *  mob, impossible with a rect. Destroyed when hover moves away. */
+  private mobSilhouette: { id: string; img: Phaser.GameObjects.Image } | null = null;
   private phaserPointerBound = false;
   private aimCursor: { dx: number; dy: number } | null = null;
   // Mouse tile cache — written by refreshMouseTile() each frame from the
@@ -2970,14 +2977,12 @@ export class WorldScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x8fd4ff, 0.9);
   }
 
-  /** Frame padding per mob display size (px, world): the frame hugs the
-   *  BODY box with a light outset so the outline reads as a "target ring"
-   *  around the mob rather than a rect glued to its pixels. Keyed by the
-   *  displayed body height — wider/narrower kinds land in the same band. */
-  private mobFramePad(displayH: number): number {
-    if (displayH <= 26) return 5;   // small tokens (rat, bat)
-    if (displayH <= 40) return 7;   // standard 32px sheets
-    return 10;                      // large mobs (boss-like)
+  /** Frame padding per mob display size (px, world): TIGHT now (user:
+   *  the old padded cell frame read as a floating "aura", not a target
+   *  hugging the body — the art box below already trims transparent
+   *  cell margins, so only a small outset remains). */
+  private mobFramePad(_displayH: number): number {
+    return 3;
   }
 
   /** Create/position/hide the red mob-target outline. Runs EVERY FRAME
@@ -3014,35 +3019,91 @@ export class WorldScene extends Phaser.Scene {
       break;
     }
     if (hit) {
-      ring.setPosition(hit.box.x + hit.box.w / 2, hit.box.y + hit.box.h / 2)
-        .setSize(hit.box.w, hit.box.h)
-        .setVisible(true)
-        .setActive(true);
+      // MOB HOVER = red body silhouette (no rect ring — user 05/10: it
+      // always read as a rectangle, not a body wrap).
+      ring.setVisible(false);
       this.mobHoverId = hit.id;
+      this.syncMobSilhouette(hit.id, this.zombies.get(hit.id)!);
     } else {
       ring.setVisible(false);
       this.mobHoverId = null;
+      this.clearMobSilhouette();
     }
   }
 
-  /** WORLD-space body box of one mob: the body lives INSIDE a Container
-   *  (child getBounds() returns LOCAL bounds — the container transform is
-   *  NOT included, the old hit-test silently missed every mob), so the
-   *  world box = container pos + body local pos ± display size. The
-   *  container pos is the live lerped position, so the box tracks a
-   *  walking mob frame-by-frame. */
+  /** Create/sync/destroy the red body silhouette. Runs every frame while
+   *  a mob is hovered: clones the CURRENT texture frame (animation
+   *  included) and mirrors the body's live position + scale (walk bob),
+   *  so the red coat hugs the moving body. Placeholder rect bodies (sheet
+   *  not loaded yet) fall back to the rect ring. */
+  private syncMobSilhouette(
+    id: string,
+    z: { container: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle },
+  ): void {
+    if (this.mobSilhouette && this.mobSilhouette.id !== id) this.clearMobSilhouette();
+    if (!(z.body instanceof Phaser.GameObjects.Image)) return; // placeholder: ring covers it
+    if (!this.mobSilhouette) {
+      const img = this.add.image(0, 0, z.body.texture.key, z.body.frame.name);
+      img.setTintFill(0xff3b30); // SOLID red — the silhouette IS the coat
+      img.setAlpha(0.92);
+      z.container.addAt(img, 0); // behind the body, inside the container
+      this.mobSilhouette = { id, img };
+    }
+    const img = this.mobSilhouette.img;
+    // Mirror the body's live transform (position + walk-bob scale + flip):
+    img.setPosition(z.body.x, z.body.y);
+    img.setScale(z.body.scaleX * 1.14, z.body.scaleY * 1.14);
+    // ANIMATION PARITY (user 05/10: "mob đổi frame thì nền không theo —
+    // trông kì"): the body's frame advances every animation tick; the
+    // silhouette must re-cut its texture from the SAME frame each pass or
+    // the red coat freezes on the old pose. Texture key too (bodies swap
+    // sheets on upgrades). setFrame on a same-key texture is ~free.
+    if (img.texture.key !== z.body.texture.key) img.setTexture(z.body.texture.key, z.body.frame.name);
+    else if (img.frame.name !== z.body.frame.name) img.setFrame(z.body.frame.name);
+    // Flip parity (facing left/right mirrors X).
+    img.setFlipX(z.body.flipX);
+    img.setVisible(true);
+  }
+
+  private clearMobSilhouette(): void {
+    if (this.mobSilhouette) {
+      this.mobSilhouette.img.destroy();
+      this.mobSilhouette = null;
+    }
+  }
+
+  /** WORLD-space body box of one mob — trimmed to the VISIBLE ART, not the
+   *  sprite cell: a container child's getBounds() is LOCAL (no container
+   *  transform) and most mob cells carry big transparent margins, so the
+   *  naive cell box made the red frame float like an aura around the mob
+   *  (user 05/10). The box = container pos + body local pos ± display
+   *  size, height TRIMMED to sheet.artH (real opaque art height measured
+   *  per sheet, feet-anchored at the body's bottom edge), width capped to
+   *  the art scale. The container pos is the live lerped position, so the
+   *  box tracks a walking mob frame-by-frame. */
   private mobBodyBox(z: {
+    kind: string;
     container: Phaser.GameObjects.Container;
     body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
   }): { x: number; y: number; w: number; h: number } {
-    const w = (z.body as Phaser.GameObjects.Image).displayWidth || 22;
-    const h = (z.body as Phaser.GameObjects.Image).displayHeight || 26;
-    return {
-      x: z.container.x + z.body.x - w / 2,
-      y: z.container.y + z.body.y - h / 2,
-      w,
-      h,
-    };
+    const img = z.body as Phaser.GameObjects.Image;
+    const dispW = img.displayWidth || 22;
+    const dispH = img.displayHeight || dispW;
+    const sheet = MOB_SHEETS[z.kind];
+    let artW = dispW;
+    let artH = dispH;
+    if (sheet) {
+      // Display scale of the cell (cellH displayed / cell native).
+      const k = dispH / sheet.cellH;
+      // Real opaque art height (native px → displayed), feet-anchored.
+      artH = (sheet.artH ?? sheet.size) * k;
+      // Wildlife art is wider than tall (deer/boar); humanoid sheets fill
+      // the cell width. Cap so the frame never exceeds the drawn sprite.
+      artW = sheet.artH ? Math.min(dispW, Math.max(artH * 1.45, artH)) : dispW;
+    }
+    const cx = z.container.x + z.body.x;
+    const feetY = z.container.y + z.body.y + dispH / 2; // body bottom line
+    return { x: cx - artW / 2, y: feetY - artH, w: artW, h: artH };
   }
 
   /** The mob whose CURRENT lerped position covers `tx,ty` (world body box
@@ -4262,18 +4323,24 @@ export class WorldScene extends Phaser.Scene {
     if (this.textures.exists(cacheKey)) return cacheKey;
     // Meteor-ore pseudo-tiles (NEGATIVE gids, spawned at meteor craters):
     // no Tiled tileset crop exists for them — they draw the bundled
-    // ui/node/meteor_ore.png sprite fetched through the asset lane.
+    // ui/node/<id>.png sprite fetched through the asset lane.
     if (gid < 0) {
-      if (gid === -77) {
-        // main.ts registers node assets as "node-<basename-without-.png>"
-        // (underscores preserved): meteor_ore.png -> "node-meteor_ore".
-        if (!this.textures.exists("node-meteor_ore")) {
-          this.assetFetch?.("node/meteor_ore.png");
-          return null; // retry on the next layer refresh once bytes arrive
-        }
-        return "node-meteor_ore";
+      // gid -> node sprite basename (main.ts registers "node/<id>.png" as
+      // "node-<id>"): -77 meteor crater rock, -78/-79 cave ore veins
+      // (game/resources.py spawn_ore_veins).
+      const NEG_GID_NODE: Record<number, string> = {
+        [-77]: "meteor_ore",
+        [-78]: "copper_ore",
+        [-79]: "iron_ore",
+      };
+      const base = NEG_GID_NODE[gid];
+      if (!base) return null;
+      const texKey = `node-${base}`;
+      if (!this.textures.exists(texKey)) {
+        this.assetFetch?.(`node/${base}.png`);
+        return null; // retry on the next layer refresh once bytes arrive
       }
-      return null;
+      return texKey;
     }
     const tw = map.tile_width;
     const th = map.tile_height;
@@ -4355,7 +4422,10 @@ export class WorldScene extends Phaser.Scene {
       let fill = this.progressFills.get(key);
       const isNew = !bar || !fill;
       if (isNew) {
-        bar = this.add.container(cx, maxY - 6);
+        // Bar sits UNDER the node's bottom edge (maxY + 4): the old
+        // maxY - 6 put it ON the sprite — on 1-tile cave ore veins it
+        // covered half the rock (user: "bị sai và đè lên quặng").
+        bar = this.add.container(cx, maxY + 4);
         // Fresh bar starts at ZERO width — never lerps from a previous
         // node's leftover value (the old green-flash bug).
         fill = this.add.rectangle(-width / 2, 0, 2, 5, 0x6fe26f)
