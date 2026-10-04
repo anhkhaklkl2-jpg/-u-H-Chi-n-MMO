@@ -252,6 +252,19 @@ Do not proceed to the next phase until the current acceptance tests pass.
    (file thiếu, import sai, version lệch) — KHÔNG kết luận "Railway chưa
    update" nếu chưa có bằng chứng từ log Railway.
 
+🚫 **🚫🚫 CẤM TUYỆT ĐỐI GHI CREDIT Codebuff/Freebuff (user 05/10/2026 — NHẤN MẠNH) 🚫🚫**
+   KHÔNG BAO GIỜ ghi credit/brand/tên công cụ AI của Freebuff/Codebuff vào
+   BẤT CỨ CHỖ NÀO trong dự án: không trong commit message (không footer
+   "Generated with Codebuff", KHÔNG trailer "Co-Authored-By: Codebuff"),
+   không trong code/comment, không trong docs/README, không trong file cấu
+   hình. Đây là dự án của user — công cụ không tự gắn tên vào sản phẩm.
+   - Khi tạo commit: message chỉ gồm nội dung thay đổi, KẾT THÚC SẠCH,
+     KHÔNG thêm footer/trailer AI nào.
+   - KHI BẮT GẶP credit như vậy ở bất cứ đâu (file, commit, doc) —
+     **TRIỆT TIÊU NGAY LẬP TỨC**: xóa dòng đó khỏi file, hoặc rewrite lịch
+     sử (`git filter-branch --msg-filter`) rồi force-push nếu nó đã lên
+     remote. KHÔNG hỏi lại, user đã duyệt sẵn hành động này.
+
 1. **LUÔN trả lời bằng tiếng Việt** — mọi câu trả lời, giải thích, báo cáo cho
    người dùng đều bằng tiếng Việt (code, log, comment giữ nguyên tiếng Anh).
 2. **LUÔN deploy code lên cloud khi xong việc** — sau mỗi thay đổi code đã
