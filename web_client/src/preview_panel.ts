@@ -277,6 +277,7 @@ export class PreviewPanel {
       if (fxSaveTimer !== null) window.clearTimeout(fxSaveTimer);
       fxSaveTimer = window.setTimeout(() => fxScene()?.commitFxAlign(), 700);
     };
+    const fxSliders: Array<{ key: string; inp: HTMLInputElement; val: HTMLSpanElement }> = [];
     const fxSlider = (label: string, key: string, min: number, max: number): void => {
       const cur = fxScene()?.welcome?.map?.room_fx?.[key] ?? 1;
       const line = document.createElement("div");
@@ -300,7 +301,25 @@ export class PreviewPanel {
       };
       line.append(cap, inp, val);
       mapSec.appendChild(line);
+      fxSliders.push({ key, inp, val });
     };
+    // Sync slider positions from the welcome's saved tuning (the panel
+    // builds BEFORE the welcome arrives, so the initial 1.00 default is
+    // often wrong — user 05/10 "lấy fx mik fix làm gốc"). Skips the slider
+    // the user is currently dragging.
+    const syncFxSliders = (): void => {
+      const rf = fxScene()?.welcome?.map?.room_fx;
+      if (!rf) return;
+      for (const s of fxSliders) {
+        const v = rf[s.key];
+        if (typeof v !== "number") continue;
+        if (document.activeElement === s.inp) continue;
+        s.inp.value = String(v);
+        s.val.textContent = v.toFixed(2);
+      }
+    };
+    window.setInterval(syncFxSliders, 5000);
+    window.setTimeout(syncFxSliders, 3000);
     fxSlider("🔥 cỡ", "fire_scale", 0.5, 2.5);
     fxSlider("🔥 tốc độ", "fire_speed", 0.25, 3);
     fxSlider("🪟 cỡ", "window_scale", 0.5, 2.5);

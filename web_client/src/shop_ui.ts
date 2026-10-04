@@ -202,6 +202,12 @@ export function openShop(frame: ShopOpenFrame, api: ShopApi): void {
   overlay.open(frame, api);
 }
 
+/** True while a shop panel is on screen (F/click gates in main.ts — a
+ *  second F used to re-open the NPC dialogue OVER the shop: bug). */
+export function isShopOpen(): boolean {
+  return overlay.el !== null;
+}
+
 /** Close the shop panel (server push, map switch…). */
 export function closeShop(): void {
   overlay.close();

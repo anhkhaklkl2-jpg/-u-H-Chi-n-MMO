@@ -7,7 +7,7 @@ import { KeyboardInput } from "./input";
 import { MobileControls } from "./mobile_controls";
 import { Net } from "./net";
 import { dialogBox, DialogPage } from "./dialog_box";
-import { openShop, closeShop } from "./shop_ui";
+import { openShop, closeShop, isShopOpen } from "./shop_ui";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { weatherFx } from "./weather";
@@ -1207,6 +1207,8 @@ const input = new KeyboardInput({
     // Kaetram parity: atk anim plays exactly ONCE per click, ~450ms.
     // SWING GATE: one swing anim = one hit — rapid F taps inside the
     // animation window are dropped locally (the server also refuses them).
+    // SHOP GATE: vung tay khi đang mở shop là nhầm phím — bỏ qua.
+    if (isShopOpen()) return;
     if (!swingGateOpen()) return;
     markSwingSent();
     net.action("attack");
@@ -1225,6 +1227,9 @@ const input = new KeyboardInput({
     // F khi hộp thoại ĐANG MỞ = chuyển trang/skip typewriter (dialogBox tự xử
     // qua keyHandler của nó) — không gửi /npc lại (sẽ re-open trang 1).
     if (dialogBox.isOpen) return true;
+    // SHOP GATE (bug 05/10): đang mở shop mà nhấn F lại mở thoại đè lên
+    // panel — nuốt phím, không làm gì cả.
+    if (isShopOpen()) return true;
     // F = NPC talk (user 30/09): standing next to an NPC opens the dialogue.
     if (!scene.nearNpc()) return false;
     scene.requestNpcDialogue();
@@ -1782,6 +1787,8 @@ game.events.once("ready", () => {
   // NPC dialogue: ask the SERVER for the NPC's dialogue text (it owns the
   // npcs.json data) — the structured npc_dialogue frame renders the DialogBox.
   scene.onNpcInteract = (npc) => {
+    // SHOP GATE: click vào NPC khi shop đang mở thì bỏ qua (không mở thoại đè).
+    if (isShopOpen()) return;
     net.chatCommand(`/npc ${npc.id}`);
   };
   // Dialogue face lock release: when the conversation truly ends (box
