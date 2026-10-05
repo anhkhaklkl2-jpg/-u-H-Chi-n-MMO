@@ -102,6 +102,19 @@ ZOMBIE_ATTACK_COOLDOWN_SECONDS = 2.0
 # shamble a touch slower than a walking player; hunters match a runner).
 WEB_ZOMBIE_WALK_SPEED = 2.2
 WEB_ZOMBIE_HUNTER_SPEED = 4.2
+
+# Collision box halves for the web movement helpers (game/collision.py).
+# _DEFAULT_BOX = the player parity box; ANIMALS use the wider MOB_BOX_HALF
+# so their oversized side-view sprites stop overlapping wall/tree art
+# (user 06/10: animal "đi đè lên cây, chui vào mép tường, kẹt layer tường").
+_DEFAULT_BOX = 0.3
+
+
+def _mob_box_half(collision) -> float:
+    """Animal collision half-width — the map's MOB_BOX_HALF when available,
+    falling back to the module constant (collision stubs in tests)."""
+    from game.collision import MOB_BOX_HALF
+    return getattr(collision, "mob_box_half", MOB_BOX_HALF)
 # Bite range in float tiles: touching distance + a small slack.
 WEB_ZOMBIE_BITE_RANGE = 0.85
 # Per-zombie bite cooldown (seconds): damage lands at most this often per
@@ -647,51 +660,187 @@ def _build_art_ok_set(map_data) -> Optional[set]:
     return ok
 
 
+# ---- ZONE-GRID SPAWN ECOSYSTEM ("spawn dàn đều, không dồn cục") ----------
+# Player-anchored spawning alone made the world feel rigid: every mob popped
+# inside a fixed ring around ONE player and several spawns could stack into
+# the same neighbourhood ("spawn 1 đống quái vào 1 khu vực"). Spawning is
+# now ZONE-based: the map is partitioned into a grid of spawn zones derived
+# from the tile layers (data-driven — NO hard-coded coordinates, rules
+# 10/17). Each zone carries a live-population cap and every new spawn keeps
+# a minimum spacing from the mobs already alive, so packs spread across the
+# area around the players instead of dumping into one spot. The player ring
+# stays as the PREFERENCE (near the action, weighted) with a low-priority
+# fallback that slowly fills the rest of the world.
+SPAWN_ZONE_TILES = 16   # zone side, in tiles
+ZOMBIES_PER_ZONE = 3    # max ALIVE hostile mobs inside one zone
+AMBIENT_PER_ZONE = 4    # ambient wildlife cap per zone (they cluster less)
+ZOMBIE_SPAWN_SPACING = 6  # min Chebyshev distance between mobs at spawn time
+# Zones within this radius of a player are "near" (preferred); the rest are
+# low-weight fillers so an idle world still populates gradually.
+SPAWN_ZONE_NEAR_RADIUS = 45
+
+
+def _zone_key(x, y) -> Tuple[int, int]:
+    return (int(x) // SPAWN_ZONE_TILES, int(y) // SPAWN_ZONE_TILES)
+
+
+def _spawn_zone_map(collision) -> Dict[Tuple[int, int], List[Tuple[int, int]]]:
+    """Zone grid -> legal spawn tiles (walkable + art, VOID cells excluded).
+
+    Built once per map (cached on the MapData instance — maps are static per
+    runtime) and shared by every spawner. Replaces the old full-map scan per
+    spawn attempt with an O(zone-tiles) pick.
+    """
+    md = collision.map_data
+    cached = getattr(md, "_spawn_zone_cache", None)
+    if cached is not None:
+        return cached
+    art_ok = _build_art_ok_set(md)
+    zones: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+    for y in range(md.height):
+        for x in range(md.width):
+            if not collision.is_walkable(x, y):
+                continue
+            if art_ok is not None and (x, y) not in art_ok:
+                continue
+            zones.setdefault(_zone_key(x, y), []).append((x, y))
+    md._spawn_zone_cache = zones
+    return zones
+
+
+def _zone_spawn_tile(
+    zone_map: Dict[Tuple[int, int], List[Tuple[int, int]]],
+    existing: List[Tuple[int, int, int]],
+    players_xy: List[Tuple[float, float]],
+    rng: random.Random,
+    *,
+    min_player_dist: float,
+    per_zone: int,
+    spacing: int,
+    extra_filter=None,
+) -> Optional[Tuple[int, int]]:
+    """Pick a spawn tile through the zone ecosystem. Returns (x, y) or None.
+
+    ``existing`` = (zone_key, x, y) of every ALIVE mob on the map (all
+    kinds — spacing and per-zone caps must count neighbours of any kind).
+
+    Selection: zones UNDER their per-zone cap are eligible; near-player
+    zones are drawn first, weighted by remaining capacity (rotation — the
+    same zone is never picked twice while another has room), then far zones
+    as low-weight filler. Inside the chosen zone a random legal tile must
+    clear: player distance, mob spacing, and the caller's extra filter
+    (e.g. outside every Discord viewport). NO zone fits -> None (caps are
+    hard — never dump a mob into a crowded zone).
+    """
+    if not zone_map:
+        return None
+
+    def _near(zone: Tuple[int, int]) -> bool:
+        cx = zone[0] * SPAWN_ZONE_TILES + SPAWN_ZONE_TILES / 2.0
+        cy = zone[1] * SPAWN_ZONE_TILES + SPAWN_ZONE_TILES / 2.0
+        return any(
+            max(abs(cx - px), abs(cy - py)) <= SPAWN_ZONE_NEAR_RADIUS
+            for px, py in players_xy
+        )
+
+    alive_by_zone: Dict[Tuple[int, int], int] = {}
+    for zkey, _zx, _zy in existing:
+        alive_by_zone[zkey] = alive_by_zone.get(zkey, 0) + 1
+
+    near_pool: List[Tuple[int, int]] = []
+    far_pool: List[Tuple[int, int]] = []
+    for zone, tiles in zone_map.items():
+        capacity = per_zone - alive_by_zone.get(zone, 0)
+        if capacity <= 0 or not tiles:
+            continue
+        pool = near_pool if _near(zone) else far_pool
+        pool.extend([zone] * capacity)  # capacity-weighted draw
+
+    for pool in (near_pool, far_pool):
+        rng.shuffle(pool)
+        for zone in pool:
+            tiles = list(zone_map[zone])
+            rng.shuffle(tiles)
+            for (x, y) in tiles:
+                # Distance from the tile's float CENTRE (mobs snap to
+                # centre) — a tile whose centre is inside the min radius is
+                # rejected even when its int anchor is not.
+                if players_xy and min(
+                    max(abs(x + 0.5 - px), abs(y + 0.5 - py))
+                    for px, py in players_xy
+                ) < min_player_dist:
+                    continue
+                if any(
+                    max(abs(x - zx), abs(y - zy)) < spacing
+                    for _zk, zx, zy in existing
+                ):
+                    continue
+                if extra_filter is not None and not extra_filter(x, y):
+                    continue
+                return (x, y)
+    return None
+
+
+def _web_spawn_positions(state) -> List[Tuple[int, int, int]]:
+    """``(zone, x, y)`` for every alive web mob (hostile + ambient)."""
+    out = []
+    for z in _web_zombies(state):
+        zx = int(getattr(z, "x_f", z.x))
+        zy = int(getattr(z, "y_f", z.y))
+        out.append((_zone_key(zx, zy), zx, zy))
+    return out
+
+
+def _discord_spawn_positions(state) -> List[Tuple[int, int, int]]:
+    """``(zone, x, y)`` for the Discord turn pack."""
+    return [(_zone_key(z.x, z.y), z.x, z.y) for z in _zombies(state)]
+
+
 def _spawn_position(state, collision, view_rects: Dict[int, tuple], rng: random.Random):
-    """Random walkable tile near (but not on) a player: inside the crowd area
-    (<= ZOMBIE_AREA_RADIUS of someone), outside every viewport, not too close
-    to any player. Random pick = spawns scatter instead of stacking at one
-    "preferred" ring position."""
+    """Zone-based walkable tile near the players (Discord turn pack).
+
+    Through _zone_spawn_tile: per-zone caps + mob spacing keep the pack
+    spread around the action instead of stacking in one neighbourhood;
+    the extra filter keeps every candidate outside all Discord viewports.
+    Fallback: any legal off-screen tile (tiny maps may not fill a zone).
+    """
     players = _players(state)
     if not players:
         return None
 
     occupied = _occupied(state)
-    width = collision.map_data.width
-    height = collision.map_data.height
-    # VOID GUARD ("quái spawn ra ngoài void"): walkable alone is not enough
-    # on the carved Ekonia maps — the invisible-blocker carve opens no-art
-    # cells (and the outer rim is void). A spawn tile must also carry ART:
-    # at least one non-ground layer with an opaque pixel at the cell. We use
-    # the same truth the renderer draws; cells with nothing drawn are void.
+    players_xy = [(float(p.x), float(p.y)) for p in players]
+
+    def _outside_views(x: int, y: int) -> bool:
+        return not _in_any_view_xy(x, y, view_rects)
+
+    tile = _zone_spawn_tile(
+        _spawn_zone_map(collision),
+        _discord_spawn_positions(state),
+        players_xy, rng,
+        min_player_dist=ZOMBIE_MIN_SPAWN_DISTANCE,
+        per_zone=ZOMBIES_PER_ZONE,
+        spacing=ZOMBIE_SPAWN_SPACING,
+        extra_filter=_outside_views if view_rects else None,
+    )
+    if tile is not None:
+        return tile
+
+    # Fallback: anywhere legal off-screen (still art-checked, still outside
+    # every viewport, still spacing-checked) — tiny maps may not fill a zone.
     _art_ok = _build_art_ok_set(collision.map_data)
-    candidates: List[Tuple[int, int]] = []
-
-    for y in range(height):
-        for x in range(width):
-            if (x, y) in occupied or not collision.is_walkable(x, y):
-                continue
-            if _art_ok is not None and (x, y) not in _art_ok:
-                continue
-            if _in_any_view_xy(x, y, view_rects):
-                continue
-            dists = [max(abs(x - p.x), abs(y - p.y)) for p in players]
-            if min(dists) < ZOMBIE_MIN_SPAWN_DISTANCE:
-                continue
-            if min(dists) > ZOMBIE_AREA_RADIUS:
-                continue
-            candidates.append((x, y))
-
-    # Fall back to anywhere legal off-screen; tiny maps may not have the ideal
-    # ring. Still random, still never inside a viewport — and still never on
-    # a no-art void cell (the art filter above applies here too).
-    if not candidates:
-        candidates = [
-            (x, y) for y in range(height) for x in range(width)
-            if (x, y) not in occupied and collision.is_walkable(x, y)
-            and (_art_ok is None or (x, y) in _art_ok)
-            and not _in_any_view_xy(x, y, view_rects)
-        ]
+    existing = [(zx, zy) for _zk, zx, zy in _discord_spawn_positions(state)]
+    candidates: List[Tuple[int, int]] = [
+        (x, y) for y in range(collision.map_data.height)
+        for x in range(collision.map_data.width)
+        if (x, y) not in occupied and collision.is_walkable(x, y)
+        and (_art_ok is None or (x, y) in _art_ok)
+        and not _in_any_view_xy(x, y, view_rects)
+        and all(
+            max(abs(x - zx), abs(y - zy)) >= ZOMBIE_SPAWN_SPACING
+            for zx, zy in existing
+        )
+    ]
     return rng.choice(candidates) if candidates else None
 
 
@@ -883,7 +1032,8 @@ def advance_visible_zombies(
                 if target.hp <= 0:
                     target.visible = False
                     target.dead_until = time.time() + 5.0
-                    target.death_reason = "bị zombie tấn công"
+                    from game.death_reasons import stamp as _stamp, death_reason_for_mob as _mob
+                    _stamp(target, _mob(zombie.kind), kind="zombie")
                     result.died_player_ids.add(target.user_id)
             continue
         if _move_one(state, collision, zombie, target, rng):
@@ -1028,77 +1178,65 @@ def _web_set_anim(z: Zombie, anim: str, now: float) -> None:
 
 
 def web_spawn_one(state, collision, players: List[object], rng: random.Random) -> Optional[Zombie]:
-    """Spawn one web zombie in a ring around a random web player.
+    """Spawn one web hostile through the ZONE ecosystem.
 
-    Ring: >= WEB_ZOMBIE_MIN_SPAWN_DIST away (no pop-in on the player),
-    walkable tile, centre-snapped float pos. None when no tile fits.
+    Zone pick (per-zone cap + mob spacing + player distance) prefers
+    near-player zones weighted by remaining capacity, so packs spread
+    around the action instead of stacking into one ring/spot. The tile is
+    centre-snapped to a float pos. None when no zone/tile fits (caps are
+    hard — never dump a mob into a crowded zone).
     """
-    import math as _math
-
     alive = [p for p in players if getattr(p, "alive", True)]
     if not alive:
         return None
-    anchor = rng.choice(alive)
-    w = getattr(getattr(collision, "map_data", None), "width", 0) or 0
-    h = getattr(getattr(collision, "map_data", None), "height", 0) or 0
-    if not w or not h:
+    players_xy = [
+        (float(getattr(p, "x_f", p.x)), float(getattr(p, "y_f", p.y)))
+        for p in alive
+    ]
+    tile = _zone_spawn_tile(
+        _spawn_zone_map(collision),
+        _web_spawn_positions(state),
+        players_xy, rng,
+        min_player_dist=WEB_ZOMBIE_MIN_SPAWN_DIST,
+        per_zone=ZOMBIES_PER_ZONE,
+        spacing=ZOMBIE_SPAWN_SPACING,
+    )
+    if tile is None:
         return None
+    tx, ty = tile
     hunters = sum(1 for z in _web_zombies(state) if getattr(z, "hunter", False))
-    for _ in range(24):
-        ang = rng.uniform(0, 2 * _math.pi)
-        dist = rng.uniform(WEB_ZOMBIE_MIN_SPAWN_DIST, WEB_ZOMBIE_MIN_SPAWN_DIST + 10.0)
-        tx = int(_math.floor(anchor.x_f + _math.cos(ang) * dist))
-        ty = int(_math.floor(anchor.y_f + _math.sin(ang) * dist))
-        if tx < 0 or ty < 0 or tx >= w or ty >= h:
-            continue
-        try:
-            walkable = collision.is_walkable(tx, ty)
-        except Exception:
-            walkable = True
-        # VOID GUARD: keep the spawn centre at least half a tile inside the
-        # map so nothing pops in the black band around converted maps.
-        if not _in_bounds_float(tx + 0.5, ty + 0.5, w, h):
-            continue
-        if not walkable:
-            continue
-        # VOID GUARD: also require ART at the tile (same rule as the
-        # spawner's _spawn_position) — the carve opens walkable no-art
-        # cells around the playable region; mobs must never pop there.
-        _art_ok = _build_art_ok_set(getattr(collision, "map_data", None))
-        if _art_ok is not None and (tx, ty) not in _art_ok:
-            continue
-        z = Zombie(_next_web_id(state), tx, ty)
-        # Kind roll FIRST (per-map profile), then per-kind stats.
-        from game.mob_profiles import roll_kind_for
+    z = Zombie(_next_web_id(state), tx, ty)
+    # Kind roll FIRST (per-map profile), then per-kind stats.
+    from game.mob_profiles import roll_kind_for
 
-        z.kind = roll_kind_for(
-            getattr(getattr(collision, "map_data", None), "map_id", "bigmap"), rng
-        )
-        stats = mob_stats(z.kind)
-        z.hp = z.max_hp = stats["hp"]
-        z.damage = stats["dmg"]
-        z.web_speed = stats["speed"]
-        z.web_cooldown = stats["cooldown"]
-        z.x_f = float(tx) + 0.5
-        z.y_f = float(ty) + 0.5
-        z.hunter = hunters < ZOMBIE_MAX_HUNTERS and rng.random() < ZOMBIE_HUNTER_CHANCE
-        z.facing = "S"
-        z.anim = "walk"
-        z.anim_t = time.monotonic()
-        _add_web_zombie(state, z)
-        return z
-    return None
+    z.kind = roll_kind_for(
+        getattr(getattr(collision, "map_data", None), "map_id", "bigmap"), rng
+    )
+    stats = mob_stats(z.kind)
+    z.hp = z.max_hp = stats["hp"]
+    z.damage = stats["dmg"]
+    z.web_speed = stats["speed"]
+    z.web_cooldown = stats["cooldown"]
+    z.x_f = float(tx) + 0.5
+    z.y_f = float(ty) + 0.5
+    z.hunter = hunters < ZOMBIE_MAX_HUNTERS and rng.random() < ZOMBIE_HUNTER_CHANCE
+    z.facing = "S"
+    z.anim = "walk"
+    z.anim_t = time.monotonic()
+    _add_web_zombie(state, z)
+    return z
 
 
 def spawn_animal_one(state, collision, players: List[object], rng: random.Random,
                      kind: Optional[str] = None) -> Optional[Zombie]:
-    """Spawn ONE ambient animal (same ring rules as the hostile spawner).
+    """Spawn ONE ambient animal through the ZONE ecosystem.
 
-    kind=None rolls from the map's ambient roster. Animals share the web
-    store with ambient=True — the hostile cap never counts them.
+    Same machinery as the hostile spawner but with its own per-zone cap
+    (animals are allowed to cluster slightly more — herds read natural).
+    The per-zone cap counts ONLY ambient mobs: the hostile pack lives in
+    its own pool with its own cap. kind=None rolls from the map's ambient
+    roster. Animals share the web store with ambient=True.
     """
-    import math as _math
-
     from game.mob_profiles import (
         behavior_of,
         roll_ambient_kind_for,
@@ -1107,53 +1245,49 @@ def spawn_animal_one(state, collision, players: List[object], rng: random.Random
     alive = [p for p in players if getattr(p, "alive", True)]
     if not alive:
         return None
-    anchor = rng.choice(alive)
-    w = getattr(getattr(collision, "map_data", None), "width", 0) or 0
-    h = getattr(getattr(collision, "map_data", None), "height", 0) or 0
-    if not w or not h:
+    players_xy = [
+        (float(getattr(p, "x_f", p.x)), float(getattr(p, "y_f", p.y)))
+        for p in alive
+    ]
+    amb_existing = [
+        (_zone_key(int(getattr(z, "x_f", z.x)), int(getattr(z, "y_f", z.y))),
+         int(getattr(z, "x_f", z.x)), int(getattr(z, "y_f", z.y)))
+        for z in _web_zombies(state) if getattr(z, "ambient", False)
+    ]
+    tile = _zone_spawn_tile(
+        _spawn_zone_map(collision),
+        amb_existing,
+        players_xy, rng,
+        min_player_dist=WEB_ZOMBIE_MIN_SPAWN_DIST,
+        per_zone=AMBIENT_PER_ZONE,
+        spacing=ZOMBIE_SPAWN_SPACING,
+    )
+    if tile is None:
         return None
-    for _ in range(24):
-        ang = rng.uniform(0, 2 * _math.pi)
-        dist = rng.uniform(WEB_ZOMBIE_MIN_SPAWN_DIST, WEB_ZOMBIE_MIN_SPAWN_DIST + 10.0)
-        tx = int(_math.floor(anchor.x_f + _math.cos(ang) * dist))
-        ty = int(_math.floor(anchor.y_f + _math.sin(ang) * dist))
-        if tx < 0 or ty < 0 or tx >= w or ty >= h:
-            continue
-        try:
-            walkable = collision.is_walkable(tx, ty)
-        except Exception:
-            walkable = True
-        if not _in_bounds_float(tx + 0.5, ty + 0.5, w, h):
-            continue
-        if not walkable:
-            continue
-        _art_ok = _build_art_ok_set(getattr(collision, "map_data", None))
-        if _art_ok is not None and (tx, ty) not in _art_ok:
-            continue
-        z = Zombie(next_animal_id(state), tx, ty)
-        z.kind = kind or roll_ambient_kind_for(
-            getattr(getattr(collision, "map_data", None), "map_id", "bigmap"), rng
-        )
-        stats = mob_stats(z.kind)
-        z.hp = z.max_hp = stats["hp"]
-        z.damage = stats["dmg"]
-        z.web_speed = stats["speed"]
-        z.web_cooldown = stats["cooldown"]
-        z.x_f = float(tx) + 0.5
-        z.y_f = float(ty) + 0.5
-        z.ambient = True
-        z.hunter = False
-        # Neutral animals spawn calm; aggro is armed by taking a hit.
-        z.aggro_until = 0.0
-        _ = behavior_of(z.kind)  # validate the kind has a behavior row
-        # Side-view sheet: start facing right ("S" would show the right row
-        # anyway — face the art's native direction from birth).
-        z.facing = "E"
-        z.anim = "walk"
-        z.anim_t = time.monotonic()
-        _add_web_zombie(state, z)
-        return z
-    return None
+    tx, ty = tile
+    z = Zombie(next_animal_id(state), tx, ty)
+    z.kind = kind or roll_ambient_kind_for(
+        getattr(getattr(collision, "map_data", None), "map_id", "bigmap"), rng
+    )
+    stats = mob_stats(z.kind)
+    z.hp = z.max_hp = stats["hp"]
+    z.damage = stats["dmg"]
+    z.web_speed = stats["speed"]
+    z.web_cooldown = stats["cooldown"]
+    z.x_f = float(tx) + 0.5
+    z.y_f = float(ty) + 0.5
+    z.ambient = True
+    z.hunter = False
+    # Neutral animals spawn calm; aggro is armed by taking a hit.
+    z.aggro_until = 0.0
+    _ = behavior_of(z.kind)  # validate the kind has a behavior row
+    # Side-view sheet: start facing right ("S" would show the right row
+    # anyway — face the art's native direction from birth).
+    z.facing = "E"
+    z.anim = "walk"
+    z.anim_t = time.monotonic()
+    _add_web_zombie(state, z)
+    return z
 
 
 def _web_ambient_upkeep(state, collision, players, rng, map_id: str,
@@ -1217,6 +1351,19 @@ def _web_ambient_move(state, collision, players, now_mono: float, dt: float,
         length = _math.hypot(dx, dy) or 1e-6
         if style == "prey":
             flee_vision = float(beh.get("flee_vision", 4.5))
+            # HIT PANIC OVERRIDE (user 06/10: "bị đấm mà chả phản ứng gì"):
+            # rules.py arms panic_until on every landed hit — that panic must
+            # hold in the DAY loop too (the night prey flow re-arms it, this
+            # condensed one used to just let the animal calm the moment it
+            # left flee_vision).
+            if now_mono < z.panic_until:
+                _web_chase_step(
+                    z, -dx / length, -dy / length, collision, step, now_mono,
+                    result,
+                    speed=z.web_speed * float(beh.get("flee_mult", 1.3)),
+                    towards=(-dx, -dy),
+                )
+                continue
             if dist <= flee_vision:
                 _web_chase_step(
                     z, -dx / length, -dy / length, collision, step, now_mono,
@@ -1236,9 +1383,123 @@ def _web_ambient_move(state, collision, players, now_mono: float, dt: float,
                 z.aggro_until = 0.0
                 _web_ambient_wander(z, rng, collision, step, now_mono, result, state=state)
             continue
-        # neutral / others: calm wander (aggro never persists into the day
-        # gate for these because the day gate only runs this function).
-        _web_ambient_wander(z, rng, collision, step, now_mono, result, state=state)
+        # neutral / others: CALM wander UNTIL PROVOKED — rules.py arms
+        # aggro_until on every landed hit (user 06/10: "bị đấm mà chả phản
+        # ứng gì"). The old day loop ignored aggro entirely, so a boar/bear
+        # hit during the day just kept grazing. Aggro in the day falls
+        # through to the SAME fight-back flow as night: a defensive charge
+        # capped by the aggro leash, then calm back to grazing.
+        if now_mono >= getattr(z, "aggro_until", 0.0):
+            z.boar_warned = False
+            z.aggro_origin = None
+            _web_ambient_wander(z, rng, collision, step, now_mono, result, state=state)
+            continue
+        # Aggro fight-back (condensed copy of the night neutral flow):
+        # leash cap, boar warn-charge, then a straight chase + bite via the
+        # shared melee flow at the bottom of the night loop is NOT reachable
+        # from here, so replicate the charge/bite rhythm inline.
+        leash = float(beh.get("charge_leash", 0.0)) or float(beh.get("aggro_leash", 0.0))
+        if leash > 0.0:
+            if z.aggro_origin is None:
+                z.aggro_origin = (z.x_f, z.y_f)
+            ox, oy = z.aggro_origin
+            if _math.hypot(z.x_f - ox, z.y_f - oy) > leash:
+                z.aggro_until = 0.0
+                z.aggro_origin = None
+                _web_ambient_wander(z, rng, collision, step, now_mono, result, state=state)
+                continue
+        # BOAR warn-charge (same display as night: atk pose + back step).
+        if beh.get("warn_s") and z.charge_until <= now_mono:
+            if not z.boar_warned:
+                z.boar_warned = True
+                z.facing = _side_animal_facing(z, dx, dy)
+                _web_set_anim(z, "atk", now_mono)
+                if length > 1e-6:
+                    _web_chase_step(
+                        z, -dx / length, -dy / length, collision, step,
+                        now_mono, result, speed=z.web_speed,
+                        towards=(-dx, -dy),
+                    )
+                z.recover_until = now_mono + float(beh.get("warn_s", 0.7))
+                continue
+            if z.recover_until <= now_mono and length > 1e-6:
+                if z.charge_until == 0.0:
+                    z.charge_until = now_mono + float(beh.get("charge_s", 1.5))
+                    z.charge_dx, z.charge_dy = dx / length, dy / length
+                if z.charge_until > now_mono:
+                    _web_chase_step(
+                        z, z.charge_dx, z.charge_dy, collision, step,
+                        now_mono, result,
+                        speed=z.web_speed * float(beh.get("charge_mult", 2.0)),
+                        towards=(z.charge_dx, z.charge_dy),
+                    )
+                    continue
+                z.charge_until = 0.0
+                _web_set_anim(z, "atk", now_mono)
+                z.recover_until = now_mono + WEB_ZOMBIE_RECOVER_S
+        # Bear back-turn burst (O5a parity for the day gate).
+        speed = z.web_speed
+        if beh.get("backturn_bonus") and now_mono < z.backturn_until:
+            speed = max(speed, z.web_speed * float(beh.get("backturn_bonus", 1.4)))
+        # Chase + bite rhythm (mirrors the night melee flow).
+        if dist <= WEB_ZOMBIE_BITE_RANGE:
+            since_bite = now_mono - (z.last_bite or 0.0)
+            if since_bite < WEB_ZOMBIE_ATK_MS / 1000.0:
+                continue
+            if since_bite < WEB_ZOMBIE_RECOVER_S:
+                _web_recovery_drift(z, collision, step, now_mono, result)
+                continue
+            if since_bite < z.web_cooldown:
+                _web_creep(z, dx, dy, length, collision, step, now_mono, result)
+                continue
+            z.facing = _side_animal_facing(z, dx, dy)
+            _web_set_anim(z, "atk", now_mono)
+            z.last_bite = now_mono
+            before = target.hp
+            dealt = max(1, round(z.damage * float(beh.get("damage_mult", 1.0))))
+            target.hp = max(0, target.hp - dealt)
+            if target.hp != before:
+                target.last_damaged_at = now_mono
+                target.regen_bank = 0.0
+                result.changed = True
+                result.damaged_player_ids.add(target.user_id)
+                feed = getattr(state, "recent_damage", None)
+                if feed is not None:
+                    feed.append((now_wall, target.user_id, dealt, "zombie"))
+                    del feed[:-40]
+            rec_len = max(1e-6, length)
+            z.recover_dx = (-dx / rec_len) * 0.7 + random.uniform(-0.6, 0.6)
+            z.recover_dy = (-dy / rec_len) * 0.7 + random.uniform(-0.6, 0.6)
+            rl = _math.hypot(z.recover_dx, z.recover_dy)
+            if rl > 1e-6:
+                z.recover_dx /= rl
+                z.recover_dy /= rl
+            if target.hp <= 0:
+                target.visible = False
+                target.dead_until = now_wall + 5.0
+                from game.death_reasons import stamp as _stamp, death_reason_for_mob as _mob
+                _stamp(target, _mob(z.kind), kind="zombie")
+                result.died_player_ids.add(target.user_id)
+            continue
+        # Out of bite range: chase the attacker down.
+        if length > 1e-6:
+            _web_chase_step(
+                z, dx / length, dy / length, collision, step, now_mono,
+                result, speed=speed, towards=(dx, dy),
+            )
+
+
+def _web_hostile_wander(z, rng, collision, step, now_mono: float,
+                        result: "ZombieTurnResult", state=None) -> None:
+    """HOSTILE idle rhythm (user 06/10: "mob thù địch đứng yên + xoay mặt
+    về đúng 1 phía mãi"): when a hostile mob loses its target / falls out
+    of vision / slips the leash, it no longer freezes forever — it reuses
+    the ambient stroll cycle (walk one heading 1.5-4 s at ~35% speed, then
+    stand 1-3 s, pick again). Facing updates from the ACTUAL step inside
+    _web_slide (8-way for Kaetram mobs), so the sprite turns with the walk.
+    A target appearing again interrupts the stroll on the next tick —
+    chase logic keeps full priority."""
+    _web_ambient_wander(z, rng, collision, step, now_mono, result, state=state)
 
 
 def _web_ambient_wander(z, rng, collision, step, now_mono: float,
@@ -1249,60 +1510,96 @@ def _web_ambient_wander(z, rng, collision, step, now_mono: float,
     touch) so deer cluster into loose herds and birds into flocks instead
     of scattering like random NPCs. Solo animals wander exactly as before.
     Walk one direction 1.5-4 s at ~35% speed, then stand 1-3 s, then pick
-    again."""
+    again.
+
+    WALL-AWARE HEADING (user 06/10 "animal hay ôm mép tường / đi đè lên
+    cây / kẹt vào layer tường"): before committing to a stroll heading, a
+    cheap forward probe (1.5 tiles) tests the sweep — headings blocked
+    within the probe distance get rejected and re-rolled (max 8 tries,
+    then the original heading stands, e.g. inside a corridor). A walking
+    animal no longer picks a heading straight INTO a wall/tree and grinds
+    along its edge for 4 s."""
     if now_mono >= getattr(z, "wander_until", 0.0):
         import math as _math
 
         if rng.random() < 0.6:  # 60% stroll, 40% graze
-            ang = rng.uniform(0, 2 * _math.pi)
-            z.recover_dx, z.recover_dy = _math.cos(ang), _math.sin(ang)
-            # FLOCK BIAS: blend the fresh heading toward same-kind neighbors
-            # within flock_r (cheap local pass — animal counts are tiny).
-            try:
-                from game.mob_profiles import behavior_of as _beh
+            # WALL-AWARE probe (see docstring): a candidate heading must keep
+            # the animal's (wider) box free for ~1.5 tiles or it gets re-rolled.
+            probe = 1.5
+            r = _mob_box_half(collision)
+            for _ in range(8):
+                cand = rng.uniform(0, 2 * _math.pi)
+                cx, cy = _math.cos(cand), _math.sin(cand)
+                try:
+                    fx, fy = collision.can_move_float(
+                        z.x_f, z.y_f, cx * probe, cy * probe, r,
+                    )
+                except TypeError:
+                    # Collision without the box_half param (older signature).
+                    try:
+                        fx, fy = collision.can_move_float(
+                            z.x_f, z.y_f, cx * probe, cy * probe,
+                        )
+                    except Exception:  # noqa: BLE001
+                        fx, fy = z.x_f + cx * probe, z.y_f + cy * probe
+                except Exception:  # noqa: BLE001 — probe must never break the tick
+                    fx, fy = z.x_f + cx * probe, z.y_f + cy * probe
+                reached = _math.hypot(fx - z.x_f, fy - z.y_f)
+                if reached >= probe * 0.75:
+                    z.recover_dx, z.recover_dy = cx, cy
+                    break
+            else:
+                # Every candidate blocked close-in (narrow corridor): keep a
+                # fresh random heading — the slide still clamps it legally.
+                ang = rng.uniform(0, 2 * _math.pi)
+                z.recover_dx, z.recover_dy = _math.cos(ang), _math.sin(ang)
+                # FLOCK BIAS: blend the fresh heading toward same-kind neighbors
+                # within flock_r (cheap local pass — animal counts are tiny).
+                try:
+                    from game.mob_profiles import behavior_of as _beh
 
-                beh = _beh(z.kind)
-                flock_r = float(beh.get("flock_r", 0.0))
-                flock_w = float(beh.get("flock_w", 0.0))
-            except Exception:  # noqa: BLE001 — flocking must never break the tick
-                flock_r = flock_w = 0.0
-            if flock_r > 0.0 and flock_w > 0.0 and state is not None:
-                mates = [
-                    o for o in _web_zombies(state)
-                    if o is not z and getattr(o, "ambient", False)
-                    and o.kind == z.kind and _web_dist(o, z) <= flock_r
-                ]
-                if mates:
-                    # Cohesion: toward the centroid; Alignment: average of
-                    # the mates' current headings (unit-weighted).
-                    cx = sum(o.x_f for o in mates) / len(mates)
-                    cy = sum(o.y_f for o in mates) / len(mates)
-                    hx = sum(o.recover_dx for o in mates) / len(mates)
-                    hy = sum(o.recover_dy for o in mates) / len(mates)
-                    coh = _math.hypot(cx - z.x_f, cy - z.y_f)
-                    if coh > 1e-3:
-                        ux, uy = (cx - z.x_f) / coh, (cy - z.y_f) / coh
-                    else:
-                        ux, uy = z.recover_dx, z.recover_dy
-                    hl = _math.hypot(hx, hy)
-                    if hl > 1e-3:
-                        ux += (hx / hl) * 0.6
-                        uy += (hy / hl) * 0.6
-                    ul = _math.hypot(ux, uy)
-                    if ul > 1e-3:
-                        ux, uy = ux / ul, uy / ul
-                        z.recover_dx = (
-                            z.recover_dx * (1.0 - flock_w) + ux * flock_w
-                        )
-                        z.recover_dy = (
-                            z.recover_dy * (1.0 - flock_w) + uy * flock_w
-                        )
-                        # Re-normalize the blended heading.
-                        bl = _math.hypot(z.recover_dx, z.recover_dy) or 1.0
-                        z.recover_dx /= bl
-                        z.recover_dy /= bl
-            z.wander_walking = True
-            z.wander_until = now_mono + rng.uniform(1.5, 4.0)
+                    beh = _beh(z.kind)
+                    flock_r = float(beh.get("flock_r", 0.0))
+                    flock_w = float(beh.get("flock_w", 0.0))
+                except Exception:  # noqa: BLE001 — flocking must never break the tick
+                    flock_r = flock_w = 0.0
+                if flock_r > 0.0 and flock_w > 0.0 and state is not None:
+                    mates = [
+                        o for o in _web_zombies(state)
+                        if o is not z and getattr(o, "ambient", False)
+                        and o.kind == z.kind and _web_dist(o, z) <= flock_r
+                    ]
+                    if mates:
+                        # Cohesion: toward the centroid; Alignment: average of
+                        # the mates' current headings (unit-weighted).
+                        cx = sum(o.x_f for o in mates) / len(mates)
+                        cy = sum(o.y_f for o in mates) / len(mates)
+                        hx = sum(o.recover_dx for o in mates) / len(mates)
+                        hy = sum(o.recover_dy for o in mates) / len(mates)
+                        coh = _math.hypot(cx - z.x_f, cy - z.y_f)
+                        if coh > 1e-3:
+                            ux, uy = (cx - z.x_f) / coh, (cy - z.y_f) / coh
+                        else:
+                            ux, uy = z.recover_dx, z.recover_dy
+                        hl = _math.hypot(hx, hy)
+                        if hl > 1e-3:
+                            ux += (hx / hl) * 0.6
+                            uy += (hy / hl) * 0.6
+                        ul = _math.hypot(ux, uy)
+                        if ul > 1e-3:
+                            ux, uy = ux / ul, uy / ul
+                            z.recover_dx = (
+                                z.recover_dx * (1.0 - flock_w) + ux * flock_w
+                            )
+                            z.recover_dy = (
+                                z.recover_dy * (1.0 - flock_w) + uy * flock_w
+                            )
+                            # Re-normalize the blended heading.
+                            bl = _math.hypot(z.recover_dx, z.recover_dy) or 1.0
+                            z.recover_dx /= bl
+                            z.recover_dy /= bl
+                z.wander_walking = True
+                z.wander_until = now_mono + rng.uniform(1.5, 4.0)
         else:
             z.wander_walking = False
             z.wander_until = now_mono + rng.uniform(1.0, 3.0)
@@ -1440,7 +1737,9 @@ def web_tick(
     for z in list(zombies):
         target = _web_nearest(z, players)
         if target is None:
-            _web_set_anim(z, "idle", now_mono)
+            # HOSTILE WANDER: no player anywhere — stroll instead of freezing
+            # forever on one facing (user 06/10).
+            _web_hostile_wander(z, rng, collision, step, now_mono, result, state=state)
             continue
         dist = _web_dist(z, target)
         # Per-kind combat style (game/mob_profiles.MOB_BEHAVIORS).
@@ -1678,7 +1977,9 @@ def web_tick(
                         if target.hp <= 0:
                             target.visible = False
                             target.dead_until = now_wall + 5.0
-                            target.death_reason = "bị spectre bắn trúng"
+                            from game.death_reasons import stamp as _stamp, death_reason_for_mob as _mob
+
+                            _stamp(target, _mob(z.kind), kind="zombie")
                             result.died_player_ids.add(target.user_id)
                 else:
                     _web_set_anim(z, "idle", now_mono)
@@ -1717,8 +2018,9 @@ def web_tick(
 
         # LEASH: beyond WEB_ZOMBIE_LEASH a zombie simply loses interest (no
         # steering, no bite) — every attack the player sees is within reach.
+        # HOSTILE WANDER: it prowls around its post instead of statues-frozen.
         if dist > WEB_ZOMBIE_LEASH:
-            _web_set_anim(z, "idle", now_mono)
+            _web_hostile_wander(z, rng, collision, step, now_mono, result, state=state)
             continue
         if dist <= WEB_ZOMBIE_BITE_RANGE:
             # Attack rhythm: lunge (~0.36 s, pose plays out) -> short recovery
@@ -1811,7 +2113,9 @@ def web_tick(
                 if target.hp <= 0:
                     target.visible = False
                     target.dead_until = now_wall + 5.0
-                    target.death_reason = "bị zombie tấn công"
+                    from game.death_reasons import stamp as _stamp, death_reason_for_mob as _mob
+
+                    _stamp(target, _mob(z.kind), kind="zombie")
                     result.died_player_ids.add(target.user_id)
             continue
         sees = z.hunter or dist <= WEB_ZOMBIE_VISION_RADIUS
@@ -1872,7 +2176,9 @@ def web_tick(
                         _web_set_anim(z, "atk", now_mono)
                     continue
         if not sees or length <= 1e-6:
-            _web_set_anim(z, "idle", now_mono)
+            # HOSTILE WANDER: player present but out of vision — patrol a
+            # small beat rather than stand petrified (user 06/10).
+            _web_hostile_wander(z, rng, collision, step, now_mono, result, state=state)
             continue
         # Hunters are always fast; ambush pounce bursts faster; regular kinds
         # use their MOB_KINDS speed.
@@ -1985,13 +2291,23 @@ def _web_chase_step(
     post-collision movement vector — a mob sliding along a tree keeps
     looking at what it hunts, and a single-facing (side-view) animal
     moving purely vertically keeps a sensible horizontal bearing instead
-    of freezing on a stale facing."""
+    of freezing on a stale facing.
+
+    ANIMALS sweep with the wider MOB_BOX_HALF (see _web_slide) — the flee
+    and chase paths are exactly where a panicking deer used to bury its
+    sprite half a tile into a tree trunk."""
     import math as _math
 
+    r = _mob_box_half(collision) if getattr(z, "ambient", False) else _DEFAULT_BOX
     can_float = getattr(collision, "can_move_float", None)
     if callable(can_float):
         try:
-            nx_f, ny_f = can_float(z.x_f, z.y_f, ux * speed * step, uy * speed * step)
+            nx_f, ny_f = can_float(z.x_f, z.y_f, ux * speed * step, uy * speed * step, r)
+        except TypeError:
+            try:
+                nx_f, ny_f = can_float(z.x_f, z.y_f, ux * speed * step, uy * speed * step)
+            except Exception:
+                nx_f, ny_f = z.x_f + ux * speed * step, z.y_f + uy * speed * step
         except Exception:
             nx_f, ny_f = z.x_f + ux * speed * step, z.y_f + uy * speed * step
     else:
@@ -2062,11 +2378,22 @@ def _web_slide(
     now_mono: float, result: "ZombieTurnResult",
 ) -> None:
     """Move by (dx, dy) float offset with collision; walk anim on success,
-    idle breathe when blocked."""
+    idle breathe when blocked.
+
+    ANIMALS (ambient=True) sweep with the wider MOB_BOX_HALF box (see
+    game/collision.MOB_BOX_HALF) so their oversized side-view sprites stop
+    hugging wall/tree art — the "đi đè lên cây / chui vào mép tường" fix.
+    Hostile mobs keep the player-sized box (parity + they are small)."""
+    r = _mob_box_half(collision) if getattr(z, "ambient", False) else _DEFAULT_BOX
     can_float = getattr(collision, "can_move_float", None)
     if callable(can_float):
         try:
-            nx_f, ny_f = can_float(z.x_f, z.y_f, dx, dy)
+            nx_f, ny_f = can_float(z.x_f, z.y_f, dx, dy, r)
+        except TypeError:
+            try:
+                nx_f, ny_f = can_float(z.x_f, z.y_f, dx, dy)
+            except Exception:
+                nx_f, ny_f = z.x_f + dx, z.y_f + dy
         except Exception:
             nx_f, ny_f = z.x_f + dx, z.y_f + dy
     else:

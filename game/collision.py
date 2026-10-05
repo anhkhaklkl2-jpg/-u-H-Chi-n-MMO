@@ -8,6 +8,14 @@ from game.state import Direction
 # Web-player collision box, in tile units (smaller than 1 tile so free
 # movement can slip through 1-tile gaps the same way Discord players do).
 FLOAT_BOX_HALF = 0.3
+# ANIMAL (ambient mob) collision box: bigger than the player's — side-view
+# wildlife sprites (deer/bear/boar...) draw 1.5-2.5 tiles WIDE, so a
+# player-sized 0.3 half-box let their art reach deep into the neighbouring
+# wall/tree tile while the centre stayed legal: the animal LOOKED like it
+# walked over the tree trunk or out of the wall edge (user 06/10). A wider
+# box keeps the sprite's BODY clear of solid art without touching player
+# collision (the player keeps FLOAT_BOX_HALF everywhere).
+MOB_BOX_HALF = 0.45
 
 # Field-forage node kinds (game/resources.py NODE_DEFS): non-solid decor —
 # the player walks through living mushrooms/grass/flowers.
@@ -54,9 +62,9 @@ class Collision:
 
     # ----- continuous (web) movement: swept AABB per axis -----
 
-    def _overlapped_rows(self, v_f: float) -> list:
-        """Tile rows/columns the box actually overlaps on one axis."""
-        r = FLOAT_BOX_HALF
+    def _overlapped_rows(self, v_f: float, r: float = FLOAT_BOX_HALF) -> list:
+        """Tile rows/columns the box actually overlaps on one axis.
+        ``r`` = box half-width (player 0.3, animal 0.45 — see MOB_BOX_HALF)."""
         out = []
         for t in (math.floor(v_f - r), math.floor(v_f + r)):
             if t not in out and v_f - r < t + 1 and v_f + r > t:
@@ -75,13 +83,13 @@ class Collision:
             return False
         return tm.grid[y][x] is not None
 
-    def _free_x(self, x_f: float, y_f: float, dx: float) -> float:
+    def _free_x(self, x_f: float, y_f: float, dx: float,
+                r: float = FLOAT_BOX_HALF) -> float:
         """Movement allowed along x, clamped EXACTLY to the blocking wall so
         the player slides along it instead of stopping short."""
         if dx == 0:
             return 0.0
-        r = FLOAT_BOX_HALF
-        rows = self._overlapped_rows(y_f)
+        rows = self._overlapped_rows(y_f, r)
         if dx > 0:
             # Columns whose interior the box's RIGHT edge passes through
             # during the move. Start at floor(edge0) — NOT floor(edge0)+1:
@@ -112,12 +120,12 @@ class Collision:
                 return max(dx, (c + 1) + r - x_f)  # left edge touches c+1
         return dx
 
-    def _free_y(self, x_f: float, y_f: float, dy: float) -> float:
+    def _free_y(self, x_f: float, y_f: float, dy: float,
+                r: float = FLOAT_BOX_HALF) -> float:
         """Movement allowed along y (mirror of _free_x)."""
         if dy == 0:
             return 0.0
-        r = FLOAT_BOX_HALF
-        cols = self._overlapped_rows(x_f)
+        cols = self._overlapped_rows(x_f, r)
         if dy > 0:
             # Same boundary fix as _free_x: floor(y_f + r), not +1.
             start = math.floor(y_f + r)
@@ -141,10 +149,16 @@ class Collision:
                 return max(dy, (t + 1) + r - y_f)
         return dy
 
-    def can_move_float(self, x_f: float, y_f: float, dx: float, dy: float) -> tuple:
+    def can_move_float(self, x_f: float, y_f: float, dx: float, dy: float,
+                       box_half: float = FLOAT_BOX_HALF) -> tuple:
         """Swept move for the continuous client: X first, then Y against the
         new x, each clamped to the wall — the player SLIDES along walls.
         Returns the new (x_f, y_f).
+
+        ``box_half``: collision half-width. The PLAYER keeps the default
+        0.3 (client prediction parity — the client hardcodes 0.3 in
+        overlappedRows/freeX/freeY); ANIMALS pass MOB_BOX_HALF (0.45) so
+        their oversized side-view sprites stop hugging wall/tree art.
 
         Sub-tile refinement (rendering/tile_masks.py): AFTER the swept tile
         clamp — which stays byte-identical to the client prediction — a
@@ -172,12 +186,12 @@ class Collision:
         for i in range(steps):
             tx = x_f + dx * (i + 1) / steps
             ty = y_f + dy * (i + 1) / steps
-            ax = self._free_x(nx, ny, tx - nx)
-            ay = self._free_y(nx + ax, ny, ty - ny)
+            ax = self._free_x(nx, ny, tx - nx, box_half)
+            ay = self._free_y(nx + ax, ny, ty - ny, box_half)
             nx += ax
             ny += ay
             if self.map_data.tile_masks is not None:
                 nx, ny = self.map_data.tile_masks.correct(
-                    nx, ny, FLOAT_BOX_HALF, self
+                    nx, ny, box_half, self
                 )
         return nx, ny
