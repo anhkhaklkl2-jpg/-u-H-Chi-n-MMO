@@ -4902,8 +4902,14 @@ export class WorldScene extends Phaser.Scene {
 
   /** True when a LIVE zombie sits within attack reach of the clicked tile
    * (zombie tile hit, or a half-tile slack so near-misses still connect).
-   * The primary click routes to `attack` first — combat beats chopping. */
+   * The primary click routes to `attack` first — combat beats chopping.
+   * CLICK-FORGIVING HIT (user 05/10: "bấm rất dễ hụt, hụt là không tương
+   * tác gì"): a click inside the mob's VISIBLE ART box also counts — the
+   * art box is the same generous box the red target outline uses, so
+   * hitting the head/limbs (a neighbouring tile) no longer silently falls
+   * through to chop. Prefer the art-box mob, then the 0.75-tile slack. */
   zombieNear(tile: { x: number; y: number }): boolean {
+    if (this.mobIdAtArtBox(tile.x * this.tilePx, tile.y * this.tilePx, this.tilePx, this.tilePx)) return true;
     for (const z of this.zombies.values()) {
       if (z.dieT0 !== 0) continue;
       const zx = z.lastX / this.tilePx;
@@ -4911,6 +4917,22 @@ export class WorldScene extends Phaser.Scene {
       if (Math.hypot(zx - (tile.x + 0.5), zy - (tile.y + 0.5)) <= 0.75) return true;
     }
     return false;
+  }
+
+  /** The mob whose visible art body box overlaps the WORLD-px rect
+   * (x,y,w,h) — same trimmed box as mobBodyBox, so "click on the drawn
+   * mob" always routes to attack. Prefers the lowest (visually nearest). */
+  private mobIdAtArtBox(px: number, py: number, pw: number, ph: number): string | null {
+    let best: string | null = null;
+    let bestTop = -Infinity;
+    for (const [id, z] of this.zombies) {
+      if (z.dieT0 !== 0) continue;
+      const b = this.mobBodyBox(z);
+      if (px + pw > b.x && px < b.x + b.w && py + ph > b.y && py < b.y + b.h) {
+        if (b.y > bestTop) { bestTop = b.y; best = id; }
+      }
+    }
+    return best;
   }
 
   /** Set the active Build-Mode cursor offset (from the server snapshot). */
