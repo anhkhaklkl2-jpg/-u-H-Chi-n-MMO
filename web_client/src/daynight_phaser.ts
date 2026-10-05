@@ -19,6 +19,9 @@ import { tintFactor, castColor, SECONDS_PER_DAY } from "./daynight";
 
 const DARK_STRENGTH = 0.55; // mirror daynight.ts
 const MIN_AMBIENT = 0.45;
+// INDOOR (trade maps) night floor: lamp-lit room — night dims the map only
+// faintly (20% dark max) instead of the outdoor MIN_AMBIENT floor.
+const INDOOR_MIN_AMBIENT = 0.8;
 const CAST_ALPHA = 0.28;
 
 function clamp01(v: number): number {
@@ -74,14 +77,14 @@ export class DayNightPhaser {
   /** Per-frame refresh (called from WorldScene.update — cheap: 2 GPU rects). */
   update(): void {
     if (!this.scene || !this.dark || !this.cast) return;
-    // INDOOR maps (trade house / lobby): no day/night exists indoors — the
-    // room stays evenly lit ("luôn sáng vừa đủ"), night tint never applies.
-    if (this.indoor) {
-      this.dark.setVisible(false);
-      this.cast.setVisible(false);
-      this.ambientNorm = 1;
-      return;
-    }
+    // INDOOR maps (trade house / lobby): the room is lamp-lit, so night is
+    // much brighter than outdoors — but NOT fully bright (user: "đêm ở chợ
+    // vẫn bị sáng"): clamp the ambient floor higher so the night tint is
+    // a faint warm dim instead of nothing. Compute the same key as the
+    // outdoor branch (through the shared tail below) so map switches can
+    // never leave a stale lastKey hiding the rects.
+    const indoorMinAmbient = this.indoor ? INDOOR_MIN_AMBIENT : MIN_AMBIENT;
+    {
     const sec = this.currentSec();
     if (sec < 0) {
       this.dark.setVisible(false);
@@ -106,7 +109,7 @@ export class DayNightPhaser {
     this.cast.setSize(w, h);
     const [r, g, b] = tintFactor(sec);
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const ambient = Math.max(MIN_AMBIENT, 1 - DARK_STRENGTH * (1 - lum));
+    const ambient = Math.max(indoorMinAmbient, 1 - DARK_STRENGTH * (1 - lum));
     this.ambientNorm = clamp01((ambient - MIN_AMBIENT) / (1 - MIN_AMBIENT));
     const darkA = 1 - ambient;
     const cast = castColor(sec);
@@ -129,6 +132,7 @@ export class DayNightPhaser {
     } else {
       this.cast.setVisible(false);
     }
+    }
   }
 
   /** Current normalized ambient (see ambientNorm). */
@@ -136,9 +140,16 @@ export class DayNightPhaser {
     return this.ambientNorm;
   }
 
-  /** Indoor flag: true kills the day/night tint entirely (trade maps). */
+  /** Indoor flag: trade maps are lamp-lit — night tint is clamped to a
+   *  faint dim (INDOOR_MIN_AMBIENT) instead of full darkness. Resets the
+   *  dedupe key so a map switch (chợ → thảo nguyên) can never leave a
+   *  stale key hiding the rects (user bug: "ra chợ về thảo nguyên mất
+   *  layer tối"). */
   setIndoor(v: boolean): void {
-    this.indoor = v;
+    if (this.indoor !== v) {
+      this.indoor = v;
+      this.lastKey = "";
+    }
   }
 
   private indoor = false;
