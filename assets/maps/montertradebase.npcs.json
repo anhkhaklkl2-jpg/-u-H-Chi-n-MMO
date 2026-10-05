@@ -1,0 +1,30 @@
+{
+  "npcs": [
+    {
+      "id": "skull",
+      "name": "Skull:",
+      "emoji": "👑",
+      "x": 9,
+      "y": 6,
+      "dialogue": "skull_intro",
+      "sprite": {"w": 16, "h": 16, "frames": 4, "scale": 0.5},
+      "facing": "down",
+      "reach": 2
+    }
+  ],
+  "dialogues": {
+    "skull_intro": {
+      "text": "Chào người lãng khách đến từ phương xa, chớ hay muốn hỏi đến đây tìm gì?",
+      "options": [
+        {"label": "(Gật đầu chào lại)", "next": "skull_shop_line"}
+      ]
+    },
+    "skull_shop_line": {
+      "text": "Hàng trong sàn đều có giá niêm yết, khách lạ khách quen đều như nhau. Mời xem.",
+      "options": [
+        {"label": "Xem hàng hiếm", "next": "shop:skull"},
+        {"label": "Chỉ ghé ngang qua", "next": null}
+      ]
+    }
+  }
+}

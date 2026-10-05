@@ -1,0 +1,11 @@
+{
+  "skull": {
+    "currency": "coin",
+    "items": [
+      {"key": "steel_sword", "price": 900, "count": 1},
+      {"key": "key_stone", "price": 700, "count": 1},
+      {"key": "leatherchest", "price": 380, "count": 1},
+      {"key": "steel_ingot", "price": 260, "count": 2}
+    ]
+  }
+}
