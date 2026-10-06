@@ -676,6 +676,14 @@ class GameManager:
             and getattr(sess, "map_switch_at", 0.0) > 0.0
         ):
             sess.map_switch_at = 0.0  # client confirmed the new map
+            # EPOCH RACE FIX (user 07/10: "vào hang đứng cách xa miệng hang"):
+            # the acking frame may ITSELF still carry a stale position — the
+            # client echoed the epoch from a 20 Hz snapshot that raced ahead
+            # of the welcome while it was still predicting on the OLD map
+            # (a bigmap-mouth report fits inside the cave's bounds). Drop
+            # this frame's report too; the first frame sent AFTER the client
+            # actually rebuilt the world is the one we trust.
+            rx = ry = None
         sess_map_switch = getattr(sess, "map_switch_at", 0.0)
         now_t = _loop_time()
         in_grace = (

@@ -496,10 +496,13 @@ export class Net {
         break;
       }
       case "snapshot": {
-        // Keep the epoch fresh mid-session (a portal switch bumps it; the
-        // next snapshot carries the new value even before a welcome lands).
-        const sep = (frame as { self?: { map_epoch?: number } }).self?.map_epoch;
-        if (typeof sep === "number") this.mapEpoch = sep;
+        // EPOCH RACE FIX (user 07/10: "vào hang đứng cách xa miệng hang"):
+        // a 20 Hz snapshot carrying the NEW epoch can arrive BEFORE the
+        // welcome is processed — the client was still predicting on the OLD
+        // map, so echoing that snapshot epoch let a stale bigmap report
+        // (valid inside the cave's bounds!) end the server's grace and drag
+        // the fresh arrival body across the map. The epoch changes ONLY on
+        // a welcome (every map switch sends one), so adopt it there alone.
         this.handlers.onSnapshot(frame);
         break;
       }
