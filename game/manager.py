@@ -38,6 +38,7 @@ from game.collision import Collision
 from game.inventory import Inventory
 from game.map_loader import MapData, load_map
 from game.map_catalog import list_map_ids
+from game.shops import Shop, load_shops
 from game.npc import NpcMap, load_npcs
 from game.rules import (
     REGEN_DELAY_S,
@@ -288,6 +289,15 @@ class ScenarioRuntime:
     hotbars: Dict[int, Dict[int, str]] = field(default_factory=dict)
     # Data-driven NPCs for this map.
     npc_map: NpcMap = field(default_factory=lambda: NpcMap([], {}))
+    # Data-driven NPC shops (game/shops.py) — Kaetram stores.json format,
+    # loaded per map from assets/maps/<map>.shops.json. Mutable stock lives
+    # in the ShopItem objects (runtime-only; a restart resets the stock).
+    shops: Dict[str, object] = field(default_factory=dict)
+    # Session-merchant state machines (game/shop_sessions.py): npc_id ->
+    # ShopSessionState (phase open/leaving/closed, session_id, deal key).
+    npc_sessions: Dict[str, object] = field(default_factory=dict)
+    # npc_id -> the SHOP KEY this merchant opens (sessions config "shop").
+    npc_session_shops: Dict[str, str] = field(default_factory=dict)
     # Harvestable nodes (trees/bushes) indexed from the map's resource layer.
     # Chop progress + regrow deadlines; felled nodes persist via repositories.
     resources: Optional[ResourceGrid] = None
@@ -822,7 +832,13 @@ class GameManager:
         # nhanh hơn"): residual desync decays in ~1-2 ticks instead of
         # trailing behind at walk pace. A hacked client still can't teleport
         # — the cap is finite and swept collision holds.
-        max_speed = WEB_RUN_SPEED * 1.6
+        # 16px-TILE SPEED PARITY (user 07/10: "di chuyển trong cave/forest
+        # cảm giác như đi 1 quãng đường xa hơn"): Ekonia maps are 16px tiles
+        # vs the grassland's 32px — the same tiles/s read as HALF the screen
+        # speed there. Scale the legal move rate by 32/tile_width so the
+        # on-screen pace matches; the client prediction scales identically.
+        speed_scale = max(1.0, 32.0 / float(rt.map_data.tile_width or 32))
+        max_speed = WEB_RUN_SPEED * 1.6 * speed_scale
         if player.eating_until > now:
             max_speed *= EAT_SPEED_MULT
         max_step = max_speed * max(step_budget, 2.0 / WEB_TICK_HZ)
@@ -1049,6 +1065,8 @@ class GameManager:
                         if eff_running:
                             self._drain_stamina(player, STAMINA_RUN_DRAIN * dt)
                         speed = WEB_RUN_SPEED if eff_running else WEB_WALK_SPEED
+                        # 16px-tile speed parity (see _converge_to_report).
+                        speed *= max(1.0, 32.0 / float(rt.map_data.tile_width or 32))
                         # EATING: chew while walking = half speed (user feature).
                         if player.eating_until > now:
                             speed *= EAT_SPEED_MULT
@@ -1195,11 +1213,32 @@ class GameManager:
             # no animation lane for this. map_id/now_s are re-derived here
             # (the zombie else-branch scope above is not always entered).
             if sessions and is_meteor_map(rt.map_data.map_id):
-                from game.meteors import tick_meteors as _met_tick
+                from game.meteors import (
+                    expire_unmined_ores as _expire_ores,
+                    tick_meteors as _met_tick,
+                )
                 from game.mob_profiles import active_at as _met_active
 
                 _met_map = rt.map_data.map_id
                 _met_clock = _ingame_s()
+                _met_terrain = getattr(rt, "terrain", None)
+                _met_landed_at = getattr(rt, "meteor_ore_landed", None)
+                if _met_landed_at is None:
+                    _met_landed_at = rt.meteor_ore_landed = {}
+
+                # UNMINED CRATER ORE DESPAWN (user 06/10): untouched
+                # meteor-ore nodes vanish UNMINED_ORE_TTL_S after landing so
+                # ignored craters never pile up. Any node with a mining hit
+                # (or a chop) is spared.
+                try:
+                    _expired = _expire_ores(
+                        rt.resources, _loop_time(), terrain=_met_terrain,
+                        marked=_met_landed_at,
+                    )
+                    if _expired:
+                        rt._res_resent = True
+                except Exception as _e:  # noqa: BLE001 — cleanup never kills the tick
+                    log.warning("[METEOR] ore expire sweep failed: %s", _e)
 
                 def _pick_meteor_target() -> tuple:
                     import random as _r2
@@ -1208,7 +1247,15 @@ class GameManager:
                         tx = _r2.randrange(2, max(3, rt.map_data.width - 2))
                         ty = _r2.randrange(2, max(3, rt.map_data.height - 2))
                         try:
-                            if rt.collision.is_walkable(tx, ty):
+                            # GRASSLAND GATE (user 06/10: "chỉ rơi ở thảo
+                            # nguyên"): the tile must be open grass (the
+                            # bigmap ground layer) — no meteor rain inside
+                            # the cave or on non-grass terrain.
+                            if (
+                                rt.collision.is_walkable(tx, ty)
+                                and _met_terrain is not None
+                                and _met_terrain.is_grass(tx, ty)
+                            ):
                                 return (tx, ty)
                         except Exception:
                             return (tx, ty)
@@ -1229,6 +1276,12 @@ class GameManager:
                     try:
                         if _spawn_ore(rt.resources, _m.tx, _m.ty):
                             print(f"[METEOR] crater ore spawned at ({_m.tx},{_m.ty})")
+                            # TTL clock starts at the impact (despawn if no
+                            # one mines it — see UNMINED_ORE_TTL_S above).
+                            if rt.resources is not None:
+                                _node = rt.resources.node_at(_m.tx, _m.ty)
+                                if _node is not None:
+                                    _met_landed_at[_node.anchor] = _loop_time()
                     except Exception as _e:  # noqa: BLE001 — one bad tile can't kill the tick
                         print(f"[METEOR] crater ore skipped at ({_m.tx},{_m.ty}): {_e}")
                 if _landed:
@@ -1241,8 +1294,42 @@ class GameManager:
             # its target tile, PAUSES when a player is adjacent (talking),
             # and its live float position rides the 20 Hz snapshot. Static
             # NPCs (signs/doors) skip this entirely.
+            # SESSION MERCHANTS first: advance their open/leaving/closed
+            # state machine (out-of-window NPCs vanish from the payloads).
+            from game.shop_sessions import ShopSessionState, session_active, parse_sessions
+            from rendering.daynight import ingame_seconds as _ingame_sec
+            _now_npc = _loop_time()
+            _sec = _ingame_sec()
             _npcs = getattr(rt.npc_map, "npcs", []) if getattr(rt, "npc_map", None) else []
-            _wanderers = [n for n in _npcs if getattr(n, "wander", None)]
+            for _snpc in [n for n in _npcs if parse_sessions(n) is not None]:
+                st = rt.npc_sessions.get(_snpc.id)
+                if st is None:
+                    st = rt.npc_sessions[_snpc.id] = ShopSessionState()
+                was_present = getattr(st, "_present", False)
+                present = session_active(_snpc, st, _now_npc, _sec)
+                # On session OPEN: roll the merchant's stock once (shared by
+                # every player — one market per session) + maybe a deal row.
+                if present and not was_present:
+                    shop_key = str((_snpc.sessions or {}).get("shop", ""))
+                    shop = getattr(rt.shops, "get", lambda k: None)(shop_key)
+                    if shop is not None:
+                        from game.shops import roll_session_stock
+                        roll_session_stock(shop, _snpc.sessions or {}, self.zombie_rng)
+                        # Mispriced deal row (Stardew cheap line): -50%.
+                        cfg = _snpc.sessions or {}
+                        if shop.items and self.zombie_rng.random() < float(
+                                cfg.get("deal_chance", 0.15)):
+                            _di = self.zombie_rng.choice(shop.items)
+                            _di.price = max(1, int(
+                                _di.price * float(cfg.get("deal_discount", 0.5))))
+                            st.deal_key = _di.key
+                    rt._npc_session_dirty = True
+                st._present = present
+            _wanderers = [
+                n for n in _npcs
+                if getattr(n, "wander", None)
+                and getattr(rt.npc_sessions.get(n.id), "_present", True)
+            ]
             if _wanderers:
                 _dt_npc = 1.0 / max(1.0, WEB_TICK_HZ)
                 _occupied = {
@@ -1266,7 +1353,6 @@ class GameManager:
                         _npc_moved = True
                 if _npc_moved:
                     moved_any = True
-                print(f"[NPCWANDER] wanderers={len(_wanderers)} moved={_npc_moved} pos={[(n.id, round(n.x_f,2), round(n.y_f,2)) for n in _wanderers]}", flush=True)
         if moved_any:
             self._touch_web_activity(rt)
         if zombie_touched:
@@ -1423,6 +1509,7 @@ class GameManager:
             npc_map=load_npcs(map_id, self.assets_dir),
             resources=resources,
             terrain=terrain,
+            shops=load_shops(map_id, self.assets_dir),
         )
         self.runtimes[channel_id] = rt
         # MAIN-WORLD marker: side runtimes compare against this to decide
@@ -2290,6 +2377,7 @@ class GameManager:
             npc_map=load_npcs(map_id, self.assets_dir),
             resources=resources,
             terrain=terrain,
+            shops=load_shops(map_id, self.assets_dir),
         )
         # Side world: main_map_id points at the CHANNEL's main map so
         # world_map persistence writes NULL for main-world bodies.
@@ -2993,19 +3081,15 @@ class GameManager:
         main_rt = self.runtimes.get(channel_id)
         if main_rt is None:
             return None
+        main_map = getattr(main_rt, "main_map_id", None) or main_rt.map_data.map_id
+        # CONTINUITY FIX (user 06/10): read the SAVED world FIRST. The old
+        # code early-returned on "body exists somewhere" — but _handle_join
+        # registers the session BEFORE calling this, so a fresh body always
+        # existed at the main spawn with world_map=None and the saved cave/
+        # forest position was never honoured.
         current = self.runtime_of(channel_id, user_id)
-        if current is not None and user_id in current.state.players:
-            # Body exists somewhere. Keep it there (even the main world) —
-            # its world_map attribute is already correct.
-            if current.map_data.map_id == current.state.players[user_id].world_map \
-                    or current.state.players[user_id].world_map is None:
-                # Sync the attribute when the body sits in the main world.
-                if current.map_data.map_id == (
-                    getattr(current, "main_map_id", None) or current.map_data.map_id
-                ):
-                    current.state.players[user_id].world_map = None
-                return None
         saved_map = None
+        saved_xy = None
         if self.db is not None:
             try:
                 rows = await self.db.fetchall(
@@ -3015,11 +3099,20 @@ class GameManager:
                 )
                 if rows:
                     saved_map = rows[0][0]
+                    saved_xy = (int(rows[0][1]), int(rows[0][2]))
             except Exception:  # noqa: BLE001 — missing table/col must not block join
                 saved_map = None
-        if not saved_map or saved_map == (
-            getattr(main_rt, "main_map_id", None) or main_rt.map_data.map_id
-        ):
+        # Body already in the world it is saved in (or no saved side world):
+        # keep it where it stands.
+        if not saved_map or saved_map == main_map:
+            if current is not None and user_id in current.state.players:
+                p = current.state.players[user_id]
+                if current.map_data.map_id == main_map:
+                    p.world_map = None
+            return None
+        if current is not None and user_id in current.state.players \
+                and current.map_data.map_id == saved_map:
+            current.state.players[user_id].world_map = saved_map
             return None
         # Sanity: the saved map must still exist on disk.
         try:
@@ -3030,35 +3123,38 @@ class GameManager:
             return None
         dst_rt = self.get_or_create_side_runtime(main_rt, saved_map)
         player = current.state.players.get(user_id) if current is not None else None
+        # Saved tile: honoured for BOTH a live body and a fresh one (the old
+        # code only trusted it when the body's world_map attr already matched,
+        # which a freshly registered body never did).
+        if saved_xy is not None and dst_rt.map_data.is_walkable(*saved_xy):
+            saved = saved_xy
+        else:
+            saved = dst_rt.map_data.spawn
         if player is not None:
             # Body in another live runtime: migrate it wholesale.
             from game.travel import move_player_between_runtimes
-            saved = dst_rt.map_data.spawn
-            if player.world_map == saved_map:
-                saved = (player.x, player.y)
             move_player_between_runtimes(current, dst_rt, user_id, saved)
         else:
             # No live body (fresh join after restart): create it directly in
             # the saved world at the saved tile.
-            rows = None
-            if self.db is not None:
-                try:
-                    rows = await self.db.fetchall(
-                        "SELECT x, y FROM players WHERE channel_id=? AND user_id=?",
-                        (channel_id, user_id),
-                    )
-                except Exception:  # noqa: BLE001
-                    rows = None
-            x, y = (rows[0][0], rows[0][1]) if rows else dst_rt.map_data.spawn
-            if not dst_rt.map_data.is_walkable(int(x), int(y)):
-                x, y = dst_rt.map_data.spawn
+            x, y = saved
             dst_rt.state.add_player(user_id, "", int(x), int(y))
             p = dst_rt.state.get_player(user_id)
             if p is not None:
                 p.world_map = saved_map
                 p.sync_float_from_int()
-        # Register the web session on the runtime that now holds the body.
-        self.register_web_session(channel_id, user_id, "")
+        # Register the web session on the runtime that now holds the body —
+        # GHOST-BODY FIX (user 06/10 reload report: cave shows but the
+        # mechanics were grassland's + cave portal dead): the old call to
+        # register_web_session always targets the MAIN runtime and, finding
+        # no body there (it was just migrated to the side runtime),
+        # re-created a GHOST at the main spawn. runtime_of then answered the
+        # MAIN world for every snapshot/tick: cave visuals + grassland
+        # weather + a portal gate that never matched. Attach the session to
+        # the runtime that actually holds the body.
+        if user_id not in dst_rt.web_sessions:
+            dst_rt.web_sessions[user_id] = WebSession(last_tick=_loop_time())
+        self.touch_session(channel_id, user_id)
         return dst_rt
 
     def _arm_map_switch_grace(self, rt: ScenarioRuntime, user_id: int) -> None:

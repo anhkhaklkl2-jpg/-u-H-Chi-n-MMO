@@ -992,15 +992,12 @@ export class WorldScene extends Phaser.Scene {
     // --- physics-less world: positions are authoritative from the server ---
     this.cameras.main.setBounds(0, 0, map.width * map.tile_width, map.height * map.tile_height);
     this.cameras.main.setBackgroundColor("#20303c");
-    // Zoom 2.0 for EVERY mode (mobile zoom removed per user). PER-MAP
-    // PARITY (user 06/10: "block trong cave bị nhỏ hơn + đi quãng đường xa
-    // hơn"): Ekonia maps are 16px tiles while the classic maps are 32px —
-    // at a fixed 2.0 zoom a cave tile displayed HALF the screen size of a
-    // grassland tile, shrinking placed blocks (tilePx/32 scale) and halving
-    // the on-screen movement speed (tiles/s x tilePx x zoom). Normalize the
-    // zoom so EVERY tile shows the same 64 screen px as a 32px map at 2.0:
-    // zoom = 2.0 * (32 / tile_width).
-    this.cameras.main.setZoom(2.0 * (BASE_TILE / (map.tile_width || BASE_TILE)));
+    // Zoom 2.0 for EVERY map and EVERY mode (mobile zoom removed per user:
+    // the camera is always exactly this). REVERT of the per-map zoom
+    // experiment (user 07/10: "mọi thứ đang bị zoomin quá mức") — the cave
+    // keeps its wide 16px-tile field of view; block size + movement speed
+    // parity are handled at their own sites instead.
+    this.cameras.main.setZoom(2.0);
 
     this.spawnSelf(welcome);
     for (const p of welcome.players) this.upsertPlayer(p);
@@ -1534,7 +1531,12 @@ export class WorldScene extends Phaser.Scene {
       // map (Ekonia cave) a full-size sprite covers a 2x2 tile area — the
       // "đặt block trong cave trông kì" bug. Display-scale it to ONE tile
       // cell of THIS map (bigmap 32px maps keep the authored size).
-      const blockScale = this.tilePx / 32;
+      // BLOCK SIZE PARITY (user 07/10: "block trong cave bị nhỏ hơn so với
+      // đặt ngoài thảo nguyên"): the block art is authored at 32px world px
+      // for the grassland's 32px tiles — keep it at scale 1 on EVERY map so
+      // a placed block shows the SAME 64 screen px everywhere (on 16px
+      // maps it spans 2x2 tile cells, matching the hover-box precedent).
+      const blockScale = 1;
       if (!go) {
         // New block: sprite (or placeholder rectangle until the face
         // texture arrives — see onBlockTexture).
@@ -2503,27 +2505,19 @@ export class WorldScene extends Phaser.Scene {
             ? Math.min(len - 1, z.frame + 1) // lunge holds its last frame
             : (z.frame + 1) % Math.max(1, len); // walk/idle loop
         }
-        this.applyMobCell(
-          z.body, z.frame, row,
-          // PER-MAP ART SCALE: mob sheets are authored against 32px tiles;
-          // on 16px maps shrink the world size by tilePx/32 so the
-          // per-map camera zoom shows every mob at the SAME screen size
-          // and tile proportion as on the grassland (user 06/10 parity).
-          sheet.size * (this.tilePx / 32), sheet.cellW, sheet.cellH,
-        );
+        this.applyMobCell(z.body, z.frame, row, sheet.size, sheet.cellW, sheet.cellH);
         z.body.setFlipX(fx);
         // DEER STOTTING (O2b): while walking fast, deer bounce — a subtle
         // vertical pulse every ~0.3 s reads as the real stotting gait
         // (leaping mid-run to signal "I see you"). Scale-only: no extra
         // sprites needed.
-          const mobSize = sheet.size * (this.tilePx / 32);
-          if ((z.kind === "deer" || z.kind === "deer2") && z.anim === "walk" && z.body instanceof Phaser.GameObjects.Image) {
-            const stot = Math.abs(Math.sin(now / 300)) * 0.06;
-            z.body.setScale(mobSize / sheet.cellW * (1 + stot), mobSize / sheet.cellH * (1 - stot * 0.5));
-          } else if (z.body instanceof Phaser.GameObjects.Image) {
-            const base = mobSize / sheet.cellW;
-            if (z.body.scaleX !== base) z.body.setScale(base, mobSize / sheet.cellH);
-          }
+        if ((z.kind === "deer" || z.kind === "deer2") && z.anim === "walk" && z.body instanceof Phaser.GameObjects.Image) {
+          const stot = Math.abs(Math.sin(now / 300)) * 0.06;
+          z.body.setScale(sheet.size / sheet.cellW * (1 + stot), sheet.size / sheet.cellH * (1 - stot * 0.5));
+        } else if (z.body instanceof Phaser.GameObjects.Image) {
+          const base = sheet.size / sheet.cellW;
+          if (z.body.scaleX !== base) z.body.setScale(base, sheet.size / sheet.cellH);
+        }
         if (z.anim === "atk") {
           // Kaetram humanoid mobs flash red on the lunge; SIDE-VIEW animals
           // don't — a red flash on prey reads as "it's wounded", which was
@@ -2650,9 +2644,15 @@ export class WorldScene extends Phaser.Scene {
       const tired = this.selfStamina <= 0;
       // Eating: half speed while chewing (server EAT_SPEED_MULT).
       const eatMul = this.selfEating ? 0.5 : 1.0;
+      // 16px-TILE SPEED PARITY (user 07/10: "di chuyển trong cave/forest
+      // cảm giác như đi 1 quãng đường xa hơn"): Ekonia tiles are 16px vs the
+      // grassland's 32px — the same tiles/s read as HALF the screen speed
+      // there. Double the tile-rate on 16px maps so the on-screen pace
+      // matches; the server's move-rate cap scales identically (32/tile).
+      const spdScale = this.tilePx < 32 ? 32 / this.tilePx : 1;
       const speed = (v.running && !tired
         ? (s?.run_speed ?? 6.0)
-        : (s?.walk_speed ?? 4.0)) * eatMul;
+        : (s?.walk_speed ?? 4.0)) * eatMul * spdScale;
       if (v.running && !tired) {
         this.selfStamina = Math.max(
           0, this.selfStamina - (s?.stamina_run_drain ?? 4) * dt,
@@ -2934,10 +2934,14 @@ export class WorldScene extends Phaser.Scene {
     const sq = this.hoverSquare;
     if (!sq) return; // ensureHoverSquare guarantees construction; belt+braces
     const mobHovered = this.mobHoverId !== null;
-    // SIZE PARITY ACROSS MAPS: with the per-map zoom above a tile already
-    // displays the same screen size everywhere, so the box is simply the
-    // tile cell (tilePx - 2) on every map.
-    const boxPx = this.tilePx - 2;
+    // SIZE PARITY ACROSS MAPS: the box matches the tile cell (tilePx - 2).
+    // On 32px maps that is ~30px; on Ekonia's 16px tiles it shrank to 14px
+    // — half the on-screen size of the bigmap box at the same zoom, which
+    // read as "ô đặt block siêu nhỏ". Match the BIGMAP look: the box spans
+    // 2x2 tile cells (32px) on 16px maps, 1 cell on 32px maps — the same
+    // world-space size everywhere. Placement still lands on the CENTER
+    // cell; the oversized outline is the aiming aid, not the footprint.
+    const boxPx = this.tilePx >= 32 ? this.tilePx - 2 : this.tilePx * 2 - 2;
     sq.setSize(boxPx, boxPx);
     // MOBILE AIM LOCK: while a touch aim target is armed it OWNS the cursor
     // square (locked green = "tap again to act"). Otherwise the cursor
@@ -4686,13 +4690,12 @@ export class WorldScene extends Phaser.Scene {
         // the tile centre) spilled ~half a tile SOUTH into the next row —
         // a mob just north of a tree visually stomped OVER the trunk.
         // dy shifts the body so its bottom edge lands on the tile bottom.
-        const mobSize0 = sheet.size * (this.tilePx / 32);
-        const bodyY = ready ? this.tilePx / 2 - mobSize0 / 2 : 4;
+        const bodyY = ready ? this.tilePx / 2 - sheet.size / 2 : 4;
         // Cut the FIRST idle frame immediately so a fresh spawn never shows
         // the whole stretched sheet for even one frame.
         if (body instanceof Phaser.GameObjects.Image) {
           body.setPosition(0, bodyY);
-          this.applyMobCell(body, 0, sheet.rows.idle.down[0], mobSize0, sheet.cellW, sheet.cellH);
+          this.applyMobCell(body, 0, sheet.rows.idle.down[0], sheet.size, sheet.cellW, sheet.cellH);
         }
         // No emoji label under mobs (user request): the sprite + hp bar are
         // enough; the container still needs a placeholder for typing.
