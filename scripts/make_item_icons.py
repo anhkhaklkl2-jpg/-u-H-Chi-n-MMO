@@ -91,9 +91,13 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     # ---- Vietnamese verified pack (user 09/10): routes that read better ----
     # Da thú: real hide sprite (0670) replaces the flat red square Twemoji 🟫.
     "hide": ("viet", "da_thú_nâu_lông"),
-    # Đất: clod sprite with brown veins (0576) — the red heap (0588) and the
-    # round stone (0674) did NOT read as dirt (user 09/10).
-    "dirt": ("viet", "quặng_xám_nâu_vân"),
+    # Đất: clay/earth chunk with diagonal shading (0714, gạch đất sét — the
+    # GPT names are unreliable; this reads as a brown earth lump). The veined
+    # ore (0576) read as an ORE, the red heap (0588) as red dust (user 10/10).
+    "dirt": ("viet", "gạch_nâu_đất_sét"),
+    # Chìa khoá đá: plain silver key (0693) — the fancy golden bow key (0691)
+    # looked like a decorative key, not a plain stone key (user 10/10).
+    "key_stone": ("viet", "chìa_khóa_bạc_đơn_giản_cán"),
     # NOTE: ores/ingots/key stay on their ORIGINAL correct Kaetram routes —
     # the earlier viet swap made the good ones wrong (user: revert).
     # ---- Twemoji fallbacks (Kaetram has no match) ----
