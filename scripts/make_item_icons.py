@@ -91,18 +91,11 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     # ---- Vietnamese verified pack (user 09/10): routes that read better ----
     # Da thú: real hide sprite (0670) replaces the flat red square Twemoji 🟫.
     "hide": ("viet", "da_thú_nâu_lông"),
-    # Đất: a brown HEAP (0588 reads as a mound of soil) — the round stone
-    # (0674) read as a rock, not dirt (user 09/10).
-    "dirt": ("viet", "khoáng_vật_chồng_đỏ_nâu_ván_gỗ"),
-    # Ingots + ores + key: the Kaetram routes were wrong-look (moonrock ore
-    # as steel, candykey as key). Vietnamese pack has exact matches.
-    "iron_ingot": ("viet", "thỏi_kim_loại_xám_sắt"),
-    "copper_ingot": ("viet", "thỏi_kim_loại_đỏ_đồng_đỏ"),
-    "gold_ingot": ("viet", "thỏi_kim_loại_vàng"),
-    "iron_ore": ("viet", "quặng_xám_nâu_vân"),
-    "copper_ore": ("viet", "quặng_xám_cam_vân"),
-    "gold_ore": ("viet", "quặng_xám_có_vân_vàng"),
-    "key_stone": ("viet", "chìa_khóa_vàng_có_vòng_nơ"),
+    # Đất: clod sprite with brown veins (0576) — the red heap (0588) and the
+    # round stone (0674) did NOT read as dirt (user 09/10).
+    "dirt": ("viet", "quặng_xám_nâu_vân"),
+    # NOTE: ores/ingots/key stay on their ORIGINAL correct Kaetram routes —
+    # the earlier viet swap made the good ones wrong (user: revert).
     # ---- Twemoji fallbacks (Kaetram has no match) ----
     # (dirt/hide moved to the viet pack above)
     # plank: user rule — icon = the bright wood-plank texture (same family
