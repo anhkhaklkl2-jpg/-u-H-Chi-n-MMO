@@ -646,7 +646,7 @@ html, body {
    rendered gigantic without this). */
 .slot .icon-img {
   width: 36px; height: 36px;
-  object-fit: contain;
+  object-fit: fill;
   image-rendering: pixelated;
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.6));
   pointer-events: none;
@@ -1287,6 +1287,8 @@ body.mobile-ui #mc-actions.mc-hidden {
   /* 12/14 of the slot core: bigger, readable item art (was 11/14). */
   width: calc(var(--pix-scale, 3) * 12.5px);
   height: calc(var(--pix-scale, 3) * 12.5px);
+  object-fit: fill; /* icons are square 16x16 — contain would shrink any
+                       icon whose ink bbox is smaller (hide blob fix) */
   image-rendering: pixelated;
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.6));
   pointer-events: none;

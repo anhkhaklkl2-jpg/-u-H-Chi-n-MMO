@@ -501,6 +501,14 @@ class HubRenderer:
         draw = ImageDraw.Draw(img)
         icon = self._item_icons.get(item_id)
         if icon is not None:
+            if icon.size != (16, 16):
+                # Non-canonical source art: normalize to the 16x16 icon grid
+                # FIRST (centered, NEAREST) so every icon fills the slot the
+                # same way (user 09/10: hide rendered as a tiny inset blob).
+                canvas = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+                canvas.paste(icon, ((16 - icon.size[0]) // 2,
+                                    (16 - icon.size[1]) // 2))
+                icon = canvas
             art = icon.resize((ITEM_ICON_SIZE, ITEM_ICON_SIZE), Image.NEAREST)
             img.paste(art, (x + (slot - ITEM_ICON_SIZE) // 2,
                             y + (slot - ITEM_ICON_SIZE) // 2), art)

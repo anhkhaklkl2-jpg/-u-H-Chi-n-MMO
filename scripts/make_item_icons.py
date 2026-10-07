@@ -21,6 +21,10 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+# Vietnamese-named verified pixel icon pack (user 09/10): 1247 16x16 items —
+# PRIMARY source for items Kaetram covered badly (da thú, đất…). Filenames
+# are "NNNN_ten_tieng_viet.png"; keep the ("viet", stem) entries in sync.
+VIET = Path(r"D:/UserData/Downloads/status_effect_assets_pixel_32x32_v3/items_viet_verified_visual_review")
 KAETRAM = ROOT / "kaetram_extract" / "04_items" / "sprites"
 CURSORS = ROOT / "kaetram_extract" / "10_interface" / "cursors"
 TWEMOJI = ROOT / "assets" / "gui" / "items"
@@ -47,6 +51,8 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     "iron_axe": ("kaetram", "ironaxe"),
     "iron_ingot": ("kaetram", "ironbar"),
     "iron_ore": ("kaetram", "ironore"),
+    "copper_ore": ("kaetram", "copperore"),
+    "copper_ingot": ("kaetram", "copperbar"),
     "iron_pickaxe": ("kaetram", "ironpickaxe"),
     "iron_sword": ("kaetram", "ironsword"),
     "stone_sword": ("kaetram", "tinsword"),
@@ -82,14 +88,40 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     "potion_hp": ("kaetram", "flask", (1.0, 0.32, 0.32)),
     "potion_mp": ("kaetram", "flask", (0.42, 0.55, 1.15)),
     "steel_sword": ("kaetram", "goldsword", (0.55, 0.68, 0.92)),
+    # ---- Vietnamese verified pack (user 09/10): routes that read better ----
+    # Da thú: real hide sprite (0670) replaces the flat red square Twemoji 🟫.
+    "hide": ("viet", "da_thú_nâu_lông"),
+    # Đất: a genuine dirt/stone lumps art instead of the flat brown square.
+    "dirt": ("viet", "đá_tròn_nâu"),
+    # Ingots + ores + key: the Kaetram routes were wrong-look (moonrock ore
+    # as steel, candykey as key). Vietnamese pack has exact matches.
+    "iron_ingot": ("viet", "thỏi_kim_loại_xám_sắt"),
+    "copper_ingot": ("viet", "thỏi_kim_loại_đỏ_đồng_đỏ"),
+    "gold_ingot": ("viet", "thỏi_kim_loại_vàng"),
+    "iron_ore": ("viet", "quặng_xám_nâu_vân"),
+    "copper_ore": ("viet", "quặng_xám_cam_vân"),
+    "gold_ore": ("viet", "quặng_xám_có_vân_vàng"),
+    "key_stone": ("viet", "chìa_khóa_vàng_có_vòng_nơ"),
     # ---- Twemoji fallbacks (Kaetram has no match) ----
-    "dirt": ("twemoji", "1f7e4"),
+    # (dirt/hide moved to the viet pack above)
     # plank: user rule — icon = the bright wood-plank texture (same family
     # as the floor planks) so Ván gỗ reads as planks, not a brown square.
     "plank": ("block", "floor"),
     "rotten_flesh": ("twemoji", "1f969"),
     "hide": ("twemoji", "1f7e5"),  # 🟤 tấm da thú (twemoji không có hide sprite)
 }
+
+
+def load_viet(stem: str) -> Image.Image | None:
+    """A PNG from the Vietnamese verified icon pack ("NNNN_stem.png")."""
+    if not VIET.is_dir():
+        return None
+    for p in VIET.glob(f"*_{stem}.png"):
+        im = Image.open(p).convert("RGBA")
+        if im.size != (16, 16):
+            im = im.resize((16, 16), Image.NEAREST)
+        return im
+    return None
 
 
 def load_kaetram(stem: str) -> Image.Image | None:
@@ -141,6 +173,8 @@ def make() -> int:
         tint = src[2] if len(src) > 2 else None
         if kind == "block":
             im = load_block_face(name)
+        elif kind == "viet":
+            im = load_viet(name)
         else:
             im = (load_kaetram(name) if kind == "kaetram"
                   else load_cursor(name) if kind == "cursor" else load_twemoji(name))
