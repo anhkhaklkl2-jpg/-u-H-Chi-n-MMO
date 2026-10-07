@@ -1652,9 +1652,14 @@ body.mobile-ui #mc-actions.mc-hidden {
 .rm-slot-bg { left: 0; top: 0; width: 100%; height: 100%; }
 .rm-icon {
   left: 50%; top: 50%;
-  width: calc(16px * 3 * 0.72); height: calc(16px * 3 * 0.72);
-  object-fit: fill;
-  transform: translate(-50%, -50%);
+  /* object-fit CONTAIN + a square box: non-square icons (17x17 fits, but
+     odd sizes padded) shrunk to FIT the circle, never stretched into the
+     square-ghost artifact (user 10/10: "hình vuông gì đó giữa slot").
+     Centering via margin (no transform) keeps pixels integer. */
+  width: calc(16px * 3 * 0.7); height: calc(16px * 3 * 0.7);
+  object-fit: contain;
+  margin-left: calc(-16px * 3 * 0.7 / 2);
+  margin-top: calc(-16px * 3 * 0.7 / 2);
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.55));
 }
 /* The kit's thin white stroke = hover/selection ring. The stroke art is a
@@ -1664,18 +1669,22 @@ body.mobile-ui #mc-actions.mc-hidden {
    slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
   left: 50%; top: 50%;
-  width: calc(27px * 3);
-  height: calc(28px * 3);
-  margin-left: calc(-27px * 3 / 2);
-  margin-top: calc(-28px * 3 / 2);
+  /* Smaller than before (user 10/10: "thu nhỏ tý, đang hơi to"): dia 81px
+     -> 72px, a hair INSIDE the 78px slot circle — reads as an inner thin
+     ring hugging the slot, not a halo. Content bbox in the art is centered
+     (13,13.5) so pure centering can't skew it; any old offset came from the
+     transform — margins keep it integer-aligned with the slot pixel grid. */
+  width: calc(27px * 3 * 0.89);
+  height: calc(28px * 3 * 0.89);
+  margin-left: calc(-27px * 3 * 0.89 / 2);
+  margin-top: calc(-28px * 3 * 0.89 / 2);
   transform: none;
   opacity: 0.95;
-  /* Kill sub-pixel blur from transform-centering: integer position only. */
   image-rendering: pixelated;
 }
 .rm-hot .rm-icon {
-  transform: translate(-50%, -50%) scale(1.12);
-  transition: transform 0.08s ease-out;
+  /* Ahnhoring the icon box by margins: hover pop = slight box growth. */
+  opacity: 0.92;
 }
 /* Retract: reverse bloom (quick, no stagger). */
 #radial-menu:not(.rm-open) .rm-slot {
