@@ -58,9 +58,10 @@ export class CharacterPanel {
 
     // --- face (portrait), also overflowing left. SOFT HALO (user 08/10:
     // "hào quang ở chỗ avatar, không phải model") lives HERE as a CSS glow
-    // on the circular face — default ON, toggle via setHalo. ---
+    // on the circular face — default ON, toggle via setHalo. Starts EMPTY
+    // (user 09/10: no static kit placeholder on login) — setFace fills it,
+    // clearFace empties it back to a blank dark ring. ---
     this.faceImg = el("cp-face cp-halo", `left:-21px;top:-1px;width:22px;height:22px;`);
-    this.faceImg.src = `${KIT}/face_default.png`;
 
     // --- frame on top of the overflow art ---
     el("", `left:0;top:0;width:59px;height:19px;`).src = `${KIT}/frame.png`;
@@ -100,12 +101,23 @@ export class CharacterPanel {
     parent.appendChild(this.root);
   }
 
-  /** Discord/web avatar into the portrait ring (falls back to kit face). */
+  /** Discord/web avatar into the portrait ring. Empty/null = blank ring
+   *  (user 09/10: the static kit face must NOT appear — login/lobby shows
+   *  an empty avatar slot). */
   setFace(url: string | null): void {
-    const src = url || `${KIT}/face_default.png`;
+    const src = url || "";
     if (src === this.faceSrc) return;
     this.faceSrc = src;
-    this.faceImg.src = src;
+    if (src) {
+      this.faceImg.src = src;
+    } else {
+      this.faceImg.removeAttribute("src");
+    }
+  }
+
+  /** Empty the portrait ring (login/lobby — no placeholder art). */
+  clearFace(): void {
+    this.setFace(null);
   }
 
   /** Toggle the avatar's soft glow rim (default ON). */

@@ -224,6 +224,11 @@ html, body {
   height: calc(19px * 3 + 5px * 3);   /* frame + top overflow */
   pointer-events: none;
   z-index: 3;
+  /* BELOW the inv/craft panels (#inv-panel z:5, user 09/10: "hub hp/mana
+     phải ở dưới inv/craft để còn click chuyển panel được") — the inv
+     panel opens at left:12px top:64px and would collide with the panel's
+     bottom edge otherwise. */
+  z-index: 2;
 }
 .cp-scale {
   position: absolute;
@@ -1071,6 +1076,8 @@ body.mobile-ui #hud-hub #buttons.shown::-webkit-scrollbar-thumb {
   position: absolute;
   left: 12px; top: 64px;
   display: flex; flex-direction: column; gap: 6px;
+  z-index: 5; /* ABOVE the char panel (z:2) so tabs/cells stay clickable
+                  where the hub hp/mana overlaps the panel's top edge */
   /* THE "lỗi hiển thị to chà bá" FIX: the panel is a FIXED 294×337px
    * pixel-art bitmap (98×101 kit px × 3). On short landscape phones
    * (~360px tall) it overflowed the bottom by ~40px — purse icons cut

@@ -2201,6 +2201,9 @@ export class Hud {
     this.gateEl.classList.remove("hidden");
     this.gatePanel.classList.remove("hidden");
     this.statusEl.textContent = status;
+    // Empty the character panel portrait (user 09/10: no static placeholder
+    // avatar on the login/lobby screens — blank ring only).
+    this.charPanel?.clearFace();
   }
 
   /** Collapse just the login panel (both buttons clicked) — the gate keeps
