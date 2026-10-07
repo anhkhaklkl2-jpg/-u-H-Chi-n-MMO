@@ -1595,6 +1595,84 @@ body.mobile-ui #mc-actions.mc-hidden {
   background: rgba(5, 6, 10, 0.88);
 }
 #login-gate.hidden { display: none; }
+
+/* ---- Radial quick-menu (Kando-style; kit v5 Circle_menu assets) ----
+   Fixed CENTER of screen. Bloom: hub zooms 0.2->1, slots fly from center
+   to their radial position with per-slot stagger. Hover = hover-state slot
+   art + the kit's 1px white stroke ring. All pixelated ×3 kit scale. */
+#radial-menu {
+  position: absolute;
+  left: var(--rm-cx, 50vw); top: var(--rm-cy, 50vh);
+  width: 0; height: 0;
+  z-index: 1500;                 /* above panels (z:5) & mobile controls */
+  pointer-events: none;          /* selection is drag-based, not per-slot */
+  image-rendering: pixelated;
+}
+#radial-menu.hidden { display: none; }
+.rm-hub {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -50%) scale(0.15);
+  opacity: 0;
+  transition: transform 0.19s cubic-bezier(0.22, 1.2, 0.36, 1), opacity 0.13s ease-out;
+}
+.rm-hub img {
+  display: block;
+  width: calc(27px * 3); height: calc(28px * 3);
+  image-rendering: pixelated;
+}
+.rm-slot {
+  position: absolute;
+  left: calc(-25px * 3 / 2); top: calc(-26px * 3 / 2);
+  width: calc(25px * 3); height: calc(26px * 3);
+  /* Bloom start: collapsed at the CENTER (translate 0) + invisible. */
+  transform: translate(0, 0) scale(0.1);
+  opacity: 0;
+  transition:
+    transform 0.19s cubic-bezier(0.22, 1.2, 0.36, 1) var(--rm-delay, 0ms),
+    opacity 0.11s ease-out var(--rm-delay, 0ms);
+}
+#radial-menu.rm-open .rm-hub {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+#radial-menu.rm-open .rm-slot {
+  /* Final radial position (--rm-dx/--rm-dy = slot-center offset). */
+  transform: translate(
+      calc(var(--rm-dx, 0px) - 25px * 3 / 2),
+      calc(var(--rm-dy, 0px) - 26px * 3 / 2)
+    ) scale(1);
+  opacity: 1;
+}
+.rm-slot-bg, .rm-icon, .rm-ring {
+  position: absolute;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.rm-slot-bg { left: 0; top: 0; width: 100%; height: 100%; }
+.rm-icon {
+  left: 50%; top: 50%;
+  width: calc(16px * 3 * 0.72); height: calc(16px * 3 * 0.72);
+  object-fit: fill;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.55));
+}
+/* The kit's thin white stroke = hover/selection ring. Slightly larger than
+   the slot circle so it reads as an outline AROUND the highlighted slot. */
+.rm-ring {
+  left: 50%; top: 50%;
+  width: calc(27px * 3); height: calc(28px * 3);
+  transform: translate(-50%, -50%);
+  opacity: 0.9;
+}
+.rm-hot .rm-icon {
+  transform: translate(-50%, -50%) scale(1.12);
+  transition: transform 0.08s ease-out;
+}
+/* Retract: reverse bloom (quick, no stagger). */
+#radial-menu:not(.rm-open) .rm-slot {
+  transition: transform 0.13s ease-in, opacity 0.11s ease-in;
+}
 #login-gate .panel {
   width: min(420px, 92vw);
   background: #12151c;

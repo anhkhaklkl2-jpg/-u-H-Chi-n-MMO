@@ -2,6 +2,8 @@
 // KeyboardInput. OAuth return handling + asset texture cache live here.
 
 import Phaser from "phaser";
+import { radialOpen, radialDrag, radialRelease, closeRadial, isRadialOpen } from "./radial_menu";
+import { itemIconUrl } from "./pixel_ui";
 import { WorldScene } from "./game";
 import { KeyboardInput } from "./input";
 import { MobileControls } from "./mobile_controls";
@@ -1025,6 +1027,56 @@ window.addEventListener("keydown", (e) => {
       scene.setCollisionDebug(!scene.getCollisionDebug());
     }
   }
+});
+
+// ---- RADIAL QUICK-MENU (Kando-style; kit v5 Circle_menu) ----------------
+// HOLD TAB: menu blooms at screen center; drag toward a wedge to highlight;
+// RELEASE fires the highlighted action. Actions = the 8 hotbar slots (pick
+// that slot); a wedge with an empty hotbar cell is skipped (actions shift).
+// Track raw mouse deltas from the press point for the wedge angle.
+let radialMouseStart: { x: number; y: number } | null = null;
+let mouseX = 0, mouseY = 0;
+window.addEventListener("mousemove", (e) => { mouseX = e.clientX; mouseY = e.clientY; }, { passive: true });
+function radialActions(): import("./radial_menu").RadialAction[] {
+  const hot = hud.inventoryHotbar;
+  const acts: import("./radial_menu").RadialAction[] = [];
+  for (let i = 0; i < 8; i++) {
+    const id = hot[i] ?? null;
+    acts.push({
+      id: id ?? "__empty",
+      label: id ?? "",
+      iconUrl: id ? itemIconUrl(id) : null,
+      onFire: () => {
+        if (!id) return;
+        hud.selectSlot(i);
+        net.selectSlot(i);
+        scene.setSelfHeldFromHotbar(hud.inventoryHotbar, i);
+      },
+    });
+  }
+  return acts;
+}
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Tab" && !e.repeat && !hud.gateVisible) {
+    e.preventDefault();
+    radialMouseStart = { x: mouseX, y: mouseY };
+    radialOpen(radialActions(), (a) => a?.onFire());
+  }
+});
+window.addEventListener("mousemove", (e) => {
+  if (radialMouseStart && (isRadialOpen())) {
+    radialDrag(e.clientX - radialMouseStart.x, e.clientY - radialMouseStart.y);
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.code === "Tab" && isRadialOpen()) {
+    e.preventDefault();
+    radialMouseStart = null;
+    radialRelease();
+  }
+});
+window.addEventListener("blur", () => {
+  if (isRadialOpen()) { radialMouseStart = null; closeRadial(); }
 });
 // Console handle for the preview harness: window.toggleBoxChan(true|false)
 // re-draws the collision debug overlay after a map switch.
