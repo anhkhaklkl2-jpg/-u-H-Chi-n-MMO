@@ -1657,13 +1657,21 @@ body.mobile-ui #mc-actions.mc-hidden {
   transform: translate(-50%, -50%);
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.55));
 }
-/* The kit's thin white stroke = hover/selection ring. Slightly larger than
-   the slot circle so it reads as an outline AROUND the highlighted slot. */
+/* The kit's thin white stroke = hover/selection ring. The stroke art is a
+   1px ellipse that fills its 27x28 canvas edge-to-edge — draw it at the
+   EXACT slot footprint +3px so the ring hugs the circle without spilling
+   over neighbors (user 10/10: ring "đang sai"). Pixel-center alignment:
+   slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
   left: 50%; top: 50%;
-  width: calc(27px * 3); height: calc(28px * 3);
-  transform: translate(-50%, -50%);
-  opacity: 0.9;
+  width: calc(27px * 3);
+  height: calc(28px * 3);
+  margin-left: calc(-27px * 3 / 2);
+  margin-top: calc(-28px * 3 / 2);
+  transform: none;
+  opacity: 0.95;
+  /* Kill sub-pixel blur from transform-centering: integer position only. */
+  image-rendering: pixelated;
 }
 .rm-hot .rm-icon {
   transform: translate(-50%, -50%) scale(1.12);

@@ -1057,10 +1057,18 @@ function radialActions(): import("./radial_menu").RadialAction[] {
   return acts;
 }
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Tab" && !e.repeat && !hud.gateVisible) {
+  // TAB-HOLD RADIAL MENU. Two browser-hostility gotchas handled here:
+  //  1. Tab default = focus cycling — preventDefault on EVERY Tab keydown
+  //     (repeat included), else the first repeat steals focus to the URL bar
+  //     and the menu dies mid-hold (user 10/10: "giữ Tab không được lâu").
+  //  2. Long-hold keeps firing keydown repeats — opening again would
+  //     double-bloom, so repeats are ignored for OPENING only.
+  if (e.code === "Tab") {
     e.preventDefault();
-    radialMouseStart = { x: mouseX, y: mouseY };
-    radialOpen(radialActions(), (a) => a?.onFire());
+    if (!e.repeat && !hud.gateVisible && !isRadialOpen()) {
+      radialMouseStart = { x: mouseX, y: mouseY };
+      radialOpen(radialActions(), (a) => a?.onFire());
+    }
   }
 });
 window.addEventListener("mousemove", (e) => {
