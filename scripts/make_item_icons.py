@@ -91,8 +91,9 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     # ---- Vietnamese verified pack (user 09/10): routes that read better ----
     # Da thú: real hide sprite (0670) replaces the flat red square Twemoji 🟫.
     "hide": ("viet", "da_thú_nâu_lông"),
-    # Đất: a genuine dirt/stone lumps art instead of the flat brown square.
-    "dirt": ("viet", "đá_tròn_nâu"),
+    # Đất: a brown HEAP (0588 reads as a mound of soil) — the round stone
+    # (0674) read as a rock, not dirt (user 09/10).
+    "dirt": ("viet", "khoáng_vật_chồng_đỏ_nâu_ván_gỗ"),
     # Ingots + ores + key: the Kaetram routes were wrong-look (moonrock ore
     # as steel, candykey as key). Vietnamese pack has exact matches.
     "iron_ingot": ("viet", "thỏi_kim_loại_xám_sắt"),
