@@ -74,16 +74,32 @@ export const CRAFT_PANEL = {
   frame: "ui/v5/layers/craft_frame.png",
 };
 export const CRAFT_LAYERS = [
-  // craft_top1/2/3 (the STATIC demo icons at [11,12]/[28,18]/[43,18])
-  // deliberately NOT drawn — the interactive category tabs render those
-  // positions themselves (lit/rest state driven); the static layers would
-  // ghost a permanent brown icon under the tabs.
-  { x: 67, y: 87, w: 37, h: 22, file: "ui/v5/layers/craft_anvil.png" },
+  // craft_anvil (the bottom-left anvil decor, [67,87] 37x22) REMOVED from the
+  // static stack (user 06/10: the anvil reads as a random bolted-on prop).
+  // The slot is now a LIVE icon that mirrors the material-grid mode — see
+  // CRAFT_MODE_ICON + Hud.updateCraftModeIcon(): crafting_table when a table
+  // is in range (same `nearTable || stationOpen` flag the 3x3 grid uses),
+  // a hand-bag icon otherwise. Kept OUT of CRAFT_LAYERS so it can swap at runtime.
   // craft_round1/round2 (the two small green dots) deliberately NOT drawn —
   // user request: tắt 2 chấm xanh lá nhỏ trong vùng mô tả.
   { x: 193, y: 14, w: 3, h: 20, file: "ui/v5/layers/craft_scroll.png" },
 ];
 export const CRAFT_TITLE = { x: 82, y: 3, w: 29, h: 8, file: "ui/v5/layers/craft_title.png" };
+
+// ---- Craft-mode icon (replaces the old anvil decor) --------------------
+// The anvil's footprint was [67,87] 37x22 (bottom row, LEFT of the result
+// cell at [108,90] 16x16). The replacement icon keeps the same vertical band
+// and is CENTERED horizontally in the old 37px gap. Size: 26x26 (user 06/10:
+// 22 looked small next to the panel's other art) — centered on the old
+// anvil band: x = 67+(37-26)/2 = 72.5 -> 72, y = 87+(22-26)/2 = 85.
+// Left margin 5 / right 6 kit px keeps clear of the quick-grid column;
+// top/bottom overhang 2px each into the empty padding band (no elements
+// above/below in that region). Icon box: 26x26 from a 32x32 source.
+export const CRAFT_MODE_ICON = {
+  x: 72, y: 85, w: 26, h: 26,
+  table: "ui/v5/icons/craft_spool.png",  // crafting table in range (3x3 grid) — cuộn chỉ (user 06/10)
+  bag: "ui/v5/icons/craft_bag.png",          // no table — quick-craft from the bag (túi, asset_15)
+};
 
 // QUICK-CRAFT grid (LIGHT cells): 3×5, origin [10,33] — recipe catalog.
 export const CRAFT_QUICK_GRID: GridLayout = {

@@ -866,6 +866,8 @@ const net = new Net({
     hud.setLoginButton(true, `Tiếp: ${displayName}`);
     // Persist the profile for the lobby chip across reloads.
     localStorage.setItem("web_name", displayName);
+    // Character panel portrait: Discord/web avatar inside the kit ring.
+    hud.setFace(avatarUrl || localStorage.getItem("web_avatar"));
     if (avatarUrl) localStorage.setItem("web_avatar", avatarUrl);
     else localStorage.removeItem("web_avatar");
     // Silent reconnect recovery: a stale-token error queued the last map —
@@ -1882,7 +1884,15 @@ game.events.once("ready", () => {
   scene.onSelfTurn = (dir) => net.turn(dir);
   // EQUIPMENT tab: the worn paperdoll slots mirror the scene's armor echo
   // (welcome/snapshot "armor") so both views show the same server truth.
-  scene.onSelfArmorChanged = (armor) => hud.setWornArmor(armor);
+  scene.onSelfArmorChanged = (armor) => {
+    hud.setWornArmor(armor);
+    // NOTE: portrait painting lives in startPortraitLoop (it passes the LIVE
+    // action frame); the armor echo must NOT regenerate the portrait without
+    // args — that reset the avatar to frame 0 on every echo (bug 08/10).
+  };
+  // Avatar mirrors the player's live animation (idle/walk/atk, SOUTH-locked).
+  scene.onPortraitFrame = (src) => hud.setCharacterPortrait(src);
+  scene.startPortraitLoop();
   // Station interact pipeline. TOGGLE: if the station window is already
   // open, E closes it (bubble fades back); otherwise open + suppress the
   // bubble. The explosion only plays on the OPEN press.

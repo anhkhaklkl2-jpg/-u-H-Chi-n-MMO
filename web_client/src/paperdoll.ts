@@ -238,6 +238,16 @@ export class PaperdollBody {
     return row ?? this.manifest.rows[`idle_${suffix}`] ?? 0;
   }
 
+  /** SOUTH-locked animation snapshot for the character-panel portrait
+   *  (user 08/10: "avatar có idle/walk/attack như player, không xoay mặt"):
+   *  exposes the LIVE action + frame + the matching SOUTH row index so the
+   *  portrait generator can redraw the exact frame the world doll shows. */
+  get southAnimSnapshot(): { action: "idle" | "walk" | "atk"; frame: number; row: number } {
+    const rowName = `${this.action}_down`;
+    const row = this.manifest.rows[rowName] ?? this.manifest.rows[`idle_down`] ?? 0;
+    return { action: this.action, frame: this.frame, row };
+  }
+
   private applyBaseFrame(): void {
     if (!this.base) return;
     const tex = this.base.texture;

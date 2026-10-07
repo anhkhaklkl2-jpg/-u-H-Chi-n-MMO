@@ -139,7 +139,9 @@ html, body {
 /* Clock/weather/ping box sits LEFT of the HP-bar stack, same row. The
    bars' width is fluid; anchor the clock box to the left of the bars via
    right offset = bars min-width + gap + margins. */
-#hud-topleft { top: 10px; right: 226px; font-size: 15px; font-weight: 600; }
+/* Char panel moved to top-LEFT (user 07/10): the clock/weather box slides to
+   the top-right corner so the two HUD boxes occupy opposite corners. */
+#hud-topleft { top: 10px; right: 10px; font-size: 15px; font-weight: 600; }
 /* The old bottom-left ping box is merged into #hud-topleft; hide the shell. */
 #hud-bottomleft { display: none; }
 #hud-clock {
@@ -174,8 +176,10 @@ html, body {
 }
 #hud-weather, #hud-daynight { line-height: 0; }
 
-/* Top-right: HP/mana — flush to the corner */
+/* Top-right: HP/mana — REPLACED by the kit-v5 #char-panel (user 06/10:
+   ẩn thanh cũ). Kept display:none so the legacy wiring keeps no-op'ing. */
 #hud-topright {
+  display: none;
   top: 10px; right: 10px;
   flex-direction: column; align-items: stretch; gap: 6px;
   min-width: 200px;
@@ -206,15 +210,129 @@ html, body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* Character panel (UI kit v5 art, character_panel.ts): replaces the old
+   #hud-topright CSS bars. Kit geometry in px, scaled ×3 via .cp-scale;
+   anchored top-LEFT (user 07/10: chuyển panel sang góc trên bên trái).
+   face/border overflow LEFT of the frame (kit "overflow_child" rule) — and
+   since the panel now sits at the left edge, the overflow hangs toward the
+   screen edge, same visual as before but mirrored position. The sizer is
+   inset by the overflow (25 kit px left, 5 top) so nothing clips. */
+#char-panel {
+  position: absolute;
+  top: 10px; left: 10px;
+  width: calc(59px * 3 + 25px * 3);   /* frame + left overflow */
+  height: calc(19px * 3 + 5px * 3);   /* frame + top overflow */
+  pointer-events: none;
+  z-index: 3;
+}
+.cp-scale {
+  position: absolute;
+  /* Raw kit-px coordinate space, magnified ×3 as ONE unit (kit rule:
+     "uniform panel scale only, never independently scale children"). */
+  left: calc(25px * 3); top: calc(5px * 3);
+  width: 59px; height: 19px;
+  transform: scale(3);
+  transform-origin: 0 0;
+}
+.cp-img {
+  position: absolute;
+  image-rendering: pixelated;
+  display: block;
+}
+.cp-face {
+  border-radius: 50%;          /* crop the avatar into the kit ring */
+  object-fit: cover;
+  /* NO z-index: the FRAME art must paint OVER the circle where they overlap
+     (user 08/10: "UI đè lên hình tròn" — DOM order border→face→frame now
+     wins naturally; the earlier z-index:1 made the circle cover the UI). */
+}
+.cp-halo {
+  /* SOFT HALO on the AVATAR — INSIDE the circle only (user 08/10: "chỉ ở
+     bên trong vòng tròn, không liên quan bên ngoài"): an INSET luminous
+     rim hugging the circle's inner edge, breathing gently. */
+  box-shadow: inset 0 0 5px 1px rgba(255, 244, 214, 0.55);
+  animation: cp-halo-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cp-halo-pulse {
+  0%, 100% { box-shadow: inset 0 0 3px 1px rgba(255, 244, 214, 0.35); }
+  50% { box-shadow: inset 0 0 6px 2px rgba(255, 244, 214, 0.7); }
+}
+.cp-fill {
+  /* Fill is resized by JS (kit-px width); keep art crisp while shrinking. */
+  max-width: 52px;
+  z-index: 1;
+  /* Below the fill sits the TRACK image, and BEHIND both the frame's own
+     dark interior (opaque kit art). Nothing transparent to "giật" through. */
+}
+.cp-label {
+  /* Hidden (user 06/10: hub mới không hiện số). Kept for future re-enable. */
+  display: none;
+  position: absolute;
+  display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 3px;
+  font-size: 6px; line-height: 1; font-weight: 700;
+  color: #fff; text-shadow: 0 0 2px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,1);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Impact FX (user 07/10, refined 08/10): 3 shake tiers for HP drops.
+   Lives on the OUTER root (outside .cp-scale) so the ×3 kit geometry never
+   changes. sm = tick, md = real hit, lg = heavy blow. */
+.cp-shake {
+  animation: cp-shake-anim 0.3s linear;
+}
+.cp-shake-md {
+  animation: cp-shake-anim-md 0.34s linear;
+}
+.cp-shake-lg {
+  animation: cp-shake-anim-lg 0.42s linear;
+}
+@keyframes cp-shake-anim {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); }
+  75% { transform: translate(-1px, 0); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes cp-shake-anim-md {
+  0% { transform: translate(0, 0); }
+  15% { transform: translate(-4px, 2px); }
+  30% { transform: translate(4px, -2px); }
+  45% { transform: translate(-3px, -2px); }
+  60% { transform: translate(3px, 2px); }
+  80% { transform: translate(-1px, 0); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes cp-shake-anim-lg {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  12% { transform: translate(-6px, 3px) rotate(-0.6deg); }
+  25% { transform: translate(6px, -3px) rotate(0.6deg); }
+  40% { transform: translate(-5px, -3px) rotate(-0.5deg); }
+  55% { transform: translate(5px, 3px) rotate(0.5deg); }
+  70% { transform: translate(-3px, 1px); }
+  85% { transform: translate(2px, -1px); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+/* Mobile: same shake, slightly smaller (the panel itself is scaled 0.75). */
+@keyframes cp-shake-anim-mobile {
+  0% { transform: scale(0.75) translate(0, 0); }
+  20% { transform: scale(0.75) translate(-3px, 1px); }
+  40% { transform: scale(0.75) translate(3px, -1px); }
+  60% { transform: scale(0.75) translate(-2px, -1px); }
+  80% { transform: scale(0.75) translate(2px, 1px); }
+  100% { transform: scale(0.75) translate(0, 0); }
+}
+
 /* Status effect rail: a FLOATING element OUTSIDE the HP panel box — no
    background/border of its own, anchored to the same right edge as the HP
    panel, hanging below it. Each icon is a 32x32 pixel-art tile; the seconds
    counter is a tiny chip overlapping the icon's BOTTOM-LEFT corner. */
 #hud-status {
   position: absolute;
-  /* Right edge aligns with #hud-topright (right:10px); hugs the panel's
-     bottom edge (panel bottom ~85px + 2px breathing room). */
-  top: 88px; right: 14px;
+  /* Stays hugging the top-RIGHT (the char panel moved to the top-left,
+     clock/weather moved in here); hangs below where the panel used to be. */
+  top: 92px; right: 14px;
   display: flex;
   flex-direction: row-reverse; /* first effect = rightmost, newest grows LEFT */
   justify-content: flex-end;
@@ -2187,25 +2305,32 @@ body.mobile-ui {
   }
   #chat-toggle .ct-badge.unseen { display: inline-flex; }
 
-  /* ---- MOBILE STATUS BOXES: stack both top-right, out of the chat's way.
-   * Clock/weather moves beside the HP bars (top-right corner); the topleft
-   * desktop anchor (right: 226px) would overlap the moved chat otherwise. */
+  /* ---- MOBILE STATUS BOXES: char panel is top-left; clock/weather hugs
+   * the top-right corner (same corners as desktop). */
   #hud-topleft {
     top: 10px;
-    right: 226px;
+    right: 10px;
     font-size: 13px;
     padding: 6px 10px;
     gap: 6px;
   }
-  #hud-topright {
-    min-width: 168px;
-    top: 8px;
-    right: 8px;
-  }
+  /* (hidden — replaced by #char-panel; mobile override not needed) */
   #hud-topright .bar { height: 15px; }
+  /* Char panel: slight shrink on phones; rail hugs the smaller panel. */
+  #char-panel {
+    top: 8px; left: 8px;
+    transform: scale(0.75);
+    transform-origin: top left;
+  }
+  /* Mobile: keep the 0.75 scale in every shake tier. */
+  #char-panel.cp-shake,
+  #char-panel.cp-shake-md,
+  #char-panel.cp-shake-lg {
+    animation-name: cp-shake-anim-mobile;
+  }
   /* Rail hugs the mobile panel (panel bottom ~72px). */
   #hud-status {
-    top: 74px;
+    top: 84px;
     right: 12px;
   }
 

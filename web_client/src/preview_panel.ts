@@ -19,7 +19,9 @@ type Cmd =
   | "clock" | "meteor" | "weather" | "zombies" | "animals" | "map"
   | "state" | "bite" | "heal" | "kill" | "respawn" | "status" | "tp"
   | "hurt"
-  | "give"; // 🎁 give: item_id [qty] — bộ demo / item tùy chọn (tooltip test)
+  | "give"
+  | "kit"
+  | "block"; // 🧱 block: đặt/gỡ bàn chế tạo cạnh player (test near_station)
 
 interface PanelHooks {
   send: (frame: Record<string, unknown>) => void;
@@ -204,6 +206,129 @@ export class PreviewPanel {
     btn(me, "✨ Hồi sinh", () => this.send("respawn"), "#1a2a52");
     // 🎁 give: bộ demo item (potion/sword/block/giáp) để thử rich tooltip.
     btn(me, "🎁 Bộ demo", () => this.send("give", "demo"), "#2a2a1a");
+    // 🎒 Kit test (user 08/10): full giáp + vũ khí + potion + block, auto-mặc.
+    btn(me, "🎒 Kit test", () => this.send("kit", ""), "#2a1a0f");
+    // 🎁 give <item_id>: item bất kỳ theo id (đặt block như crafting_table
+    // để test near_station/craft grid; server _cmd_give nhận ITEM/BLOCK id).
+    const giveRow = row(me);
+    const giveInput = document.createElement("input");
+    giveInput.placeholder = "item_id (vd crafting_table)";
+    giveInput.style.cssText =
+      "flex:1;min-width:110px;background:#0e1424;color:#dfe6ff;border:1px solid #4a5a8a;border-radius:6px;padding:3px 6px;font:11px monospace";
+    giveRow.appendChild(giveInput);
+    const giveBtn = document.createElement("button");
+    giveBtn.textContent = "🎁 Tặng";
+    giveBtn.style.cssText = btnStyle("#2a2a1a");
+    giveBtn.onclick = () => {
+      const v = giveInput.value.trim();
+      if (v) this.send("give", v);
+    };
+    giveRow.appendChild(giveBtn);
+    // 🧱 block: server-side đặt/gỡ bàn chế tạo cạnh player — test thật đường
+    // near_station (icon craft-mode + lưới 3x3/2x2) không cần UI hotbar.
+    let blockPlaced = false;
+    const blockBtn = document.createElement("button");
+    blockBtn.textContent = "🧱 Bàn CT: ĐẶT";
+    blockBtn.title = "Đặt/gỡ bàn chế tạo cạnh player (test near_station)";
+    blockBtn.style.cssText = btnStyle("#1a2a3a");
+    blockBtn.onclick = () => {
+      blockPlaced = !blockPlaced;
+      this.send("block", blockPlaced ? "crafting_table" : "remove");
+      blockBtn.textContent = blockPlaced ? "🧱 Bàn CT: GỠ" : "🧱 Bàn CT: ĐẶT";
+    };
+    giveRow.appendChild(blockBtn);
+    // 📊 Bars TESTER (user 08/10: "tool test trực quan bằng cách nhấn chi tiết"):
+    // stateful bar mirrors + one button per impact size — press each button and
+    // judge exactly THAT impact (HP tiers sm/md/lg, heal, mana, stamina).
+    const barsState = { hp: 100, mhp: 100, mana: 50, mmana: 50, stam: 120, mstam: 120 };
+    const hud2 = () => (window as unknown as {
+      hud?: {
+        setBars(...args: number[]): void;
+        setBarsTest?(...args: number[]): void;
+        holdBars?(hold: boolean): void;
+      };
+    }).hud;
+    // Write through setBarsTest: bypasses the hold (the hold blocks the
+    // 20 Hz snapshot, NOT the tester that owns the bars while held).
+    // HOLD POLICY (08/10 fix #2): hold is PER-PRESS — every press holds for
+    // 4s, then the server regains control automatically. A hold armed at
+    // page load froze the REAL bars (snapshots blocked → "luôn full").
+    const push = () => {
+      const h2 = hud2();
+      (h2?.setBarsTest ?? h2?.setBars)?.call(h2,
+        barsState.hp, barsState.mhp, barsState.mana, barsState.mmana,
+        barsState.stam, barsState.mstam);
+    };
+    let pressHoldTimer: number | null = null;
+    const pressHold = () => {
+      hud2()?.holdBars?.(true);
+      if (pressHoldTimer !== null) window.clearTimeout(pressHoldTimer);
+      pressHoldTimer = window.setTimeout(() => {
+        pressHoldTimer = null;
+        hud2()?.holdBars?.(false);
+      }, 4000);
+    };
+    // Every tester press refreshes the 4s hold; presses call pressHold().
+    const barRow = (parent: HTMLElement): HTMLDivElement => row(parent);
+    const barBtn = (parent: HTMLElement, label: string, fn: () => void, color: string) =>
+      btn(parent, label, fn, color);
+    const barBox = details("📊 Bars tester", true);
+    const line1 = barRow(barBox);
+    // HP tiered drops: each press REMOVES that % of max from the mirror.
+    barBtn(line1, "🩸 -5%", () => { barsState.hp = Math.max(0, barsState.hp - barsState.mhp * 0.05); pressHold(); push(); }, "#3a1418");
+    barBtn(line1, "🩸 -15%", () => { barsState.hp = Math.max(0, barsState.hp - barsState.mhp * 0.15); pressHold(); push(); }, "#4a1418");
+    barBtn(line1, "💢 -35%", () => { barsState.hp = Math.max(0, barsState.hp - barsState.mhp * 0.35); pressHold(); push(); }, "#5a1418");
+    barBtn(line1, "💀 -60%", () => { barsState.hp = Math.max(0, barsState.hp - barsState.mhp * 0.6); pressHold(); push(); }, "#6a0f0f");
+    const line2 = barRow(barBox);
+    barBtn(line2, "❤️ +40%", () => { barsState.hp = Math.min(barsState.mhp, barsState.hp + barsState.mhp * 0.4); pressHold(); push(); }, "#1a3a1a");
+    barBtn(line2, "✨ Full", () => { barsState.hp = barsState.mhp; barsState.mana = barsState.mmana; barsState.stam = barsState.mstam; pressHold(); push(); }, "#1a3a1a");
+    const line3 = barRow(barBox);
+    // ↺ Reset: clear the tester state AND hand the bars back to the server NOW.
+    barBtn(line3, "↺ Reset", () => {
+      barsState.hp = 100; barsState.mana = 50; barsState.stam = 120;
+      if (pressHoldTimer !== null) window.clearTimeout(pressHoldTimer);
+      pressHoldTimer = null;
+      hud2()?.holdBars?.(false); push();
+    }, "#2a3352");
+    barBtn(line2, "🔵 mana -50%", () => { barsState.mana = Math.max(0, barsState.mana - barsState.mmana * 0.5); pressHold(); push(); }, "#12233f");
+    barBtn(line2, "🟢 stam -40%", () => { barsState.stam = Math.max(0, barsState.stam - barsState.mstam * 0.4); pressHold(); push(); }, "#12301a");
+    // 🎬 Auto choreography: same tiers back-to-back for a side-by-side feel.
+    barBtn(line3, "🎬 Auto", () => {
+      hud2()?.holdBars?.(true); // the choreography owns the bars for its run
+      const seq: Array<() => void> = [
+        () => { barsState.hp -= barsState.mhp * 0.06; },
+        () => { barsState.hp -= barsState.mhp * 0.22; },
+        () => { barsState.hp -= barsState.mhp * 0.45; },
+        () => { barsState.hp = Math.min(barsState.mhp, barsState.hp + barsState.mhp * 0.6); },
+        () => { barsState.mana -= barsState.mmana * 0.5; },
+        () => { barsState.stam -= barsState.mstam * 0.4; },
+        () => { barsState.hp = 100; barsState.mana = 50; barsState.stam = 120; },
+      ];
+      let i = 0;
+      const t = window.setInterval(() => {
+        if (i >= seq.length) {
+          window.clearInterval(t);
+          hud2()?.holdBars?.(false); // hand the bars back to the server
+          return;
+        }
+        seq[i++]();
+        push();
+      }, 900);
+    }, "#2a1a2a");
+    push(); // paint the tester's initial state immediately
+    // ✨ Hào quang toggle (user 08/10: rim sáng nhẹ quanh AVATAR, không phải
+    // model world). Routes into the character panel's face CSS glow.
+    let haloOn = true;
+    const haloBtn = btn(me, "✨ Hào quang: BẬT", () => {
+      haloOn = !haloOn;
+      (window as unknown as {
+        hud?: { setHalo?(on: boolean): void };
+      }).hud?.setHalo?.(haloOn);
+      haloBtn.textContent = `✨ Hào quang: ${haloOn ? "BẬT" : "TẮT"}`;
+    }, "#1a2a3a");
+    // 🖼️ Avatar căn: REMOVED (user 08/10 calibration {"side":0.56,"ox":0,
+    // "oy":8} baked into portrait_crop.ts defaults — tool no longer needed).
+    // 💬 Hộp thoại NPC: mở overlay DialogBox (asset pack + VT323) ngay trên map.
     // 💬 Hộp thoại NPC: mở overlay DialogBox (asset pack + VT323) ngay trên map.
     btn(me, "💬 Hộp thoại demo", () => {
       import("./dialog_box").then((m) => {

@@ -15,6 +15,7 @@
 //   panel's own pixel style.
 
 import type { InventoryPayload, RecipePayload, ItemMeta } from "./protocol";
+import { CharacterPanel } from "./character_panel";
 
 /** Status-effect tooltip copy — mirrors game/status_effects.py EFFECTS
  *  (names + mechanics). Keys are effect ids used by ui/hud/status/*.png;
@@ -43,8 +44,8 @@ const CURRENCY_IDS = new Set(["coin", "crystal"]);
 const isCurrency = (id: string) => CURRENCY_IDS.has(id);
 import {
   CRAFT_BTN, CRAFT_BUTTON, CRAFT_DESC, CRAFT_LAYERS, CRAFT_MAT_CELL,
-  CRAFT_MAT_GRID, CRAFT_MAT_GRID_SMALL, CRAFT_PANEL, CRAFT_QUICK_CELL,
-  CRAFT_QUICK_GRID,
+  CRAFT_MAT_GRID, CRAFT_MAT_GRID_SMALL, CRAFT_MODE_ICON, CRAFT_PANEL,
+  CRAFT_QUICK_CELL, CRAFT_QUICK_GRID,
   CRAFT_RESULT, CRAFT_RESULT_ATOM, CRAFT_TABS,
   CRAFT_TITLE, EQUIP_CHAR_RING, EQUIP_CHAR_SLOTS, EQUIP_CHAR_TRINKET,
   EQUIP_MANNEQUIN, EQUIPMENT_GRID, EQUIPMENT_PANEL,
@@ -169,12 +170,22 @@ export class Hud {
   private weatherKey: string | null = null;
   private weatherFrameIdx = 0;
   private weatherTimer: number | null = null;
-  private hpFill = document.getElementById("bar-hp-fill")!;
-  private hpLabel = document.getElementById("bar-hp-label")!;
-  private manaFill = document.getElementById("bar-mana-fill")!;
-  private manaLabel = document.getElementById("bar-mana-label")!;
-  private staminaFill = document.getElementById("bar-stamina-fill")!;
-  private staminaLabel = document.getElementById("bar-stamina-label")!;
+  /** Character panel (UI kit v5 art) replaced the plain CSS #hud-topright
+   *  bars — see character_panel.ts. setBars routes into it. */
+  private charPanel: CharacterPanel | null = null;
+  /** Bars-tester HOLD (user 08/10: "sau khi trừ thì thấy vẫn full"): the
+   *  20 Hz server snapshot kept calling setBars with REAL values ~50ms after
+   *  each tester press, overwriting the demo state (bar snapped back to full).
+   *  While held, server setBars calls are ignored; the tester owns the bars
+   *  until released (or the 90 s auto-release for safety). */
+  private barsHold = false;
+  private barsHoldTimer: number | null = null;
+  private hpFill = document.getElementById("bar-hp-fill");
+  private hpLabel = document.getElementById("bar-hp-label");
+  private manaFill = document.getElementById("bar-mana-fill");
+  private manaLabel = document.getElementById("bar-mana-label");
+  private staminaFill = document.getElementById("bar-stamina-fill");
+  private staminaLabel = document.getElementById("bar-stamina-label");
   private hotbarEl = document.getElementById("hud-hotbar")!;
   private chatLog = document.getElementById("chat-log")!;
   private chatForm = document.getElementById("chat-form") as HTMLFormElement;
@@ -330,6 +341,10 @@ export class Hud {
   private onCollect: ((slot: number | null) => void) | null = null;
   private onSelectSlot: ((slot: number) => void) | null = null;
   constructor() {
+    // Character panel (kit v5 art) replaces the #hud-topright CSS bars.
+    // Mounted into #overlay; setBars routes here while charPanel is set.
+    this.charPanel = new CharacterPanel();
+    this.charPanel.mount(document.getElementById("overlay")!);
     // Kaetram ORIGINAL bar (in index.html, styled by compiled kaetram_ui.css)
     // is the primary UI; the legacy HubBar wrapper is kept only for its
     // gate show/hide + inventory/chat routing hooks.
@@ -390,6 +405,16 @@ export class Hud {
     this.invItemsWrap.append(makeLayer(INV_TITLE), makeLayer(INV_COIN), makeLayer(INV_CRYSTAL));
     this.invItemsCraftWrap.append(makeLayer(INV_TITLE), makeLayer(INV_COIN), makeLayer(INV_CRYSTAL));
     this.invCraftWrap.append(makeLayer(CRAFT_TITLE), ...CRAFT_LAYERS.map((l) => makeLayer(l)));
+    // Craft-mode icon (anvil replacement, user 06/10): a MANAGED img in the
+    // old anvil slot that mirrors the material-grid mode. NOT a static
+    // layer: src swaps between crafting_table (table in range -> 3x3 grid)
+    // and backpack (no table -> 2x2 quick-craft). The mode is derived in
+    // updateCraftModeIcon() from the SAME flag renderCraftPanel uses for
+    // the grid choice (nearTable || stationOpen) so the icon and the grid
+    // can never disagree; refresh runs on every renderInventory repaint,
+    // which every state-changing path already calls.
+    this.craftModeIcon = makeLayer({ ...CRAFT_MODE_ICON, file: CRAFT_MODE_ICON.bag });
+    this.invCraftWrap.append(this.craftModeIcon);
     // Equipment panel: title + mannequin + socket/trinket art (the worn
     // slots and the 4x4 carried grid render per-frame in renderEquipPanel).
     this.invEquipWrap.append(
@@ -799,6 +824,12 @@ export class Hud {
   private stationOpen = false;
   /** Per-panel close flag for the EQUIPMENT panel (independent of craft). */
   private equipClosed = false;
+  /** Craft-mode icon (anvil replacement): managed img, src swapped by
+   *  updateCraftModeIcon() on every renderInventory repaint. */
+  private craftModeIcon!: HTMLImageElement;
+  /** Last applied mode — skip redundant src writes (re-paint storms would
+   *  otherwise flicker the icon on every bag change). */
+  private craftModeIconState: "table" | "bag" | null = null;
 
   get inventoryOpen(): boolean {
     return !this.invPanel.classList.contains("hidden");
@@ -960,6 +991,10 @@ export class Hud {
   private lastBagSig = "";
 
   private renderInventory(): void {
+    // Craft-mode icon FIRST (before the repaint guard): it derives from
+    // nearTable/stationOpen, both of which can flip without a bag change,
+    // and the guard's early return below would then freeze a stale icon.
+    this.updateCraftModeIcon();
     // Repaint guard: identical bag + same tab + same craft context + same
     // purse = skip. (Purse in the sig: counters repaint on balance change.)
     // If the table state CHANGED, force a repaint even when the bag is
@@ -2815,14 +2850,54 @@ export class Hud {
 
   setBars(hp: number, maxHp: number, mana: number, maxMana: number,
           stamina = 1, maxStamina = 0): void {
-    this.hpFill.style.width = `${maxHp > 0 ? (hp / maxHp) * 100 : 0}%`;
-    this.hpLabel.textContent = `${hp}/${maxHp}`;
-    this.manaFill.style.width = `${maxMana > 0 ? (mana / maxMana) * 100 : 0}%`;
-    this.manaLabel.textContent = `${mana}/${maxMana}`;
-    if (maxStamina > 0) {
+    if (this.barsHold) return; // tester owns the bars right now
+    if (this.charPanel) {
+      this.charPanel.setBars(hp, maxHp, mana, maxMana, stamina, maxStamina);
+      return;
+    }
+    // Legacy CSS bars (kept as fallback if the panel is not mounted).
+    if (this.hpFill) this.hpFill.style.width = `${maxHp > 0 ? (hp / maxHp) * 100 : 0}%`;
+    if (this.hpLabel) this.hpLabel.textContent = `${hp}/${maxHp}`;
+    if (this.manaFill) this.manaFill.style.width = `${maxMana > 0 ? (mana / maxMana) * 100 : 0}%`;
+    if (this.manaLabel) this.manaLabel.textContent = `${mana}/${maxMana}`;
+    if (maxStamina > 0 && this.staminaFill && this.staminaLabel) {
       this.staminaFill.style.width = `${(stamina / maxStamina) * 100}%`;
       this.staminaLabel.textContent = `${Math.round(stamina)}/${maxStamina}`;
     }
+  }
+
+  /** Character panel portrait: REAL player model (paperdoll head zoom with
+   *  worn armor) when available; falls back to the Discord avatar (setFace);
+   *  the kit face is the last resort (inside CharacterPanel.setFace). */
+  setCharacterPortrait(src: string | null): void {
+    if (src) this.charPanel?.setFace(src);
+  }
+  setFace(url: string | null): void {
+    this.charPanel?.setFace(url);
+  }
+
+  /** Avatar halo toggle (soft glow rim around the portrait circle). */
+  setHalo(on: boolean): void {
+    this.charPanel?.setHalo(on);
+  }
+
+  /** Bars-tester control: hold server snapshot updates so the tester's
+   *  pressed state stays visible; release returns server truth instantly. */
+  holdBars(hold: boolean): void {
+    this.barsHold = hold;
+    if (this.barsHoldTimer !== null) window.clearTimeout(this.barsHoldTimer);
+    this.barsHoldTimer = null;
+    if (hold) {
+      // Safety auto-release: a stuck hold must never hide real damage.
+      this.barsHoldTimer = window.setTimeout(() => { this.barsHold = false; }, 90000);
+    }
+  }
+
+  /** Tester-only write path: BYPASSES the hold (the hold blocks the 20 Hz
+   *  snapshot, not the tester that owns it). Server code never calls this. */
+  setBarsTest(hp: number, maxHp: number, mana: number, maxMana: number,
+              stamina = 1, maxStamina = 0): void {
+    this.charPanel?.setBars(hp, maxHp, mana, maxMana, stamina, maxStamina);
   }
 
   /** PHASE-1 death overlay (user 29/09): the world stays visible while the
@@ -3130,6 +3205,25 @@ export class Hud {
       this.craftScroll = next;
       this.renderCraftPanel();
     }, { passive: false });
+  }
+
+  /** Swap the craft-mode icon (anvil replacement) to match the CURRENT
+   *  material-grid mode. The mode is the EXACT same expression
+   *  renderCraftPanel uses to pick CRAFT_MAT_GRID (3x3) vs
+   *  CRAFT_MAT_GRID_SMALL (2x2) — one source of truth, so the icon and the
+   *  grid can never disagree (user: "kê cho đúng, không lệch" is about
+   *  state as much as pixels). Called from renderInventory() BEFORE the
+   *  repaint guard, so station walks flip it even when the bag is idle.
+   *  Redundant src writes are skipped to avoid img reload flicker. */
+  private updateCraftModeIcon(): void {
+    if (!this.craftModeIcon) return; // boot order: appended in the ctor block
+    const tableMode = this.nearTable || this.stationOpen;
+    if (this.craftModeIconState === (tableMode ? "table" : "bag")) return;
+    this.craftModeIconState = tableMode ? "table" : "bag";
+    this.craftModeIcon.src = tableMode ? CRAFT_MODE_ICON.table : CRAFT_MODE_ICON.bag;
+    this.craftModeIcon.title = tableMode
+      ? "Đang dùng bàn chế tạo (lưới 3x3)"
+      : "Chế tạo tay từ túi (lưới 2x2)";
   }
 
   setNearStation(near: boolean): void {

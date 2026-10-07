@@ -5,6 +5,7 @@
 import Phaser from "phaser";
 import type { DropPayload, PlayerPayload, PlayersManifest, SnapshotPayload, WebZombiePayload, WelcomePayload } from "./protocol";
 import { PaperdollBody, b64ToBytes, registerArmorSheet, registerPaperdollTextures, registerWeaponSheet } from "./paperdoll";
+import { loadPortraitCrop, portraitCrop } from "./portrait_crop";
 import { WEAPON_SHEETS as WEAPON_SHEET_BY_ITEM, weapon_sheet_for } from "./appearance_client";
 import { ICON_ITEM_IDS } from "./pixel_ui";
 import { perf } from "./perf";
@@ -601,6 +602,108 @@ export class WorldScene extends Phaser.Scene {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(src, 0, 0, fw, fh, 0, 0, fw, fh);
     return canvas.toDataURL();
+  }
+
+  /** Character-panel portrait (user 08/10: "avatar = model người chơi, zoom
+   *  mặt, có giáp hiện giáp"): composites the SELF paperdoll (idle SOUTH
+   *  frame 0) with the worn armor layers EXACTLY like the world render —
+   *  every layer bottom-anchored to the same feet line, stacking
+   *  legs -> chest -> helmet — then crops a head-zoom square and returns a
+   *  data URL. Empty string = paperdoll texture not ready (caller keeps
+   *  the previous portrait). */
+  characterPortraitSrc(row = 0, frame = 0): string {
+    if (!this.hasPaperdollTexture()) return "";
+    const mf = this.playersManifest;
+    const fw = mf?.base?.frame_w || 32;
+    const fh = mf?.base?.frame_h || 32;
+    const base = this.textures.get("pd-base").getSourceImage() as CanvasImageSource;
+    const armor = this.selfArmor ?? {};
+    const layers: Array<{ key: string; img: CanvasImageSource; fw: number; fh: number }> = [];
+    for (const slot of ["legs", "chest", "helmet"] as const) {
+      const stem = armor[slot];
+      if (!stem) continue;
+      const entry = mf?.armor?.[stem];
+      const key = `pd-armor-${stem}`;
+      // A missing armor sheet just means that layer isn't rendered YET —
+      // same retry contract as ensureArmor (the echo re-fires on arrival).
+      if (!entry || !this.textures.exists(key)) continue;
+      layers.push({ key, img: this.textures.get(key).getSourceImage() as CanvasImageSource, fw: entry.frame_w, fh: entry.frame_h });
+    }
+    const H = Math.max(fh, ...layers.map((l) => l.fh));
+    const canvas = document.createElement("canvas");
+    canvas.width = fw;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    ctx.imageSmoothingEnabled = false;
+    // BACKGROUND (user 08/10: "nền giống màu nền mẫu"): the kit's default
+    // face (004_face.png) sits on a periwinkle-blue field rgb(120,124,195).
+    // Paint the whole crop square with it so the portrait reads as an
+    // avatar badge, not a floating head on transparency.
+    ctx.fillStyle = "rgb(120, 124, 195)";
+    ctx.fillRect(0, 0, fw, H);
+    const fpr = mf?.frames_per_row || 4;
+    const idx = row * fpr + frame;
+    // Sheet geometry: the atlas is a GRID (fpr columns per row) — frame idx
+    // maps to col = idx % fpr, sheetRow = floor(idx / fpr). The earlier
+    // `idx * w` X-offset treated idx as a column and walked off the sheet
+    // for every row >= 1 (walk/atk frames = blank portrait, user 08/10:
+    // "đi trái đi phải thì nó mất tiêu").
+    const col = idx % fpr;
+    const sheetRow = Math.floor(idx / fpr);
+    // Frame-existence guard: a sheet may not be cut to that index yet —
+    // skip the layer (same contract as the world sprites' setFrame guard).
+    const drawBottom = (key: string, img: CanvasImageSource, w: number, h: number): void => {
+      if (this.textures.exists(key) && !this.textures.get(key).has(String(idx))) return;
+      // Bottom-anchored + centered: the same geometry the world sprites use
+      // (origin 0.5,1 at the feet), so every layer overlays pixel-perfect.
+      ctx.drawImage(img, col * w, sheetRow * h, w, h, Math.round((fw - w) / 2), H - h, w, h);
+    };
+    drawBottom("pd-base", base, fw, fh);
+    for (const l of layers) drawBottom(l.key, l.img, l.fw, l.fh);
+    // Head zoom: crop square driven by the TUNABLE portraitCrop state
+    // (portrait_crop.ts — the 🖼️ Avatar tool in the preview panel mutates
+    // it; hand-tuned framing persists in localStorage). Defaults match the
+    // kit's default avatar framing (head + a chunk of shoulders in the ring).
+    loadPortraitCrop();
+    const side = Math.max(4, Math.round(fw * portraitCrop.side));
+    const head = document.createElement("canvas");
+    head.width = side;
+    head.height = side;
+    const hctx = head.getContext("2d");
+    if (!hctx) return "";
+    hctx.imageSmoothingEnabled = false;
+    // Crop centre: base-frame centre + ox, top of the base box + oy. Draw
+    // with source clamping — out-of-frame regions just show the bg fill.
+    const sx = Math.round(fw / 2 + portraitCrop.ox - side / 2);
+    const sy = H - fh + Math.round(portraitCrop.oy);
+    hctx.drawImage(canvas, sx, sy, side, side, 0, 0, side, side);
+    return head.toDataURL();
+  }
+
+  /** ANIMATED portrait loop (user 08/10: "avatar idle/walk/attack như
+   *  player, không xoay mặt"): every 160ms reads the SELF doll's live
+   *  animation state (action + frame, SOUTH-locked) and repaints the
+   *  portrait only when the frame actually changed — so idle breathes,
+   *  walking walks, and the avatar swings when the player attacks. */
+  private portraitTimer: number | null = null;
+  private lastPortraitSig = "";
+  /** Set by main.ts: routes each animated portrait frame into the HUD. */
+  onPortraitFrame: ((src: string) => void) | null = null;
+
+  startPortraitLoop(): void {
+    if (this.portraitTimer !== null) return;
+    this.portraitTimer = window.setInterval(() => {
+      if (!this.paperdollReady || !this.selfDoll) return;
+      const snap = this.selfDoll.southAnimSnapshot;
+      const sig = `${snap.row}:${snap.frame}`;
+      if (sig === this.lastPortraitSig) return;
+      const src = this.characterPortraitSrc(snap.row, snap.frame);
+      if (src) {
+        this.lastPortraitSig = sig;
+        this.onPortraitFrame?.(src);
+      }
+    }, 160);
   }
 
   private frameDtSec = 1 / 60; // real Phaser frame delta (set each update)
@@ -1765,6 +1868,9 @@ export class WorldScene extends Phaser.Scene {
       // weapons) so setArmor finds its texture and the layer shows.
       const stem = name.slice("players/armor/".length).replace(/\.png$/i, "");
       registerArmorSheet(this, this.playersManifest, stem, b64ToBytes(b64));
+      // A late armor sheet completes the portrait's composite — re-fire the
+      // echo so the character panel picks the new layer up.
+      this.onSelfArmorChanged?.(this.selfArmor);
     } else {
       return;
     }
@@ -1787,6 +1893,10 @@ export class WorldScene extends Phaser.Scene {
           this.selfMarker.setVisible(false);
         }
         for (const [id, rp] of this.players) this.spawnRemoteDoll(id, rp);
+        // Paperdoll ready → the character-panel portrait can be built now
+        // (it re-fires on every armor echo, so it self-corrects as armor
+        // sheets stream in).
+        this.onSelfArmorChanged?.(this.selfArmor);
       };
       const poll = this.time.addEvent({ delay: 50, loop: true, callback: () => {
         trySpawn();
@@ -1950,6 +2060,12 @@ export class WorldScene extends Phaser.Scene {
 
   /** Set by main.ts: repaint the DOM EQUIPMENT tab's worn slots (hud UI). */
   onSelfArmorChanged: ((armor: Record<string, string> | null) => void) | null = null;
+
+  /** SOFT HALO moved to the character-panel avatar (user 08/10) — the
+   *  world model no longer carries a glow. Kept as a no-op for old callers. */
+  setSelfHalo(_on: boolean): void {
+    /* intentionally empty */
+  }
 
   /** Update the SELF hand from the local hotbar (instant, no server wait). */
   setSelfHeldFromHotbar(hotbar: (string | null)[], slot: number): void {
