@@ -109,9 +109,12 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     const sy = Math.sin(ang) * (RING_RADIUS * SCALE);
     const el = document.createElement("div");
     el.className = "rm-slot";
-    el.style.setProperty("--rm-dx", `${sx}px`);
-    el.style.setProperty("--rm-dy", `${sy}px`);
-    el.style.setProperty("--rm-delay", `${i * STAGGER_MS}ms`);
+    // Final position as a DIRECT inline transform (no CSS var/calc indirection:
+    // inline wins every time, cannot be shadowed or mis-parsed, and kills the
+    // transform-stuck-at-start bug observed in probe). The .rm-slot CSS keeps
+    // only the pre-bloom start state; the .rm-open override is REMOVED.
+    el.style.transform = `translate(calc(${sx}px - 37px), calc(${sy}px - 39px)) scale(1)`;
+    el.style.transitionDelay = `${i * STAGGER_MS}ms`;
 
     const slotImg = document.createElement("img");
     slotImg.className = "rm-slot-bg";
@@ -165,6 +168,22 @@ export function radialDrag(dx: number, dy: number): void {
 }
 
 /** Release → fire the highlighted action and retract. */
+/** Debug/preview hook: inspect layout from the console (window.__rm). */
+export function __debugState(): unknown {
+  return {
+    openState, curIdx,
+    wedges: wedges.map((w) => ({
+      angle: Math.round((w.angle * 180) / Math.PI),
+      cx: w.cx, cy: w.cy, hot: w.highlighted,
+      rect: w.el.getBoundingClientRect().toJSON(),
+      ringRect: w.ringImg.getBoundingClientRect().toJSON(),
+      iconRect: w.iconImg.getBoundingClientRect().toJSON(),
+      iconSrc: w.iconImg.src.split("/").pop(),
+    })),
+    hubRect: hubEl?.getBoundingClientRect().toJSON(),
+  };
+}
+
 export function radialRelease(): void {
   if (openState === "closed") return;
   const fired = curIdx >= 0 ? wedges[curIdx]?.action ?? null : null;

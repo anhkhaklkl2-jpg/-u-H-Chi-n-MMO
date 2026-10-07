@@ -1637,11 +1637,10 @@ body.mobile-ui #mc-actions.mc-hidden {
   opacity: 1;
 }
 #radial-menu.rm-open .rm-slot {
-  /* Final radial position (--rm-dx/--rm-dy = slot-center offset). */
-  transform: translate(
-      calc(var(--rm-dx, 0px) - 25px * 3 / 2),
-      calc(var(--rm-dy, 0px) - 26px * 3 / 2)
-    ) scale(1);
+  /* Final radial position comes INLINE from radial_menu.ts (direct transform,
+     no CSS vars) — this rule only unsets the pre-bloom state. Must be a plain
+     unset so the inline transform is the computed winner. */
+  transform: none;
   opacity: 1;
 }
 .rm-slot-bg, .rm-icon, .rm-ring {

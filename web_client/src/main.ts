@@ -2,7 +2,7 @@
 // KeyboardInput. OAuth return handling + asset texture cache live here.
 
 import Phaser from "phaser";
-import { radialOpen, radialDrag, radialRelease, closeRadial, isRadialOpen } from "./radial_menu";
+import { radialOpen, radialDrag, radialRelease, closeRadial, isRadialOpen, __debugState } from "./radial_menu";
 import { itemIconUrl } from "./pixel_ui";
 import { WorldScene } from "./game";
 import { KeyboardInput } from "./input";
@@ -1086,6 +1086,8 @@ window.addEventListener("keyup", (e) => {
 window.addEventListener("blur", () => {
   if (isRadialOpen()) { radialMouseStart = null; closeRadial(); }
 });
+// Preview/debug: window.__rm() dumps live wedge/ring/icon geometry.
+(window as unknown as { __rm: () => unknown }).__rm = __debugState;
 // Console handle for the preview harness: window.toggleBoxChan(true|false)
 // re-draws the collision debug overlay after a map switch.
 (window as unknown as { toggleBoxChan: (on?: boolean) => void }).toggleBoxChan =
