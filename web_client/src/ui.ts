@@ -2851,6 +2851,7 @@ export class Hud {
   setBars(hp: number, maxHp: number, mana: number, maxMana: number,
           stamina = 1, maxStamina = 0): void {
     if (this.barsHold) return; // tester owns the bars right now
+    if (this.gateVisible) return; // login/lobby screens show NO game HUD
     if (this.charPanel) {
       this.charPanel.setBars(hp, maxHp, mana, maxMana, stamina, maxStamina);
       return;

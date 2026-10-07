@@ -866,8 +866,10 @@ const net = new Net({
     hud.setLoginButton(true, `Tiếp: ${displayName}`);
     // Persist the profile for the lobby chip across reloads.
     localStorage.setItem("web_name", displayName);
-    // Character panel portrait: Discord/web avatar inside the kit ring.
-    hud.setFace(avatarUrl || localStorage.getItem("web_avatar"));
+    // Character panel portrait: Discord/web avatar inside the kit ring —
+    // applied only in-game; on login/lobby the panel is hidden (setBars
+    // gates it off) so the face is set on the first post-join snapshot.
+    if (!hud.gateVisible) hud.setFace(avatarUrl || localStorage.getItem("web_avatar"));
     if (avatarUrl) localStorage.setItem("web_avatar", avatarUrl);
     else localStorage.removeItem("web_avatar");
     // Silent reconnect recovery: a stale-token error queued the last map —

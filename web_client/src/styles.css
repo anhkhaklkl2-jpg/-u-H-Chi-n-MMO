@@ -1580,6 +1580,8 @@ body.mobile-ui #mc-actions.mc-hidden {
 /* Login gate */
 #login-gate {
   position: absolute; inset: 0;
+  z-index: 100; /* above all HUD (#overlay children incl. #char-panel z:3)
+                   — the login/lobby screens show no game HUD underneath */
   display: flex; align-items: center; justify-content: center;
   background: rgba(5, 6, 10, 0.88);
 }
