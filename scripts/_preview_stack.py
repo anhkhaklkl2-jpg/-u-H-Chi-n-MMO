@@ -159,10 +159,13 @@ class PreviewStack(LocalStack):
             "status": self._cmd_status,
             "tp": self._cmd_tp,
             "give": self._cmd_give,
+            "kit": self._cmd_kit,
+            "bar": self._cmd_bar,
             # Reusable FX-align framework (any map, any preview stack):
             # pixel-fine room-FX anchors + look tuning, persisted into the
             # CURRENT map's Tiled JSON (see _cmd_fx_align).
             "fx_align": self._cmd_fx_align,
+            "block": self._cmd_block,
         }.get(cmd)
         if handler is None:
             await self._send(cid, {"type": "push", "message": f"[preview] Lệnh lạ: {cmd}"})
@@ -372,6 +375,30 @@ class PreviewStack(LocalStack):
         player.last_damaged_at = time.time()  # hold off regen so it sticks
         await self._send(cid, {"type": "push", "message": f"[preview] 🩸 HP = {player.hp}/{player.max_hp} ({ratio:.0%})."})
 
+    async def _cmd_bar(self, cid: int, uid: int, rt, value) -> None:
+        """Set HP/mana/stamina to exact numbers for bar-widget testing:
+        value = "hp,mana,stamina" (each optional: "hp,", ",mana", "50,10,5").
+        Bypasses regen via last_damaged_at so values STICK for observation."""
+        player = self._player_or_msg(cid, uid, rt)
+        if player is None:
+            return
+        parts = str(value or "").split(",")
+        def _num(i, cur, mx):
+            try:
+                v = float(parts[i])
+            except (IndexError, TypeError, ValueError):
+                return cur
+            return max(0.0, min(float(mx), v))
+        hp = _num(0, player.hp, player.max_hp)
+        mana = _num(1, getattr(player, "mana", 0), getattr(player, "max_mana", 0))
+        stamina = _num(2, getattr(player, "stamina", 0), getattr(player, "max_stamina", 0))
+        player.hp = max(1, round(hp))
+        player.mana = round(mana)
+        player.stamina = round(stamina)
+        player.last_damaged_at = time.time()  # hold off regen so values stick
+        await self._send(cid, {"type": "push", "message":
+            f"[preview] 📊 HP {player.hp}/{player.max_hp} | mana {player.mana}/{getattr(player, 'max_mana', '?')} | stamina {player.stamina}/{getattr(player, 'max_stamina', '?')}"})
+
     async def _cmd_kill(self, cid: int, uid: int, rt, value) -> None:
         player = self._player_or_msg(cid, uid, rt)
         if player is None:
@@ -433,6 +460,47 @@ class PreviewStack(LocalStack):
             del feed[:-40]
         await self._send(cid, {"type": "push", "message": f"[preview] ☣️ Áp {se.EFFECTS[effect_id]['name']} — {dmg} dmg mỗi {interval:.0f}s."})
 
+    async def _cmd_kit(self, cid: int, uid: int, rt, value) -> None:
+        """[preview] kit — bộ đồ test đầy đủ (user 08/10: "cho tôi ít đồ để
+        test thử"): full giáp bộ, kiếm, cuốc, rìu, potion, thức ăn, block.
+        Tự mặc luôn giáp lên player (armor echo → avatar + paperdoll đổi)."""
+        player = self._player_or_msg(cid, uid, rt)
+        if player is None:
+            return
+        inv = rt.inventories.get(uid)
+        if inv is None:
+            from game.inventory import Inventory
+            inv = Inventory()
+            rt.inventories[uid] = inv
+        given = []
+        for iid, qty in [
+            ("leatherhelmet", 1), ("leatherchest", 1), ("leatherleggings", 1),
+            ("iron_sword", 1), ("iron_pickaxe", 1), ("wood_axe", 1),
+            ("potion_hp", 5), ("potion_mp", 5), ("cooked_meat", 5),
+            ("crafting_table", 1), ("torch", 10),
+            # Icon-verify set (user 09/10): hide + dirt + ores/ingots/key —
+            # one of each so the bag grid shows every refreshed icon.
+            ("hide", 1), ("dirt", 5), ("iron_ore", 2), ("copper_ore", 2),
+            ("gold_ore", 2), ("iron_ingot", 2), ("copper_ingot", 2),
+            ("gold_ingot", 2), ("key_stone", 1),
+        ]:
+            try:
+                inv.add(iid, qty)
+                given.append(f"{iid}x{qty}")
+            except Exception:
+                pass
+        # Auto-equip the full leather set so the armor echo fires and the
+        # portrait + world doll show it immediately.
+        try:
+            player.equipped_armor = {
+                "helmet": "leatherhelmet",
+                "chest": "leatherchest",
+                "legs": "leatherleggings",
+            }
+        except Exception:
+            pass
+        await self._send(cid, {"type": "push", "message": "[preview] 🎒 Kit test: " + ", ".join(given)})
+
     async def _cmd_give(self, cid: int, uid: int, rt, value) -> None:
         """[preview] give <item_id> [qty] — REAL inventory add (Inventory.add
         bumps the bag version, so the next snapshot pushes the bag to the
@@ -466,6 +534,43 @@ class PreviewStack(LocalStack):
             return
         inv.add(item_id, max(1, qty))
         await self._send(cid, {"type": "push", "message": f"[preview] 🎁 +{qty} {item_id}."})
+
+    async def _cmd_block(self, cid: int, uid: int, rt, value) -> None:
+        """[preview] block <block_id> [dx,dy] -- SERVER-SIDE place next to the
+        player (default +1 right, or "remove" to clear). Exercises the REAL
+        near_station path (game/crafting.nearest_station scans placed
+        blocks) -- the crafting-mode icon / 3x3-grid tests need this without
+        fighting the hotbar placement UI."""
+        parts = str(value or "").split()
+        block_id = parts[0] if parts else "crafting_table"
+        pos = parts[1] if len(parts) > 1 else ""
+        player = rt.state.get_player(uid)
+        if player is None:
+            await self._send(cid, {"type": "push", "message": "[preview] Chua join."})
+            return
+        blocks = rt.state.blocks
+        if pos == "remove":
+            removed = 0
+            for (bx, by) in [(player.x + 1, player.y), (player.x, player.y),
+                             (player.x - 1, player.y), (player.x, player.y + 1)]:
+                if blocks.pop((int(bx), int(by)), None) is not None:
+                    removed += 1
+            await self._send(cid, {"type": "push", "message": f"[preview] Da go {removed} block lan can."})
+            return
+        dx, dy = 1, 0
+        if "," in pos:
+            a, b = pos.split(",", 1)
+            try:
+                dx, dy = int(a), int(b)
+            except ValueError:
+                dx, dy = 1, 0
+        tx, ty = int(player.x) + dx, int(player.y) + dy
+        from game.blocks import get_block
+        if get_block(block_id) is None:
+            await self._send(cid, {"type": "push", "message": f"[preview] Khong biet block: {block_id}"})
+            return
+        blocks[(tx, ty)] = block_id
+        await self._send(cid, {"type": "push", "message": f"[preview] ### {block_id} @ ({tx},{ty}) -- de go: block remove"})
 
     # ---- reusable FX-align framework (any Tiled map) ----
 
