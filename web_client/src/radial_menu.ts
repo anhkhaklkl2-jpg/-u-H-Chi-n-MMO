@@ -25,7 +25,8 @@ const RING_RADIUS = 100;         // kit px from center to slot center
 const N_WEDGES = 8;
 const OPEN_MS = 190;             // bloom duration
 const STAGGER_MS = 18;           // per-slot delay
-const DEAD_ZONE = 14;            // screen px before a wedge locks
+const DEAD_ZONE = 5;             // screen px before a wedge locks (snappy:
+                                 // 14px felt sluggish switching wedges)
 
 export interface RadialAction {
   id: string;            // action/item id

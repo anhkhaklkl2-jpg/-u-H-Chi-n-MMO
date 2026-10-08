@@ -12,6 +12,7 @@ import { perf } from "./perf";
 import { RoomFx } from "./room_fx";
 import { dayNightPhaser } from "./daynight_phaser";
 import { meteorFxBusyNear } from "./meteors";
+import { isRadialOpen } from "./radial_menu";
 
 const PLAYER_SIZE = 22; // px in world space (tile = 32)
 
@@ -3049,6 +3050,14 @@ export class WorldScene extends Phaser.Scene {
     this.syncMobTargetOutline();
     const sq = this.hoverSquare;
     if (!sq) return; // ensureHoverSquare guarantees construction; belt+braces
+    // RADIAL MENU OPEN: hide ALL cursor target boxes (blue tile square + red
+    // mob frame) — while picking an item with Tab-hold the aim boxes are
+    // visual noise (user 10/10: "bỏ cái ô vuông xanh target khi dùng tab").
+    if (isRadialOpen()) {
+      sq.setVisible(false);
+      this.mobTargetOutline?.setVisible(false);
+      return;
+    }
     const mobHovered = this.mobHoverId !== null;
     // SIZE PARITY ACROSS MAPS: the box matches the tile cell (tilePx - 2).
     // On 32px maps that is ~30px; on Ekonia's 16px tiles it shrank to 14px

@@ -1673,10 +1673,10 @@ body.mobile-ui #mc-actions.mc-hidden {
      ring hugging the slot, not a halo. Content bbox in the art is centered
      (13,13.5) so pure centering can't skew it; any old offset came from the
      transform — margins keep it integer-aligned with the slot pixel grid. */
-  width: calc(27px * 3 * 0.89);
-  height: calc(28px * 3 * 0.89);
-  margin-left: calc(-27px * 3 * 0.89 / 2);
-  margin-top: calc(-28px * 3 * 0.89 / 2);
+  width: calc(27px * 3 * 0.71);
+  height: calc(28px * 3 * 0.71);
+  margin-left: calc(-27px * 3 * 0.71 / 2);
+  margin-top: calc(-28px * 3 * 0.71 / 2);
   transform: none;
   opacity: 0.95;
   image-rendering: pixelated;
