@@ -1073,7 +1073,9 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("mousemove", (e) => {
   if (radialMouseStart && (isRadialOpen())) {
-    radialDrag(e.clientX - radialMouseStart.x, e.clientY - radialMouseStart.y);
+    radialDrag(e.clientX - innerWidth / 2, e.clientY - innerHeight / 2); //
+    // absolute offset from MENU CENTER (screen center) — pointer only needs
+    // to sit in a direction, no drag-with-hold gymnastics (user: kém nhạy)
   }
 });
 window.addEventListener("keyup", (e) => {

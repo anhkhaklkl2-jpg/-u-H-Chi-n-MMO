@@ -1668,15 +1668,14 @@ body.mobile-ui #mc-actions.mc-hidden {
    slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
   left: 50%; top: 50%;
-  /* Smaller than before (user 10/10: "thu nhỏ tý, đang hơi to"): dia 81px
-     -> 72px, a hair INSIDE the 78px slot circle — reads as an inner thin
-     ring hugging the slot, not a halo. Content bbox in the art is centered
-     (13,13.5) so pure centering can't skew it; any old offset came from the
-     transform — margins keep it integer-aligned with the slot pixel grid. */
-  width: calc(27px * 3 * 0.71);
-  height: calc(28px * 3 * 0.71);
-  margin-left: calc(-27px * 3 * 0.71 / 2);
-  margin-top: calc(-28px * 3 * 0.71 / 2);
+  /* FULL kit size (81x84 on screen): the ring is a halo OUTER ring —
+     slightly LARGER than the 75x78 slot so it hugs around the slot edge
+     (art content bbox is centered, so centering is exact). Inner 0.71x
+     version read as "smaller than the slot, wrong" (user 10/10). */
+  width: calc(27px * 3);
+  height: calc(28px * 3);
+  margin-left: calc(-27px * 3 / 2);
+  margin-top: calc(-28px * 3 / 2);
   transform: none;
   opacity: 0.95;
   image-rendering: pixelated;
