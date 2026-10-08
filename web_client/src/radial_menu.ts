@@ -38,7 +38,7 @@ interface Wedge {
   el: HTMLDivElement;
   slotImg: HTMLImageElement;
   ringImg: HTMLImageElement;
-  iconImg: HTMLImageElement;
+  iconImg: HTMLImageElement | null;
   angle: number;         // radians, -PI..PI (0 = East, like atan2 screen coords)
   cx: number; cy: number;// slot center offset from menu center (screen px)
   action: RadialAction | null;
@@ -46,7 +46,6 @@ interface Wedge {
 }
 
 let root: HTMLDivElement | null = null;
-let hubEl: HTMLDivElement | null = null;
 let wedges: Wedge[] = [];
 let openState: "closed" | "opening" | "open" = "closed";
 let curIdx = -1;
@@ -92,14 +91,6 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
   root!.innerHTML = "";
   root!.classList.remove("hidden");
 
-  // Center hub: the thin stroke ring, zooming out from tiny.
-  hubEl = document.createElement("div");
-  hubEl.className = "rm-hub";
-  const hubImg = document.createElement("img");
-  hubImg.src = `${KIT}/hub_stroke.png`;
-  hubImg.draggable = false;
-  hubEl.appendChild(hubImg);
-  root!.appendChild(hubEl);
 
   wedges = [];
   for (let i = 0; i < N_WEDGES; i++) {
@@ -121,11 +112,18 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     slotImg.src = `${KIT}/slot_normal.png`;
     slotImg.draggable = false;
 
-    const iconImg = document.createElement("img");
-    iconImg.className = "rm-icon";
-    iconImg.draggable = false;
+    let iconImg: HTMLImageElement | null = null;
     const url = a.iconUrl ?? itemIconUrl(a.id);
-    if (url) iconImg.src = url;
+    if (url) {
+      iconImg = document.createElement("img");
+      iconImg.className = "rm-icon";
+      iconImg.draggable = false;
+      iconImg.src = url;
+      iconImg.onerror = () => { iconImg?.remove(); }; // broken img = the stray
+      // square on icon-less slots (2/8 slots 404 in probe) — drop it.
+      el.appendChild(iconImg); // only when there IS an icon: an empty <img>
+      // box was rendering as the stray square on icon-less slots.
+    }
 
     const ringImg = document.createElement("img");
     ringImg.className = "rm-ring";
@@ -134,7 +132,6 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     ringImg.style.display = "none";
 
     el.appendChild(slotImg);
-    el.appendChild(iconImg);
     el.appendChild(ringImg);
     root!.appendChild(el);
     wedges.push({ el, slotImg, ringImg, iconImg, angle: ang, cx: sx, cy: sy, action: a, highlighted: false });
@@ -177,10 +174,10 @@ export function __debugState(): unknown {
       cx: w.cx, cy: w.cy, hot: w.highlighted,
       rect: w.el.getBoundingClientRect().toJSON(),
       ringRect: w.ringImg.getBoundingClientRect().toJSON(),
-      iconRect: w.iconImg.getBoundingClientRect().toJSON(),
-      iconSrc: w.iconImg.src.split("/").pop(),
+      iconRect: w.iconImg?.getBoundingClientRect().toJSON() ?? null,
+      iconSrc: w.iconImg?.src.split("/").pop() ?? null,
     })),
-    hubRect: hubEl?.getBoundingClientRect().toJSON(),
+    hubRect: null,
   };
 }
 
