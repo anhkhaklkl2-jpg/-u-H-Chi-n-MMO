@@ -1671,13 +1671,12 @@ body.mobile-ui #mc-actions.mc-hidden {
    over neighbors (user 10/10: ring "đang sai"). Pixel-center alignment:
    slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
-  /* Pixel-grid EXACT: anchor the ring to the slot's top-left with INTEGER
-     offsets at its natural 81x84 size — no 50%/half-pixel margins.
-     Vertically biased 1px up (top -4): overhang 4px top / 2px bottom —
-     the symmetric 3/3 measured version still READ bottom-heavy to the
-     eye on the faint stroke (user 10/10: "lệch xuống dưới"). */
+  /* Symmetric 3px overhang on all four sides, now on INTEGER pixels:
+     slots are Math.round-ed in radial_menu.ts so subpixel snap can no
+     longer make the faint stroke drift (the previous biased/flush
+     variants only compensated for that drift). */
   left: -3px;
-  top: -4px;
+  top: -3px;
   width: calc(27px * 3);
   height: calc(28px * 3);
   margin: 0;
