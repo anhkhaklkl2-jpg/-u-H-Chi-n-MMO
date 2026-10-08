@@ -608,13 +608,40 @@ html, body {
   color: #9fb2cc;
 }
 
-/* Bottom-center: hotbar — always visible */
+/* Bottom-center: hotbar — always visible. Kit Action_panel art (frame
+   166x19 + 6 slot cells 14x14, all @3x pixelated). The frame img is the
+   background; the 6 slot divs are absolutely positioned on the kit grid
+   (origin 3,3 pitch 16 slot 14 — ×3 => origin 9,9 pitch 48 slot 42). */
 #hud-hotbar {
   position: absolute;
   bottom: 12px; left: 50%;
   transform: translateX(-50%);
-  display: flex; gap: 6px;
+  width: calc(166px * 3); height: calc(19px * 3);
 }
+#hud-hotbar .hb-frame {
+  position: absolute; left: 0; top: 0;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+#hud-hotbar .slot {
+  position: absolute;
+  left: calc(9px + (var(--hb-i) * 48px));
+  top: 9px;
+  width: 42px; height: 42px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; line-height: 1;
+}
+#hud-hotbar .hb-cell {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+/* Non-hotbar .slot (inventory grid) keeps its old plain box look. */
 .slot {
   width: 52px; height: 52px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -641,6 +668,7 @@ html, body {
   user-select: none;
   -webkit-touch-callout: none;
 }
+#hud-hotbar .slot > span { position: relative; display: contents; }
 /* Hotbar item icon (PNG): clamp to ~70% of the slot regardless of the
    source PNG's natural size (rotten_flesh/dirt ship as 72x72 Twemoji and
    rendered gigantic without this). */
@@ -652,6 +680,16 @@ html, body {
   pointer-events: none;
 }
 .slot.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.4); }
+/* Hotbar active state: kit-style highlight = bright ring hugging the
+   42px cell (no box border — the kit cell art already draws its frame). */
+#hud-hotbar .slot.active { border: none; box-shadow: none; }
+#hud-hotbar .slot.active::after {
+  content: "";
+  position: absolute; inset: -2px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  pointer-events: none;
+}
 
 /* Bottom-right: chat */
 #hud-chat {

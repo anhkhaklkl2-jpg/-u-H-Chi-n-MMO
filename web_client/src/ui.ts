@@ -3324,13 +3324,24 @@ export class Hud {
     // the DOM only when the mirrored stacks / active slot actually changed.
     // Without this, every inventory delta (20 Hz ack bursts during loot)
     // tore the hotbar down and re-decoded every icon (visible jank).
-    const slotCount = Math.max(this.inventory.hotbar.length, 6);
+    // HOTBAR = 6 slots (kit Action_panel upper half; user 10/10: action bar
+    // kit ships 10, we run 6). The hotbar still mirrors BAG slots 0..5
+    // positionally — server mapping untouched.
+    const slotCount = 6;
     const sig = this.inventory.bag.slice(0, slotCount)
       .map((s) => (s ? `${s.id}:${s.qty}` : "-")).join(",") +
       `|${this.activeSlot}|${Object.keys(this.itemEmojis).length}|${Object.keys(this.itemMeta).length}`;
     if (sig === this.lastHotbarSig) return;
     this.lastHotbarSig = sig;
     this.hotbarEl.innerHTML = "";
+    // Kit art frame (psd/Action_panel/003_frame, 166x19 @3x) behind the
+    // slots: single background img + 6 slot divs aligned to the kit's grid
+    // (origin 3,3, pitch 16, slot 14x14 — all ×3).
+    const frame = document.createElement("img");
+    frame.className = "hb-frame";
+    frame.src = "ui/v6/hotbar/frame.png";
+    frame.draggable = false;
+    this.hotbarEl.appendChild(frame);
     // LOCAL PROJECTION: hotbar slot N mirrors BAG SLOT N (positional, same
     // rule as the server) — dragging the stack OUT of the first N bag slots
     // really clears its hotbar cell, and an empty bag slot shows an empty
@@ -3343,8 +3354,17 @@ export class Hud {
       const qty = stack?.qty ?? 0;
       const div = document.createElement("div");
       div.className = "slot" + (idx === this.activeSlot ? " active" : "");
-      div.innerHTML = `<span class="key">${idx + 1}</span><span>${iconHtml(itemId, this.itemEmojis)}</span>` +
+      div.style.setProperty("--hb-i", String(idx));
+      // Kit slot surface (Action_panel cells 14x14 @3x) as the cell art.
+      const cellImg = document.createElement("img");
+      cellImg.className = "hb-cell";
+      cellImg.src = `ui/v6/hotbar/slot_${idx + 1}.png`;
+      cellImg.draggable = false;
+      div.appendChild(cellImg);
+      const inner = document.createElement("span");
+      inner.innerHTML = `<span class="key">${idx + 1}</span><span>${iconHtml(itemId, this.itemEmojis)}</span>` +
         `<span class="qty">${qty > 0 ? qty : ""}</span>`;
+      div.appendChild(inner);
       // Hotbar drag parity with the bag: LEFT-drag lifts the stack (ghost
       // follows the mouse) — releasing over another hotbar slot MOVES it
       // there (hotbar slot N mirrors bag slot N, so this is moveBag),

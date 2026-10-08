@@ -96,7 +96,7 @@ export class KeyboardInput {
       this.hooks.onThrowHeld?.();
       return;
     }
-    if (/^Digit[1-8]$/.test(e.code)) {
+    if (/^Digit[1-6]$/.test(e.code)) {
       e.preventDefault();
       this.hooks.onSlot(Number(e.code.slice(5)) - 1);
       return;
