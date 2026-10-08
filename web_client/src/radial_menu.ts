@@ -134,8 +134,11 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     ringImg.draggable = false;
     ringImg.style.display = "none";
 
-    el.appendChild(slotImg);
+    // Ring BEHIND the slot art: its inner half is hidden by the slot disc,
+    // so the soft anti-aliased stroke never presses on the slot's pixels —
+    // it reads as a clean halo around the slot (user 10/10).
     el.appendChild(ringImg);
+    el.appendChild(slotImg);
     root!.appendChild(el);
     wedges.push({ el, slotImg, ringImg, iconImg, angle: ang, cx: sx, cy: sy, action: a, highlighted: false });
   }
