@@ -1623,7 +1623,11 @@ body.mobile-ui #mc-actions.mc-hidden {
 }
 .rm-slot {
   position: absolute;
-  left: calc(-25px * 3 / 2); top: calc(-26px * 3 / 2);
+  /* INTEGER anchor (-37,-39, not the natural -37.5/-39): half-pixel base
+     offsets made every slot land on .5px device coordinates, and the faint
+     ring snapped visibly off-center (user: "vẫn lệch"). The 0.5px radius
+     bias is constant, so the ring stays perfectly circular & centered. */
+  left: -37px; top: -39px;
   width: calc(25px * 3); height: calc(26px * 3);
   /* Bloom start: collapsed at the CENTER (translate 0) + invisible. */
   transform: translate(0, 0) scale(0.1);
@@ -1668,12 +1672,12 @@ body.mobile-ui #mc-actions.mc-hidden {
    slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
   /* Pixel-grid EXACT: anchor the ring to the slot's top-left with INTEGER
-     offsets (-3,-3) at its natural 81x84 size — no 50%/half-pixel margins
-     (odd 75px slot + fractional margins = browser subpixel snap = the
-     on/off left-right drift the user kept seeing). Overhang is a uniform
-     3px on all four sides, all on integer device pixels. */
+     offsets at its natural 81x84 size — no 50%/half-pixel margins.
+     Vertically biased 1px up (top -4): overhang 4px top / 2px bottom —
+     the symmetric 3/3 measured version still READ bottom-heavy to the
+     eye on the faint stroke (user 10/10: "lệch xuống dưới"). */
   left: -3px;
-  top: -3px;
+  top: -4px;
   width: calc(27px * 3);
   height: calc(28px * 3);
   margin: 0;

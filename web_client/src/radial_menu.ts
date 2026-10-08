@@ -107,7 +107,11 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     // inline wins every time, cannot be shadowed or mis-parsed, and kills the
     // transform-stuck-at-start bug observed in probe). The .rm-slot CSS keeps
     // only the pre-bloom start state; the .rm-open override is REMOVED.
-    el.style.transform = `translate(calc(${sx}px - 37px), calc(${sy}px - 39px)) scale(1)`;
+    // ROUND the radial offset to whole pixels: fractional transforms make
+    // the browser snap slot art and ring art to DIFFERENT device pixels —
+    // the perceived ring drift ("vẫn lệch") — while DOM rects still claim
+    // symmetry. Integer grid = identical snapping for every child.
+    el.style.transform = `translate(calc(${Math.round(sx)}px - 37px), calc(${Math.round(sy)}px - 39px)) scale(1)`;
     el.style.transitionDelay = `${i * STAGGER_MS}ms`;
 
     const slotImg = document.createElement("img");
