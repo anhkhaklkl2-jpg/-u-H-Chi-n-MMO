@@ -608,10 +608,10 @@ html, body {
   color: #9fb2cc;
 }
 
-/* Bottom-center: hotbar — always visible. Kit Action_panel art (frame
-   166x19 + 6 slot cells 14x14, all @3x pixelated). The frame img is the
-   background; the 6 slot divs are absolutely positioned on the kit grid
-   (origin 3,3 pitch 16 slot 14 — ×3 => origin 9,9 pitch 48 slot 42). */
+/* Bottom-center: hotbar — always visible. Kit Action_panel art, FULL
+   10-slot frame (166x19 @3x) with all 10 cells (cell 42px = 14*3 at
+   pitch 48, origin 9,9). Slots always render — empty ones still show the
+   kit cell art (user: "slot không có vật phẩm thì cũng phải hiện ô"). */
 #hud-hotbar {
   position: absolute;
   bottom: 12px; left: 50%;
@@ -669,6 +669,10 @@ html, body {
   -webkit-touch-callout: none;
 }
 #hud-hotbar .slot > span { position: relative; display: contents; }
+/* Hotbar icons: 40px in the 42px cell (12.5/14 art ratio, @3x). */
+#hud-hotbar .slot .icon-img {
+  width: 40px; height: 40px;
+}
 /* Hotbar item icon (PNG): clamp to ~70% of the slot regardless of the
    source PNG's natural size (rotten_flesh/dirt ship as 72x72 Twemoji and
    rendered gigantic without this). */

@@ -96,9 +96,10 @@ export class KeyboardInput {
       this.hooks.onThrowHeld?.();
       return;
     }
-    if (/^Digit[1-6]$/.test(e.code)) {
+    if (/^Digit[0-9]$/.test(e.code)) {
       e.preventDefault();
-      this.hooks.onSlot(Number(e.code.slice(5)) - 1);
+      const n = e.code === "Digit0" ? 10 : Number(e.code.slice(5));
+      this.hooks.onSlot(n - 1);
       return;
     }
     if (MOVE_KEYS[e.code]) {

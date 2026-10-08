@@ -3324,19 +3324,19 @@ export class Hud {
     // the DOM only when the mirrored stacks / active slot actually changed.
     // Without this, every inventory delta (20 Hz ack bursts during loot)
     // tore the hotbar down and re-decoded every icon (visible jank).
-    // HOTBAR = 6 slots (kit Action_panel upper half; user 10/10: action bar
-    // kit ships 10, we run 6). The hotbar still mirrors BAG slots 0..5
-    // positionally — server mapping untouched.
-    const slotCount = 6;
+    // HOTBAR = 10 slots — đúng như action bar của kit Action_panel
+    // (user 10/10: "nó là 10, đéo phải 6"). Vẫn mirror BAG slots 0..9
+    // positionally — server mapping untouched (bag has 20 cells).
+    const slotCount = 10;
     const sig = this.inventory.bag.slice(0, slotCount)
       .map((s) => (s ? `${s.id}:${s.qty}` : "-")).join(",") +
       `|${this.activeSlot}|${Object.keys(this.itemEmojis).length}|${Object.keys(this.itemMeta).length}`;
     if (sig === this.lastHotbarSig) return;
     this.lastHotbarSig = sig;
     this.hotbarEl.innerHTML = "";
-    // Kit art frame (psd/Action_panel/003_frame, 166x19 @3x) behind the
-    // slots: single background img + 6 slot divs aligned to the kit's grid
-    // (origin 3,3, pitch 16, slot 14x14 — all ×3).
+    // Kit art frame (psd/Action_panel/003_frame, 166x19 @3x, FULL 10-slot
+    // width) behind the slots: single background img + 10 slot divs aligned
+    // to the kit's grid (origin 3,3, pitch 16, slot 14x14 — all ×3).
     const frame = document.createElement("img");
     frame.className = "hb-frame";
     frame.src = "ui/v6/hotbar/frame.png";
