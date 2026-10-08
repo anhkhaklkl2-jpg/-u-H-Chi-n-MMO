@@ -1667,15 +1667,16 @@ body.mobile-ui #mc-actions.mc-hidden {
    over neighbors (user 10/10: ring "đang sai"). Pixel-center alignment:
    slot is 75x78, ring is 81x84, both centered on the slot center. */
 .rm-ring {
-  left: 50%; top: 50%;
-  /* Halo 81x80, centered on the slot center: overhang 1px on ALL sides —
-     symmetric and tight. History: 84px -> bottom hang; 81px/margin -42 ->
-     top hang (user both times). Centering with a uniform 1px outgrowth
-     reads as hugging every side equally. */
+  /* Pixel-grid EXACT: anchor the ring to the slot's top-left with INTEGER
+     offsets (-3,-3) at its natural 81x84 size — no 50%/half-pixel margins
+     (odd 75px slot + fractional margins = browser subpixel snap = the
+     on/off left-right drift the user kept seeing). Overhang is a uniform
+     3px on all four sides, all on integer device pixels. */
+  left: -3px;
+  top: -3px;
   width: calc(27px * 3);
-  height: calc(27px * 3 - 1px);
-  margin-left: calc(-27px * 3 / 2);
-  margin-top: calc(-27px * 3 / 2 + 0.5px);
+  height: calc(28px * 3);
+  margin: 0;
   transform: none;
   opacity: 0.95;
   image-rendering: pixelated;
