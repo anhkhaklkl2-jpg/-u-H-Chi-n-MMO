@@ -747,10 +747,12 @@ export class Hud {
     return !this.gateEl.classList.contains("hidden");
   }
 
-  /** Select a hotbar slot (clamped, wraps); selection only — no auto-use. */
+  /** Select a hotbar slot (clamped, wraps); selection only — no auto-use.
+   *  HOTBAR = 10 slots (kit action bar) — NOT inventory.hotbar.length: the
+   *  server's hotbar array may still be shorter, and wrapping modulo it
+   *  made slots 6-9 unreachable by click/keys/wheel (user 10/10). */
   selectSlot(index: number): void {
-    const n = this.inventory.hotbar.length;
-    if (n === 0) return;
+    const n = 10;
     const next = ((index % n) + n) % n;
     if (next === this.activeSlot) return;
     this.activeSlot = next;
