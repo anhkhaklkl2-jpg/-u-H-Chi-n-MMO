@@ -12,9 +12,10 @@ import { dialogBox, DialogPage } from "./dialog_box";
 import { openShop, closeShop, isShopOpen } from "./shop_ui";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
+import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
+import { SPELLS as SPELL_DEFS, spellFx, spellById } from "./spells";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
-import { spellFx, spellById } from "./spells";
 import { previewPanel } from "./preview_panel";
 import { lowHpFx } from "./lowhp";
 // Day/night tint: kept as its own DOM canvas BUT throttled to 8 Hz + dpr 1 +
@@ -1058,6 +1059,24 @@ function radialActions(): import("./radial_menu").RadialAction[] {
   }
   return acts;
 }
+
+// WEB SPELLS radial wedges: the 4 spell cards BLOOM first (N/NE/E/SE)
+// ahead of the 8 hotbar wedges — hold Tab longer and the hotbar fills S/SW/W/NW.
+// Release on a spell wedge casts it at the nearest mob (same cast path as the
+// Skills tab card + R key).
+function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
+  const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.map((s) => ({
+    id: `spell_${s.id}`,
+    label: s.name,
+    iconUrl: `ui/fx/spells/${s.dir}/fly_00.png`,
+    onFire: () => {
+      const cast = getSpellCastHook?.();
+      if (cast) cast(s.id);
+      else hud.castSelectedSpellWithId(s.id);
+    },
+  }));
+  return [...spellActs, ...radialActions()];
+}
 window.addEventListener("keydown", (e) => {
   // TAB-HOLD RADIAL MENU. Two browser-hostility gotchas handled here:
   //  1. Tab default = focus cycling — preventDefault on EVERY Tab keydown
@@ -1069,7 +1088,7 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (!e.repeat && !hud.gateVisible && !isRadialOpen()) {
       radialMouseStart = { x: mouseX, y: mouseY };
-      radialOpen(radialActions(), (a) => a?.onFire());
+      radialOpen(radialActionsSpellsFirst(), (a) => a?.onFire());
     }
   }
 });
@@ -1229,22 +1248,29 @@ hud.onArmorEquip((action, slot, itemId, slotIndex) => {
 // within 4 tiles. The client plays the projectile VFX instantly; the
 // server (rules.apply_spell) resolves the actual damage/loot and the
 // action_result splat rides the normal zombie kill echo.
+// Shared cast path (SpellFx singleton can't reach this module's closures).
+castSpellAtNearest(
+  (spellId) => {
+    const spell = spellById(spellId);
+    if (!spell) return null;
+    const target = scene.nearestZombieTile(4);
+    if (!target) return { toast: "Không có địch trong tầm 4 ô!" };
+    scene.faceTile(target.x, target.y);
+    const self = scene.getSelfPos();
+    const t = scene.tilePxPublic;
+    spellFx.cast(spell, {
+      x: self.x * t + t / 2,
+      y: self.y * t + t / 2,
+    }, target);
+    net.castSpell(spellId, target.x, target.y);
+    return null;
+  },
+  (msg) => hud.toast(msg),
+);
+
 hud.onSpellCast((spellId) => {
-  const spell = spellById(spellId);
-  if (!spell) return;
-  const target = scene.nearestZombieTile(4);
-  if (!target) {
-    hud.toast("Không có địch trong tầm 4 ô!");
-    return;
-  }
-  scene.faceTile(target.x, target.y);
-  const self = scene.getSelfPos();
-  const t = scene.tilePxPublic;
-  spellFx.cast(spell, {
-    x: self.x * t + t / 2,
-    y: self.y * t + t / 2,
-  }, target);
-  net.castSpell(spellId, target.x, target.y);
+  const cast = getSpellCastHook();
+  if (cast) cast(spellId);
 });
 
 hud.onSlotSelect((slot) => {

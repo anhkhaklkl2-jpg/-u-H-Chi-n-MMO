@@ -919,6 +919,13 @@ export class Hud {
     if (this.selectedSpellId) this.onCastSpell?.(this.selectedSpellId);
   }
 
+  /** Radial menu wedge release: cast a SPECIFIC spell by id. */
+  castSelectedSpellWithId(spellId: string): void {
+    this.selectedSpellId = spellId;
+    this.refreshSpellSelection();
+    this.onCastSpell?.(spellId);
+  }
+
   openEquipTab(): void {
     this.invClosed = false;
     this.craftClosed = false;
