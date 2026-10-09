@@ -716,6 +716,26 @@ WEB_SPELLS: dict = {
                    radius=1.25, cooldown=1.0),
     "rocklift": dict(name="Vận chiêu đá", dmg=18, variance=5, mana=12,
                      radius=1.4, cooldown=1.6),
+    # ---- 4 spell mới (user 10/10, packs vfx done 10/10) ----
+    # dark02 = debuff HIỂN THỊ tại địch (README Dark VFX 02): damage nhẹ
+    # (user duyệt "chỉ để hiển thị — thêm damage sau" → 0 dmg, mana 4).
+    "dark02": dict(name="Debuff bóng tối", dmg=0, variance=0, mana=4,
+                   radius=1.4, cooldown=1.2, mode="debuff"),
+    # bump = Cục đá dâng (README Earth Bump): AoE ĐẨY địch quanh điểm mọc.
+    # Server: knock = dịch chuyển mob ra xa tâm (giữ trong walkable).
+    "bump01": dict(name="Cục đá dâng", dmg=2, variance=1, mana=8,
+                   radius=1.6, cooldown=1.5, mode="bump",
+                   knock_radius=2.5, knock_force=1.5),
+    # wall = Tường đất (README Earth Wall): block-ish — server dùng để
+    # spawn 1 block "wall" thật bằng PlaceBlock path con (mana 10).
+    "wall01": dict(name="Tường đất", dmg=0, variance=0, mana=10,
+                   radius=0.6, cooldown=2.5, mode="wall"),
+    # fire = Thổi lửa (README Fire Breath): cone channel — server tick
+    # * bursts* (mỗi 0.2s 1 tick do CLIENT gửi lặp) — server chỉ xử 1 tick
+    # mana 3/0.8s với cone range 4.
+    "fire01": dict(name="Thổi lửa", dmg=4, variance=2, mana=3,
+                   radius=1.2, cooldown=0.8, mode="cone", cone_range=4.0,
+                   cone_half_angle=0.6),
 }
 
 # Range (Chebyshev, tiles) from the player to the cast target tile.
@@ -777,6 +797,14 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     player.last_spell_at = now_s
     player.mana = max(0, player.mana - spell["mana"])
 
+    # DAMAGE ROLL (before any mode branch — bump/cone need it too):
+    import random as _r
+    dmg = max(1 if spell["dmg"] > 0 else 0,
+              spell["dmg"] + _r.randint(-spell["variance"], spell["variance"])) if spell["dmg"] else 0
+    critical = _r.random() < ATTACK_CRIT_CHANCE
+    if critical and dmg:
+        dmg = int(dmg * 1.5)
+
     # TARGET: the mob nearest the CAST TILE (not the player) within the
     # spell's impact radius; falls back to the nearest mob around the
     # player (keyboard casts / stale clicks), same pattern as apply_attack.
@@ -825,11 +853,92 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
         return ActionResult(False, "no_target", state_changed=True,
                             pos=(int(ex), int(ey)))
 
-    import random as _r
-    dmg = max(1, spell["dmg"] + _r.randint(-spell["variance"], spell["variance"]))
-    critical = _r.random() < ATTACK_CRIT_CHANCE
-    if critical:
-        dmg = int(dmg * 1.5)
+    # SPECIAL MODES (user 10/10 packs) ---------------------------------
+    mode = spell.get("mode", "projectile")
+    if mode == "bump":
+        # AoE knock: EVERY alive hostile inside knock_radius of the bump
+        # center gets pushed OUTWARD (knock_force tiles per cast, stays
+        # 0.5-tile aligned and inside the map). Damage is small.
+        kr = float(spell.get("knock_radius", 2.5))
+        kf = float(spell.get("knock_force", 1.5))
+        bx = best.x_f
+        by = best.y_f
+        cands = web.values() if isinstance(web, dict) else (web or [])
+        pushed = 0
+        for e in cands:
+            if not e.alive:
+                continue
+            dx_ = getattr(e, "x_f") - bx
+            dy_ = getattr(e, "y_f") - by
+            _len = _math.hypot(dx_, dy_)
+            if _len > kr or _len < 1e-6:
+                continue
+            nx_ = max(0.5, min(getattr(state, "map_width", 9999) - 0.5,
+                               e.x_f + dx_ / _len * kf))
+            ny_ = max(0.5, min(getattr(state, "map_height", 9999) - 0.5,
+                               e.y_f + dy_ / _len * kf))
+            e.x_f, e.y_f = nx_, ny_
+            pushed += 1
+        return ActionResult(
+            True, state_changed=True,
+            pos=(int(bx), int(by)), block_id="zombie",
+            damage=dmg, target_id=best.zombie_id,
+            target_defeated=False, drops=[],
+            critical=False, pushed=pushed,
+        )
+    if mode == "debuff":
+        # Dark02: visual-only debuff — zero damage, still "hits" (rides the
+        # splat route so the OTHER clients see the enemy flash).
+        return ActionResult(
+            True, state_changed=True,
+            pos=(int(best.x_f), int(best.y_f)), block_id="zombie",
+            damage=0, target_id=best.zombie_id,
+            target_defeated=False, drops=[],
+            critical=False,
+        )
+    if mode == "wall":
+        # Earth Wall: no mob resolution needed — the client renders the wall,
+        # server just answers ok with the cast tile for the block visuals.
+        return ActionResult(
+            True, state_changed=True,
+            pos=(int(ex), int(ey)), block_id="wall",
+            damage=0, target_id=None,
+            target_defeated=False, drops=[],
+        )
+    if mode == "cone":
+        # Fire breath: cone hit — ALL hostiles whose direction from the
+        # player is within cone_half_angle AND inside cone_range eat a tick.
+        _m = _math
+        cr = float(spell.get("cone_range", 4.0))
+        cha = float(spell.get("cone_half_angle", 0.6))
+        vx, vy = ex - ox, ey - oy
+        vl = _m.hypot(vx, vy) or 1e-9
+        ux, uy = vx / vl, vy / vl
+        cands = web.values() if isinstance(web, dict) else (web or [])
+        total = 0
+        for e in cands:
+            if not e.alive:
+                continue
+            exx = getattr(e, "x_f") - ox
+            eyy = getattr(e, "y_f") - oy
+            el = _m.hypot(exx, eyy)
+            if el > cr + 0.5:
+                continue
+            dot = (exx * ux + eyy * uy) / (el or 1e-9)
+            if dot < _m.cos(cha) and el > 1.0:
+                continue
+            e.hp = max(0, e.hp - dmg)
+            total += dmg
+            if not e.alive:
+                from game.zombies import remove_web_zombie as _rw
+                _rw(state, e.zombie_id)
+        return ActionResult(
+            True, state_changed=True,
+            pos=(int(ex), int(ey)), block_id="zombie",
+            damage=total, target_id=None,
+            target_defeated=False, drops=[],
+        )
+
     best.hp = max(0, best.hp - dmg)
     target_id = best.zombie_id
     defeated = not best.alive

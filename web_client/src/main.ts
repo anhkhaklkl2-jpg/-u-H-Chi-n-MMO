@@ -1066,11 +1066,18 @@ function radialActions(): import("./radial_menu").RadialAction[] {
 // Release on a spell wedge casts it at the nearest mob (same cast path as the
 // Skills tab card + R key).
 function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
+  // Icon per pack kind (8 wedges now hold ALL 8 spells):
+  const iconFor = (s: import("./spells").SpellDef): string =>
+    s.kind === "rocklift" ? "rock_00"
+    : s.kind === "debuff" ? "fx_00"
+    : s.kind === "bump" ? "fx_00"
+    : s.kind === "wall" ? "final"
+    : s.kind === "cone" ? "row01_00"
+    : "fly_00";
   const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.map((s) => ({
     id: `spell_${s.id}`,
     label: s.name,
-    // rocklift pack has NO fly frames (lift/throw only) — use rock frame.
-    iconUrl: `ui/fx/spells/${s.dir}/${s.kind === "rocklift" ? "rock_00" : "fly_00"}.png`,
+    iconUrl: `ui/fx/spells/${s.dir}/${iconFor(s)}.png`,
     onFire: () => {
       // WAND BINDING (user 10/10): releasing on a spell wedge while the
       // wand is held ATTUNES the wand (no cast). Un-attune = the same.

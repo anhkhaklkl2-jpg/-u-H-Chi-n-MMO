@@ -72,6 +72,9 @@ class ActionResult:
     # Chop/mine only: total swings the node needs WITH the resolved tool
     # (the client renders progress = hits/needed). None = not a harvest.
     needed: Optional[int] = None
+    # Bump spell (user 10/10): how many hostiles got knocked out by the AoE
+    # push — the caster's splat reads "đẩy X quái" when > 0. Default 0.
+    pushed: int = 0
 
 
 def _tile_of(v: float) -> int:
@@ -177,6 +180,14 @@ class Player:
     # short respawn window; the Discord adapter shows the dead screen.
     dead_until: Optional[float] = None
     death_reason: Optional[str] = None
+    # Death metadata for the web client's 3-phase death screen (user 29/09):
+    # kind = damage source tag ("zombie"/"status"/"self"), died_at = unix
+    # wall-clock seconds the death happened — the client restarts its
+    # dissolve animation + countdown exactly once per death by comparing
+    # died_at across snapshots (the boolean `dead` alone flips every frame).
+    # Runtime-only, never persisted (same lifetime as dead_until).
+    death_kind: Optional[str] = None
+    died_at: Optional[float] = None
     # Preferred steps per move press (1/3/5). Persisted so the choice
     # survives a restart — new sessions start at the remembered setting.
     step_size: int = 1
