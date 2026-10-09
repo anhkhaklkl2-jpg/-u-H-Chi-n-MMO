@@ -622,7 +622,17 @@ def apply_break_block(
     right_tool = (
         td is not None and (right_family is None or td.family == right_family)
     )
-    damage = 2 if right_tool else 1
+    # TOOL TIER MATTERS (user bug 30/09: "cuốc gỗ và cuốc đá đập đá giống
+    # y chang"): the old flat damage 2 made every pickaxe tier identical.
+    # Damage now scales with the tier multiplier (wood 1.0 ... steel 3.2),
+    # rounded — stone hardness 6: wood 6 hits, stone 5, iron 4, gold 3,
+    # steel 2. Wrong family / bare hand still deals the legacy damage 1.
+    if right_tool and td is not None:
+        from game.tools import mult_of
+
+        damage = max(1, round(2.0 * mult_of(td.material)))
+    else:
+        damage = 1
     if tired:
         # Out of stamina (user rule): still works, HALF damage — the block
         # breaks eventually, just twice as slow. Min 1 so it never stalls.
@@ -689,3 +699,123 @@ def apply_regen(player: Player, dt: float) -> bool:
     player.regen_bank -= gain
     player.hp = min(player.max_hp, player.hp + gain)
     return True
+
+
+# ------------------------------------------------------------------
+# WEB SPELLS (user 08/10 — 4 projectile spells from the VFX packs).
+# Server-authoritative damage: the web client plays the projectile VFX
+# locally, but the damage/loot/defeat resolution here mirrors the
+# web-zombie branch of apply_attack (same pack, same hit-test style).
+# Data-driven: tune numbers here without touching the handler.
+WEB_SPELLS: dict = {
+    "wood01": dict(name="Khúc gỗ bay", dmg=12, variance=4, mana=6,
+                   radius=1.25, cooldown=0.8),
+    "earth01": dict(name="Đá bay", dmg=12, variance=4, mana=8,
+                    radius=1.25, cooldown=1.0),
+    "dark01": dict(name="Đạn bóng tối", dmg=12, variance=4, mana=10,
+                   radius=1.25, cooldown=1.0),
+    "rocklift": dict(name="Vận chiêu đá", dmg=18, variance=5, mana=12,
+                     radius=1.4, cooldown=1.6),
+}
+
+# Range (Chebyshev, tiles) from the player to the cast target tile.
+SPELL_CAST_RANGE = 4
+
+
+def apply_spell(state: GameState, user_id: int, spell_id: str,
+                dx: Optional[int] = None, dy: Optional[int] = None) -> ActionResult:
+    """Cast one web spell toward the clicked tile.
+
+    Mirror of apply_attack's web-zombie branch: resolve the mob nearest the
+    TARGET TILE (click-forgiving 1.25-tile slack = the spell impact radius),
+    roll the damage, drain mana, gate on the per-spell cooldown. No melee
+    range requirement — the whole point of a projectile spell is range 4.
+    """
+    import math as _math
+    import time as _t
+
+    spell = WEB_SPELLS.get(spell_id)
+    if spell is None:
+        return ActionResult(False, "bad_spell")
+    player = state.get_player(user_id)
+    if player is None:
+        return ActionResult(False, "no_player")
+    if not player.alive:
+        return ActionResult(False, "dead")
+
+    now_s = _t.monotonic()
+    if now_s - getattr(player, "last_spell_at", 0.0) < spell["cooldown"]:
+        return ActionResult(False, "cooldown")
+
+    if player.mana < spell["mana"]:
+        return ActionResult(False, "no_mana")
+
+    # Cast-range gate: the aim offset (dx,dy) from the player tile must sit
+    # within SPELL_CAST_RANGE (same clamp idea as chop/place targeting).
+    if dx is None or dy is None:
+        dx, dy = 0, 0
+    if max(abs(dx), abs(dy)) > SPELL_CAST_RANGE:
+        return ActionResult(False, "out_of_range")
+
+    player.last_spell_at = now_s
+    player.mana = max(0, player.mana - spell["mana"])
+
+    # TARGET: the mob nearest the CAST TILE (not the player) within the
+    # spell's impact radius; falls back to the nearest mob around the
+    # player (keyboard casts / stale clicks), same pattern as apply_attack.
+    web = getattr(state, "web_zombies", {})
+    candidates = web.values() if isinstance(web, dict) else (web or [])
+    cx = player.x + dx + 0.5
+    cy = player.y + dy + 0.5
+    best = None
+    best_d = float("inf")
+    for enemy in candidates:
+        if not enemy.alive:
+            continue
+        d = _math.hypot(getattr(enemy, "x_f", enemy.x) - cx,
+                        getattr(enemy, "y_f", enemy.y) - cy)
+        if d <= spell["radius"] and d < best_d:
+            best, best_d = enemy, d
+    if best is None:
+        for enemy in candidates:
+            if not enemy.alive:
+                continue
+            d = _math.hypot(getattr(enemy, "x_f", enemy.x) - player.x_f,
+                            getattr(enemy, "y_f", enemy.y) - player.y_f)
+            if d <= spell["radius"] + 0.5 and d < best_d:
+                best, best_d = enemy, d
+    if best is None:
+        return ActionResult(False, "no_target", state_changed=True,
+                            pos=(player.x + dx, player.y + dy))
+
+    import random as _r
+    dmg = max(1, spell["dmg"] + _r.randint(-spell["variance"], spell["variance"]))
+    critical = _r.random() < ATTACK_CRIT_CHANCE
+    if critical:
+        dmg = int(dmg * 1.5)
+    best.hp = max(0, best.hp - dmg)
+    target_id = best.zombie_id
+    defeated = not best.alive
+
+    drops = []
+    if defeated:
+        from game.zombies import remove_web_zombie
+        remove_web_zombie(state, target_id)
+        from game.drops import spawn_drops
+        import random
+        rolled = [
+            (item_id, qty)
+            for item_id, chance, qty in mob_drop_table(getattr(best, "kind", "zombie"))
+            if random.random() < chance
+        ]
+        if rolled:
+            spawn_drops(state, best.x, best.y, rolled)
+        drops = rolled
+
+    return ActionResult(
+        True, state_changed=True,
+        pos=(best.x, best.y), block_id="zombie",
+        damage=dmg, target_id=target_id,
+        target_defeated=defeated, drops=drops,
+        critical=critical,
+    )

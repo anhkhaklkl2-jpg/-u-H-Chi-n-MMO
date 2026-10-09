@@ -527,6 +527,10 @@ def build_welcome(rt: ScenarioRuntime, user_id: int) -> dict:
             "cave_ambience": (
                 _cave_ambience_payload(rt) if _is_cave_map(rt) else None
             ),
+            # Room FX anchors (fireplace fires + window shafts, web client):
+            # marker layers ("fx lua" / "fx cua so") -> game-coord cells.
+            # Absent/empty on maps without markers — client renders nothing.
+            "room_fx": _room_fx_payload(rt),
             "spawn": list(md.spawn),
             # Sub-tile alpha masks (rendering/tile_masks.py): per-tile opaque
             # shapes for partially-blocking sprites. Client mirrors the
@@ -755,8 +759,13 @@ def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
     carry their LIVE float position + facing so the client animates them
     like players."""
     npc_map = getattr(rt, "npc_map", None)
+    present = getattr(rt, "npc_sessions", None) or {}
     out = []
     for n in (npc_map.npcs if npc_map else []):
+        # SESSION MERCHANT: only in-world during open/leaving phases.
+        st = present.get(n.id)
+        if st is not None and getattr(st, "phase", "open") == "closed":
+            continue
         row = {
             "id": n.id,
             "name": n.name,
@@ -764,6 +773,7 @@ def _npcs_payload(rt: ScenarioRuntime) -> List[dict]:
             "x": n.x,
             "y": n.y,
             **({"sprite": n.sprite} if n.sprite else {}),
+            **({"reach": int(n.reach)} if int(getattr(n, "reach", 1) or 1) > 1 else {}),
         }
         if getattr(n, "wander", None):
             n.init_float()
@@ -787,6 +797,14 @@ def _web_session_of(rt: ScenarioRuntime, user_id: int):
 # renders a dark blue night tint, and sunshine shadows/palette would read as
 # "nắng đêm". Night = before 06:00 or after 21:00 (daynight.py gradient).
 _DAY_ONLY_WEATHER = ("sunny", "sun_clouds")
+
+
+def _room_fx_payload(rt) -> dict | None:
+    """Room FX anchors for the web client (game/room_fx detect). None when
+    the map carries no fx marker layers."""
+    md = rt.map_data
+    out = dict(getattr(md, "fx_markers", None) or {}) or None
+    return out
 
 
 def _is_cave_map(rt) -> bool:
@@ -1005,6 +1023,14 @@ def build_snapshot(rt: ScenarioRuntime, user_id: int, seq: int) -> dict:
             [n.id, round(n.x_f, 3), round(n.y_f, 3), n.facing, n.target is not None]
             for n in (getattr(rt, "npc_map", None).npcs if getattr(rt, "npc_map", None) else [])
             if getattr(n, "wander", None)
+            and getattr(getattr(rt, "npc_sessions", {}).get(n.id), "phase", "open") != "closed"
+        ],
+        # SESSION MERCHANTS out of the world: the client removes their sprites
+        # (1-2 ids max — only session merchants, empty most of the time).
+        "npc_gone": [
+            n.id
+            for n in (getattr(rt, "npc_map", None).npcs if getattr(rt, "npc_map", None) else [])
+            if getattr(getattr(rt, "npc_sessions", {}).get(n.id), "phase", "open") == "closed"
         ],
     }
     # PERF (world-delta model — how MMOs ship static world state): the

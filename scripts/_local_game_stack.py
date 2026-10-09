@@ -187,6 +187,15 @@ class LocalStack:
             slot = frame.get("slot")
             if isinstance(slot, int) and 0 <= slot < 8:
                 self.selected_slot[cid] = slot
+                # PRODUCTION PARITY (web_api/core.py): mirror the held slot
+                # onto the runtime's held_slots map — without this the
+                # preview player ALWAYS swung bare-handed (chop answered
+                # needed=65 even with a pickaxe selected).
+                ch = self.joined.get(cid)
+                uid = (self.sessions.get(cid) or {}).get("user_id")
+                rt0 = self.gm.get_runtime(ch) if ch else None
+                if rt0 is not None and uid is not None:
+                    rt0.held_slots[uid] = slot
             return
         if t == "action":
             # Preview parity with web_api._handle_action: build the SAME
@@ -216,6 +225,38 @@ class LocalStack:
             action = None
             if name == "attack":
                 action = AttackAction(user_id=uid)
+            elif name == "spell":
+                # WEB SPELLS (user 08/10): parity with web_api/core.py —
+                # resolve via rules.apply_spell and echo action_result so
+                # the preview client sees damage/drops like production.
+                rt_s = self.gm.get_runtime(ch)
+                from game import rules as _rules
+                from game.rules import ActionResult
+                spell_result = (
+                    _rules.apply_spell(
+                        rt_s.state, uid, str(frame.get("spell_id", "")),
+                        abs_dx, abs_dy,
+                    ) if rt_s is not None and rt_s.state.get_player(uid) is not None
+                    else ActionResult(False, "no_scenario")
+                )
+                await self._send(cid, {
+                    "type": "action_result",
+                    "name": "spell",
+                    "ok": bool(spell_result.state_changed),
+                    "reason": spell_result.reason or "",
+                    "tx": spell_result.pos[0] if spell_result.pos else None,
+                    "ty": spell_result.pos[1] if spell_result.pos else None,
+                    "kind": "zombie" if getattr(spell_result, "target_id", None) else "",
+                    "target_id": getattr(spell_result, "target_id", None),
+                    "target_defeated": bool(getattr(spell_result, "target_defeated", False)),
+                    "needed": None,
+                    "drops": [[i, q] for i, q in (spell_result.drops or [])],
+                    "damage": int(getattr(spell_result, "damage", 0) or 0),
+                    "critical": bool(getattr(spell_result, "critical", False)),
+                    "missed": bool(getattr(spell_result, "missed", False)),
+                    "spell_id": frame.get("spell_id", ""),
+                })
+                return
             elif name == "chop":
                 action = ChopAction(user_id=uid, dx=abs_dx, dy=abs_dy)
             elif name == "break":
@@ -252,9 +293,35 @@ class LocalStack:
                 await self._send(cid, {"type": "error", "code": "bad_action"})
                 return
             try:
-                await self.gm.dispatch(ch, action)
+                _, result = await self.gm.dispatch(ch, action)
             except Exception as exc:
                 await self._send(cid, {"type": "push", "message": f"[preview] action error: {exc!r}"})
+                return
+            # PRODUCTION PARITY: echo the action outcome so the client can
+            # show progress/failures (web_api/core.py sends the same frame;
+            # without it the preview client never sees ok/reason/needed/
+            # drops — chop progress bars stayed invisible and failed swings
+            # looked like dead clicks).
+            if result is not None:
+                await self._send(cid, {
+                    "type": "action_result",
+                    "name": name,
+                    "ok": bool(result.state_changed),
+                    "reason": result.reason or "",
+                    "tx": result.pos[0] if result.pos else None,
+                    "ty": result.pos[1] if result.pos else None,
+                    "kind": (
+                        "zombie" if getattr(result, "target_id", None)
+                        else (result.block_id or "")
+                    ),
+                    "target_id": getattr(result, "target_id", None),
+                    "target_defeated": bool(getattr(result, "target_defeated", False)),
+                    "needed": result.needed,
+                    "drops": [[i, q] for i, q in (result.drops or [])],
+                    "damage": int(getattr(result, "damage", 0) or 0),
+                    "critical": bool(getattr(result, "critical", False)),
+                    "missed": bool(getattr(result, "missed", False)),
+                })
             return
         if t == "inventory_op":
             op = frame.get("op")
@@ -437,8 +504,9 @@ class LocalStack:
                         f"Sheet có: {', '.join(sorted(armor_catalog.keys()))}"})
                 return
             if cmd == "npc":
-                # Parity with web_api/core.py "npc": rounded-tile adjacency OR
-                # float distance <= 1.6 (client prediction mid-step proof).
+                # Parity with web_api/core.py "npc" (per-NPC reach incl.
+                # shopkeeper through-counter range).
+                from game.npc import npc_in_reach
                 npc_id = (args[0].lower() if args else "")
                 rt = self.gm.get_runtime(ch)
                 player = rt.state.get_player(uid) if rt is not None else None
@@ -448,9 +516,7 @@ class LocalStack:
                     for n in rt.npc_map.npcs:
                         if n.id.lower() != npc_id:
                             continue
-                        d_int = abs(n.x - round(px)) + abs(n.y - round(py))
-                        d_float = ((n.x - px) ** 2 + (n.y - py) ** 2) ** 0.5
-                        if d_int <= 1 or d_float <= 1.6:
+                        if npc_in_reach(n, px, py):
                             npc = n
                             break
                 if npc is None or npc.dialogue is None:
@@ -473,27 +539,126 @@ class LocalStack:
             if cmd == "npc_next":
                 # Dialogue tree navigation (parity with web_api/core.py).
                 node_id = (args[0].lower() if args else "")
+                # SHOP BRANCH (parity with core.py): next == "shop:<key>[:<style>]"
+                if node_id.startswith("shop:"):
+                    parts = node_id.split(":")
+                    shop_key = parts[1] if len(parts) > 1 else ""
+                    style = parts[2] if len(parts) > 2 else "kaetram"
+                    rt = self.gm.get_runtime(ch)
+                    shop = rt.shops.get(shop_key)
+                    if rt is None or shop is None:
+                        await self._send(cid, {"type": "push",
+                                               "message": "Shop không tồn tại."})
+                        return
+                    await self._preview_shop_payload(cid, ch, uid, rt, shop, style)
+                    return
                 rt = self.gm.get_runtime(ch)
                 node = rt.npc_map.dialogues.get(node_id) if rt else None
                 if node is None:
                     await self._send(cid, {"type": "push",
                                            "message": "Hội thoại không tồn tại."})
                     return
-                who = "Gạc Đặc" if node_id.startswith("gac_dac") else node_id
+                # Speaker identity (parity with web_api/core.py): prefer the
+                # npc id the client sends as 2nd arg over the node id.
+                talk_id = (args[1].lower() if len(args) > 1 else "")
+                talk_npc = None
+                if rt is not None and talk_id:
+                    for n in rt.npc_map.npcs:
+                        if n.id.lower() == talk_id:
+                            talk_npc = n
+                            break
+                who = talk_npc.name if talk_npc \
+                    else ("Gạc Đặc" if node_id.startswith("gac_dac") else node_id)
                 await self._send(cid, {
                     "type": "npc_dialogue",
-                    "npc": node_id.split("_")[0],
+                    "npc": talk_npc.id if talk_npc else node_id.split("_")[0],
                     "name": who,
-                    "emoji": "🦝",
+                    "emoji": talk_npc.emoji if talk_npc else "🦝",
                     "text": node.text,
                     "options": [
                         {"label": o.label, "next": o.next} for o in node.options
                     ],
                 })
                 return
+            if cmd in ("shop", "shop_buy", "shop_sell"):
+                await self._preview_shop_cmd(cid, ch, uid, cmd, args)
+                return
             await self._send(cid, {"type": "push", "message": f"[preview] Lệnh không hỗ trợ local: {cmd}"})
             return
         await self._send(cid, {"type": "error", "code": "unknown_type", "got": t})
+
+    async def _preview_shop_payload(self, cid, ch, uid, rt, shop, style="kaetram") -> None:
+        """Frame shop_open (parity with web_api/core.py _send_shop_payload)."""
+        from game.shops import payload as shop_payload
+        from game.items import get_item
+
+        inv = self.gm.get_inventory(ch, uid)
+        coins = inv.count(shop.currency)
+
+        def name_of(iid: str) -> str:
+            it = get_item(iid)
+            return it.name if it is not None else iid
+
+        frame = shop_payload(shop, inv, coins, name_of=name_of)
+        frame["style"] = style
+        await self._send(cid, frame)
+
+    async def _preview_shop_cmd(self, cid, ch, uid, cmd: str, args: list) -> None:
+        """shop / shop_buy / shop_sell (parity with web_api/core.py)."""
+        from game import shops as shop_mod
+
+        if not args:
+            await self._send(cid, {"type": "push", "message": "Thiếu tham số shop."})
+            return
+        rt = self.gm.get_runtime(ch)
+        shop_key = str(args[0]).lower()
+        shop = rt.shops.get(shop_key) if rt is not None else None
+        if shop is None:
+            await self._send(cid, {"type": "push", "message": "Shop không tồn tại."})
+            return
+        inv = self.gm.get_inventory(ch, uid)
+        if cmd == "shop":
+            style = str(args[1]).lower() if len(args) > 1 else "kaetram"
+            await self._preview_shop_payload(cid, ch, uid, rt, shop, style=style)
+            return
+        if cmd == "shop_buy":
+            if len(args) < 3:
+                await self._send(cid, {"type": "push",
+                                       "message": "Dùng: /shop_buy <key> <index> <count>"})
+                return
+            index, count = int(args[1]), max(1, min(999, int(args[2])))
+            coins = inv.count(shop.currency)
+            ok, msg, new_coins, _spent = shop_mod.buy(shop, index, count, inv, coins)
+            if not ok:
+                await self._send(cid, {"type": "push", "message": msg})
+                return
+            item = shop.items[index]
+            if not item.infinite:
+                item.count -= count
+            inv.remove(shop.currency, coins - new_coins)
+            inv.add(item.key, count)
+            await self._send(cid, {"type": "push", "message": msg})
+            style = str(args[3]).lower() if len(args) > 3 else "kaetram"
+            await self._preview_shop_payload(cid, ch, uid, rt, shop, style=style)
+            return
+        # shop_sell
+        if len(args) < 3:
+            await self._send(cid, {"type": "push",
+                                   "message": "Dùng: /shop_sell <key> <item_id> <qty>"})
+            return
+        item_id = str(args[1]).lower()
+        qty = max(1, min(999, int(args[2])))
+        store_item = next((i for i in shop.items if i.key == item_id), None)
+        base_price = store_item.price if store_item else 1
+        ok, msg, gained = shop_mod.sell(shop, inv, item_id, qty, base_price)
+        if not ok:
+            await self._send(cid, {"type": "push", "message": msg})
+            return
+        inv.remove(item_id, qty)
+        inv.add(shop.currency, gained)
+        await self._send(cid, {"type": "push", "message": msg})
+        style = str(args[3]).lower() if len(args) > 3 else "kaetram"
+        await self._preview_shop_payload(cid, ch, uid, rt, shop, style=style)
 
     async def _serve_asset(self, cid: int, name: str) -> None:
         """Mirror WebHub._handle_asset_request (basename-confined PNG serve)."""
@@ -522,6 +687,9 @@ class LocalStack:
             base_dir = ASSETS_DIR.parent / "node"
         elif name.startswith("players/"):
             base_dir = ASSETS_DIR.parent / "players"
+        elif name.startswith("fx/"):
+            # Room-FX strips (parity with web_api/core.py).
+            base_dir = ASSETS_DIR.parent / "fx"
         else:
             base_dir = ASSETS_DIR
         path = base_dir / safe

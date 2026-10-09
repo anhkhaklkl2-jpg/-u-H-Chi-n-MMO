@@ -801,6 +801,13 @@ Lớp `#travel-root` (styles.css) z-index **6000**, pointer-events:auto khi hi�
 - **Probe preview hay lừa:** root `display:none` → mọi đo getComputedStyle đều
   0/`none` (không phải bug). Screenshot không kịp animation 450ms → đóng băng
   trạng thái bằng tay rồi chụp.
+- **🚨 KHÔNG SPAM VÒNG LẶP "CHỤP ẢNH → TỰ ĐỌC" (user 06/10/2026 — NHẤN MẠNH):**
+  lặp `preview_screenshot` nhiều vòng để tự soi là cực kỳ mất thời gian, ảnh
+  browser automation hay dính fluke WebGL (canvas trắng) → kết luận sai.
+  Verify chuẩn = `preview_evaluate` đọc state (1 probe dứt khoát) hoặc HỎI
+  user (user mở tab song song, xác nhận nhanh nhất). Chỉ chụp ảnh khi thật
+  sự cần (lỗi render DOM probe không thấy), tối đa 1–2 lần mỗi nghi vấn;
+  1 vòng không ra kết luận → DỪNG, hỏi user. Chi tiết: docs/preview_harness.md.
 
 ## 10c. 🌿 LỖI "CỎ HOA BỊ BOX CHẶN" — BÀI HỌC PARITY CLIENT↔SERVER (27/09)
 

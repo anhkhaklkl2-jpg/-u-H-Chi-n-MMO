@@ -15,6 +15,8 @@ export interface InputHooks {
   onSlot: (index: number) => void;
   /** Q: throw the stack in the active hotbar slot into the world. */
   onThrowHeld?: () => void;
+  /** R: cast the selected web spell at the nearest mob. */
+  onCastSpell?: () => void;
   onChatFocus: () => boolean; // true while the chat input has focus
   /** Canvas clicks: "primary" = chop/break/mine, "secondary" = place block. */
   onCanvasAction?: (kind: "primary" | "secondary", sx: number, sy: number) => void;
@@ -89,6 +91,11 @@ export class KeyboardInput {
       // otherwise F stays the attack key.
       if (this.hooks.onNpcKey?.()) return;
       this.hooks.onAttack();
+      return;
+    }
+    if (e.code === "KeyR") {
+      e.preventDefault();
+      this.hooks.onCastSpell?.();
       return;
     }
     if (e.code === "KeyQ") {

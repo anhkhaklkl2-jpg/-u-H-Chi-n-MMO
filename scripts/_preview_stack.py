@@ -727,6 +727,10 @@ class PreviewStack(LocalStack):
             "night": s >= 20 * 3600 or s < 6 * 3600,
             "weather": getattr(rt, "weather_key", "") or "auto",
             "zombies": len(iter_web_zombies(rt.state)),
+            "zombie_pos": [
+                [round(z.x_f, 1), round(z.y_f, 1)]
+                for z in iter_web_zombies(rt.state) if z.alive
+            ][:12],
             "meteors": len(rt.meteors.active),
             "felled_tonight": rt.meteors.felled_tonight,
             "auto_meteor": self.auto_meteor,

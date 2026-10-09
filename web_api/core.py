@@ -529,7 +529,9 @@ class WebHub:
         # a SIDE world (cave/forest/trade lobby). Rejoining must respawn them
         # THERE — the old code always welcomed the main runtime, so entering
         # the cave and relogging dumped the player back at the bigmap spawn.
-        moved_rt = await self.manager.ensure_player_world(channel_id, sess.user_id)
+        moved_rt = await self.manager.ensure_player_world(
+            channel_id, sess.user_id, sess.display_name,
+        )
         if moved_rt is not None:
             rt = moved_rt
         welcome = build_welcome(rt, sess.user_id)
@@ -563,7 +565,7 @@ class WebHub:
             ShovelAction,
             TurnAction,
         )
-        from game.state import Direction
+        from game.state import Direction, ActionResult
 
         name = frame.get("name")
         uid = sess.user_id
@@ -571,7 +573,13 @@ class WebHub:
         # ABSOLUTE mouse-tile targeting: the client sends the tile it clicked
         # (tx, ty); the server derives the offset from ITS OWN player tile —
         # client-side position math drifts (prediction) and misplaced blocks.
-        rt_a = self.manager.get_runtime(sess.channel_id)
+        # SIDE-WORLD AIM (bug 06/10): the aim baseline must be the world the
+        # player CURRENTLY stands in (cave via portal = a SIDE runtime) —
+        # get_runtime() returned the MAIN bigmap whose player record is stale
+        # or absent there, so every chop/attack/place in the cave computed a
+        # wrong tile and silently missed the ore node (preview worked because
+        # its stack creates the cave AS the main runtime).
+        rt_a = self.manager.get_runtime_for(sess.channel_id, uid)
         player_a = rt_a.state.get_player(uid) if rt_a else None
         abs_dx = abs_dy = None
         raw_tx, raw_ty = frame.get("tx"), frame.get("ty")
@@ -618,6 +626,62 @@ class WebHub:
             # Clicked tile rides along (may be None for keyboard swings) —
             # rules.resolve_attack uses it to hit the mob near that tile.
             action = AttackAction(user_id=uid, dx=abs_dx, dy=abs_dy)
+        elif name == "spell":
+            # WEB SPELLS (user 08/10): client-selected projectile spell cast
+            # toward the clicked tile. NOT an Action dataclass — the spell
+            # resolves directly in rules.apply_spell (mana + cooldown + mob
+            # near target tile) and rides the same action_result echo below,
+            # so the client splat/loot/defeat path is reused unchanged.
+            from game import rules as _rules
+
+            rt_s = self.manager.get_runtime_for(sess.channel_id, uid)
+            spell_result = None
+            if rt_s is None:
+                spell_result = ActionResult(False, "no_scenario")
+            else:
+                spell_result = _rules.apply_spell(
+                    rt_s.state, uid, str(frame.get("spell_id", "")),
+                    abs_dx, abs_dy,
+                )
+            await self.send_to_client_conn(sess, {
+                "type": "action_result",
+                "name": "spell",
+                "ok": bool(spell_result.state_changed),
+                "reason": spell_result.reason or "",
+                "tx": spell_result.pos[0] if spell_result.pos else None,
+                "ty": spell_result.pos[1] if spell_result.pos else None,
+                "kind": "zombie" if spell_result.target_id else "",
+                "target_id": spell_result.target_id,
+                "target_defeated": bool(spell_result.target_defeated),
+                "needed": None,
+                "drops": [[i, q] for i, q in (spell_result.drops or [])],
+                "damage": int(spell_result.damage or 0),
+                "critical": bool(spell_result.critical),
+                "missed": bool(spell_result.missed),
+                "spell_id": frame.get("spell_id", ""),
+            })
+            # OTHER clients see the caster's projectile too (visual only —
+            # their own snapshots carry the mob HP/defeat).
+            if spell_result.state_changed and spell_result.pos:
+                spell_fx = {
+                    "type": "spell_cast",
+                    "uid": uid,
+                    "spell_id": frame.get("spell_id", ""),
+                    "tx": spell_result.pos[0],
+                    "ty": spell_result.pos[1],
+                }
+                for conn in list(self.connections.values()):
+                    if (
+                        conn.session is not None
+                        and conn.joined
+                        and conn.session.channel_id == sess.channel_id
+                        and conn.session.user_id != uid
+                    ):
+                        try:
+                            await self.send_to_client(conn.cid, spell_fx)
+                        except Exception:  # noqa: BLE001
+                            pass
+            return
         elif name == "chop":  # chặt cây (mouse tile nếu có)
             action = ChopAction(
                 user_id=uid,
@@ -1206,13 +1270,12 @@ class WebHub:
                 # không"). Accept EITHER rounded-tile adjacency (d <= 1) OR the
                 # true float distance <= 1.6 (physically standing next to the
                 # NPC even when rounding tips the tile over the boundary).
+                from game.npc import npc_in_reach
                 px, py = float(player.x), float(player.y)
                 for n in rt.npc_map.npcs:
                     if n.id.lower() != npc_id:
                         continue
-                    d_int = abs(n.x - round(px)) + abs(n.y - round(py))
-                    d_float = ((n.x - px) ** 2 + (n.y - py) ** 2) ** 0.5
-                    if d_int <= 1 or d_float <= 1.6:
+                    if npc_in_reach(n, px, py):
                         npc = n
                         break
             if npc is None or npc.dialogue is None:
@@ -1247,22 +1310,64 @@ class WebHub:
             node_id = (args[0].lower() if args else "")
             rt = self.manager.runtime_of(sess.channel_id, sess.user_id) \
                 or self.manager.get_runtime(sess.channel_id)
+            # SHOP BRANCH: a dialogue option may point at a shop instead of
+            # another dialogue node. Convention: next == "shop:<key>[:<style>]"
+            # (style in {kaetram, rbcat} — purely a CLIENT UI choice, echoed
+            # back in the frame so the client opens Shop 1 or Shop 2).
+            if node_id.startswith("shop:"):
+                parts = node_id.split(":")
+                shop_key = parts[1] if len(parts) > 1 else ""
+                style = parts[2] if len(parts) > 2 else "kaetram"
+                shop = getattr(rt.shops, "get", lambda k: None)(shop_key) \
+                    if rt is not None else None
+                if rt is None or shop is None:
+                    await self.send_to_client_conn(sess, {
+                        "type": MSG_PUSH, "message": "Shop không tồn tại.",
+                    })
+                    return
+                # SESSION MERCHANT: the shop only trades while the session
+                # is OPEN (the leaving walk-out has closed business).
+                st = getattr(rt, "npc_sessions", {}).get("thuong_nhan") \
+                    if shop_key == "thuong_nhan" else None
+                if st is not None and getattr(st, "phase", "open") != "open":
+                    await self.send_to_client_conn(sess, {
+                        "type": MSG_PUSH,
+                        "message": "🧙 Đã hết phiên chợ — thương nhân đi kh" + "ỏi đây... Hẹn phiên sau!",
+                        "kind": "system_private",
+                    })
+                    return
+                await self._send_shop_payload(sess, rt, shop, style)
+                return
             node = rt.npc_map.dialogues.get(node_id) if rt else None
             if node is None:
                 await self.send_to_client_conn(sess, {
                     "type": MSG_PUSH, "message": "Hội thoại không tồn tại.",
                 })
                 return
+            # Follow-up nodes must keep the SPEAKER's identity (earlier code
+            # echoed the node id as the name — "skull_shop_line" showed in
+            # the name box). The client sends the npc id as 2nd arg
+            # ("npc_next <node> <npc>"); fall back to the old guess.
+            talk_id = (args[1].lower() if len(args) > 1 else "")
+            talk_npc = None
+            if rt is not None and talk_id:
+                for n in rt.npc_map.npcs:
+                    if n.id.lower() == talk_id:
+                        talk_npc = n
+                        break
             await self.send_to_client_conn(sess, {
                 "type": "npc_dialogue",
-                "npc": node_id.split("_")[0],
-                "name": "Gạc Đặc" if node_id.startswith("gac_dac") else node_id,
-                "emoji": "🦝",
+                "npc": talk_npc.id if talk_npc else node_id.split("_")[0],
+                "name": talk_npc.name if talk_npc
+                else ("Gạc Đặc" if node_id.startswith("gac_dac") else node_id),
+                "emoji": talk_npc.emoji if talk_npc else "🦝",
                 "text": node.text,
                 "options": [
                     {"label": o.label, "next": o.next} for o in node.options
                 ],
             })
+        elif cmd in ("shop", "shop_buy", "shop_sell"):
+            await self._handle_shop_cmd(sess, cmd, args)
         elif cmd == "weather":
             rt = self.manager.get_runtime(sess.channel_id)
             key = rt.weather_key if rt is not None else "?"
@@ -1376,6 +1481,140 @@ class WebHub:
             "type": MSG_PUSH, "message": f"🎁 Đã nhận {label} vào túi.",
             "kind": "system_private",
         })
+
+    async def _send_shop_payload(self, sess: WebSession, rt, shop,
+                                 style: str = "kaetram") -> None:
+        """Frame shop_open: stock + the player's bag for the sell tab."""
+        from game.shops import payload as shop_payload
+        from game.items import get_item
+
+        inv = self.manager.get_inventory(sess.channel_id, sess.user_id)
+        coins = inv.count(shop.currency)
+
+        def name_of(iid: str) -> str:
+            it = get_item(iid)
+            return it.name if it is not None else iid
+
+        frame = shop_payload(shop, inv, coins, name_of=name_of)
+        frame["style"] = style
+        await self.send_to_client_conn(sess, frame)
+
+    async def _handle_shop_cmd(self, sess: WebSession, cmd: str, args: list) -> None:
+        """Shop commands (server-authoritative, mirroring Kaetram):
+
+        - shop <key>            -> frame shop_open (re-sync, stock + bag)
+        - shop_buy <key> <idx> <count> -> validate via game/shops.buy, apply
+        - shop_sell <key> <item_id> <qty> -> game/shops.sell, coins into bag
+        """
+        from game import shops as shop_mod
+
+        if not args:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Thiếu tham số shop.",
+            })
+            return
+        rt = self.manager.get_runtime_for(sess.channel_id, sess.user_id)
+        if rt is None:
+            return
+        shop_key = str(args[0]).lower()
+        shop = getattr(rt.shops, "get", lambda k: None)(shop_key)
+        if shop is None:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Shop không tồn tại.",
+            })
+            return
+        inv = self.manager.get_inventory(sess.channel_id, sess.user_id)
+        from game.items import get_item
+
+        def name_of(iid: str) -> str:
+            it = get_item(iid)
+            return it.name if it is not None else iid
+
+        async def persist_and_delta(changed_ids: list) -> None:
+            if self.manager.db is not None:
+                from persistence.repositories import save_inventory_item
+                for iid in changed_ids:
+                    await save_inventory_item(
+                        self.manager.db, sess.channel_id, sess.user_id,
+                        iid, inv.count(iid),
+                    )
+            self.manager._notify_inventory_change(sess.channel_id, sess.user_id)
+            from web_api.snapshots import _inventory_payload
+            await self.send_to_client_conn(sess, {
+                "type": MSG_INV_DELTA,
+                "inventory": _inventory_payload(rt, sess.user_id),
+            })
+
+        if cmd == "shop":
+            style = str(args[1]).lower() if len(args) > 1 else "kaetram"
+            await self._send_shop_payload(sess, rt, shop, style=style)
+            return
+        if cmd == "shop_buy":
+            if len(args) < 3:
+                await self.send_to_client_conn(sess, {
+                    "type": MSG_PUSH, "message": "Dùng: /shop_buy <key> <index> <count>",
+                })
+                return
+            try:
+                index = int(args[1])
+                count = max(1, min(999, int(args[2])))
+            except ValueError:
+                await self.send_to_client_conn(sess, {
+                    "type": MSG_PUSH, "message": "Index/count phải là số.",
+                })
+                return
+            coins = inv.count(shop.currency)
+            ok, msg, new_coins, _spent = shop_mod.buy(
+                shop, index, count, inv, coins, item_name=name_of(shop.items[index].key)
+                if 0 <= index < len(shop.items) else None,
+            )
+            if not ok:
+                await self.send_to_client_conn(sess, {
+                    "type": MSG_PUSH, "message": msg, "kind": "system_private",
+                })
+                return
+            item = shop.items[index]
+            if not item.infinite:
+                item.count -= count
+            inv.remove(shop.currency, coins - new_coins)
+            inv.add(item.key, count)
+            await persist_and_delta([shop.currency, item.key])
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": msg, "kind": "system_private",
+            })
+            style = str(args[3]).lower() if len(args) > 3 else "kaetram"
+            await self._send_shop_payload(sess, rt, shop, style=style)
+            return
+        # cmd == "shop_sell"
+        if len(args) < 3:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Dùng: /shop_sell <key> <item_id> <qty>",
+            })
+            return
+        item_id = str(args[1]).lower()
+        try:
+            qty = max(1, min(999, int(args[2])))
+        except ValueError:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Qty phải là số.",
+            })
+            return
+        store_item = next((i for i in shop.items if i.key == item_id), None)
+        base_price = store_item.price if store_item else 1
+        ok, msg, gained = shop_mod.sell(shop, inv, item_id, qty, base_price)
+        if not ok:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": msg, "kind": "system_private",
+            })
+            return
+        inv.remove(item_id, qty)
+        inv.add(shop.currency, gained)
+        await persist_and_delta([item_id, shop.currency])
+        await self.send_to_client_conn(sess, {
+            "type": MSG_PUSH, "message": msg, "kind": "system_private",
+        })
+        style = str(args[3]).lower() if len(args) > 3 else "kaetram"
+        await self._send_shop_payload(sess, rt, shop, style=style)
 
     async def _cmd_kill(self, sess: WebSession) -> None:
         """/kill: drop the caller's HP to 0 — the standard death flow (respawn
@@ -1868,6 +2107,10 @@ class WebHub:
             # served from assets/players — same manifest-driven pipeline as
             # blocks/mobs so the web client can build Kaetram-style sprites.
             base_dir = ASSETS_DIR.parent / "players"
+        elif name.startswith("fx/"):
+            # Room-FX strips (fire particles, …) for indoor maps — served
+            # from assets/fx through the same confined pipeline.
+            base_dir = ASSETS_DIR.parent / "fx"
         else:
             base_dir = ASSETS_DIR
         path = base_dir / safe

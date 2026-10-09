@@ -14,6 +14,7 @@ import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
+import { spellFx, spellById } from "./spells";
 import { previewPanel } from "./preview_panel";
 import { lowHpFx } from "./lowhp";
 // Day/night tint: kept as its own DOM canvas BUT throttled to 8 Hz + dpr 1 +
@@ -636,6 +637,7 @@ const net = new Net({
     // Meteor shower events (night bigmap): the FX lane syncs its warning
     // rings / falls / impacts with the server timeline from these rows.
     meteorFx.attach(scene as unknown as Phaser.Scene);
+    spellFx.attach(scene as unknown as Phaser.Scene);
     meteorFx.sync(frame.meteors);
     hud.setClock(frame.clock);
     hud.setWeather(frame.weather);
@@ -1223,6 +1225,28 @@ hud.onArmorEquip((action, slot, itemId, slotIndex) => {
 // Slot selection: numbers 1-8, mouse wheel, or click — changes the held
 // tool only. Silent on purpose: no chat spam. The self hand updates
 // INSTANTLY from the local hotbar; the server echo/snapshot converge it.
+// WEB SPELLS: click a spell card = cast it at the nearest living mob
+// within 4 tiles. The client plays the projectile VFX instantly; the
+// server (rules.apply_spell) resolves the actual damage/loot and the
+// action_result splat rides the normal zombie kill echo.
+hud.onSpellCast((spellId) => {
+  const spell = spellById(spellId);
+  if (!spell) return;
+  const target = scene.nearestZombieTile(4);
+  if (!target) {
+    hud.toast("Không có địch trong tầm 4 ô!");
+    return;
+  }
+  scene.faceTile(target.x, target.y);
+  const self = scene.getSelfPos();
+  const t = scene.tilePxPublic;
+  spellFx.cast(spell, {
+    x: self.x * t + t / 2,
+    y: self.y * t + t / 2,
+  }, target);
+  net.castSpell(spellId, target.x, target.y);
+});
+
 hud.onSlotSelect((slot) => {
   net.selectSlot(slot);
   scene.setSelfHeldFromHotbar(hud.inventoryHotbar, slot);
@@ -1309,6 +1333,11 @@ const input = new KeyboardInput({
     // Q: toss the full active-slot stack (the server removes + spawns the
     // drop with NO_COLLECT window so it isn't instantly re-magnetized).
     hud.throwHeldStack();
+  },
+  onCastSpell: () => {
+    // R: cast the selected spell card (same path as clicking the card in
+    // the Spells tab — hud keeps the active selection; first card default).
+    hud.castSelectedSpell();
   },
   onChatFocus: () => document.activeElement === document.getElementById("chat-input"),
   onCanvasAction: (kind, sx, sy) => {

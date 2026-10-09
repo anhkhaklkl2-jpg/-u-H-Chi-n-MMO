@@ -418,6 +418,8 @@ export class WorldScene extends Phaser.Scene {
   private collisionDebug: Phaser.GameObjects.Graphics | null = null;
   /** World px per tile for the CURRENT map (welcome.tile_width; default 32). */
   private tilePx = BASE_TILE;
+  /** Public read for callers outside the scene (spell cast origin math). */
+  get tilePxPublic(): number { return this.tilePx; }
   // Sub-tile alpha masks (server: rendering/tile_masks.py). Key "x,y" ->
   // bitfield (res=8): bit my*res+mx = opaque sub-cell. Only PARTIAL tiles
   // (server strips near-full/empty ones) appear here — everything else uses
@@ -5045,6 +5047,25 @@ export class WorldScene extends Phaser.Scene {
    * art box is the same generous box the red target outline uses, so
    * hitting the head/limbs (a neighbouring tile) no longer silently falls
    * through to chop. Prefer the art-box mob, then the 0.75-tile slack. */
+  /** Nearest LIVING mob within maxRange tiles of the self position — the
+   *  spell cast target (server re-resolves near that tile authoritatively). */
+  nearestZombieTile(maxRange: number): { x: number; y: number } | null {
+    const self = this.getSelfPos();
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const z of this.zombies.values()) {
+      if (z.dieT0 !== 0) continue;
+      const zx = z.lastX / this.tilePx;
+      const zy = z.lastY / this.tilePx;
+      const d = Math.hypot(zx - self.x, zy - self.y);
+      if (d <= maxRange && d < bestD) {
+        bestD = d;
+        best = { x: Math.floor(zx), y: Math.floor(zy) };
+      }
+    }
+    return best;
+  }
+
   zombieNear(tile: { x: number; y: number }): boolean {
     if (this.mobIdAtArtBox(tile.x * this.tilePx, tile.y * this.tilePx, this.tilePx, this.tilePx)) return true;
     for (const z of this.zombies.values()) {

@@ -1200,6 +1200,63 @@ body.mobile-ui #mc-actions.mc-hidden {
 #inv-panel.hidden { display: none; }
 /* Tab isolation: the hidden wrap must truly leave the layout. */
 .panel-wrap.hidden { display: none; }
+/* ---- SPELLS tab (web spells, user 08/10) ---- */
+#inv-spells-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+}
+#inv-spells-wrap .spells-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 84px);
+  gap: 10px;
+}
+.spell-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  cursor: pointer;
+  color: rgba(232, 234, 240, 0.85);
+  transition: border-color 0.12s, transform 0.12s;
+}
+.spell-card.selected {
+  border-color: #ffd35c;
+  box-shadow: 0 0 0 2px rgba(255, 211, 92, 0.55);
+}
+.spell-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.spell-card:active { transform: translateY(0); }
+.spell-card .spell-icon {
+  width: 40px; height: 40px;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+.spell-card .spell-name {
+  font-size: 10px; font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+.spell-card .spell-mana {
+  font-size: 9px;
+  color: #6fa8ff;
+  font-weight: 700;
+}
+#inv-spells-wrap .spells-hint {
+  font-size: 10px;
+  color: rgba(232, 234, 240, 0.5);
+}
 .inv-tabs {
   display: flex; gap: 4px;
 }

@@ -385,6 +385,12 @@ export class Net {
     this.send({ type: "action", name: "turn", dir });
   }
 
+  /** WEB SPELL: cast the selected spell toward an absolute tile.
+   *  Server resolves the hit (rules.apply_spell) + answers action_result. */
+  castSpell(spellId: string, tx: number, ty: number): void {
+    this.send({ type: "action", name: "spell", spell_id: spellId, tx, ty });
+  }
+
   inventoryOp(op: "move_to" | "use" | "split" | "reorder" | "throw" | "purse_withdraw" | "purse_deposit" | "armor_equip",
               payload: { item_id?: string | null; slot?: number | string; qty?: number; order?: { id: string; qty: number }[]; direction?: string; action?: "equip" | "unequip"; slot_index?: number | null }): void {
     this.send({ type: MSG_INV_OP, op, ...payload });

@@ -58,6 +58,7 @@ import {
 import { HubBar } from "./hub_bar";
 import type { HubPageId } from "./hub_bar";
 import { HubPages, type SelfInfo } from "./hub_pages";
+import { SPELLS } from "./spells";
 import { KaetramMenus, Quests, Achievements, Settings, Leaderboards, Warp, Equipments } from "./kaetram_menus";
 
 // Animated pixel weather icons copied from the Discord hub renderer
@@ -213,6 +214,8 @@ export class Hud {
   private craftTab: HTMLElement;
   private itemsTab: HTMLElement;
   private equipTab: HTMLElement;
+  private spellsTab: HTMLElement;
+  private invSpellsWrap = document.getElementById("inv-spells-wrap") as HTMLElement;
   private selectedQuick: number | null = null; // quick-craft catalog index
   private nearTable = false; // updated from snapshots (server truth)
 
@@ -364,7 +367,8 @@ export class Hud {
     this.itemsTab = document.querySelector<HTMLElement>(".inv-tab[data-tab=items]")!;
     this.craftTab = document.querySelector<HTMLElement>(".inv-tab[data-tab=craft]")!;
     this.equipTab = document.querySelector<HTMLElement>(".inv-tab[data-tab=equip]")!;
-    [this.itemsTab, this.craftTab, this.equipTab].forEach((tab) => {
+    this.spellsTab = document.querySelector<HTMLElement>(".inv-tab[data-tab=spells]")!;
+    [this.itemsTab, this.craftTab, this.equipTab, this.spellsTab].forEach((tab) => {
       tab.addEventListener("click", () => {
         // Tab click while fully closed reopens BOTH panels (reset state).
         if (this.invPanel.classList.contains("hidden")) {
@@ -860,6 +864,61 @@ export class Hud {
 
   /** Hub-bar armor icon: open the inv window straight on OUR Equipment
    *  tab (replaces the Kaetram Equipments menu — user request). */
+  /** Cast hook (main.ts): fire the selected spell at the nearest mob. */
+  private onCastSpell: ((spellId: string) => void) | null = null;
+  onSpellCast(cb: (spellId: string) => void): void {
+    this.onCastSpell = cb;
+  }
+
+  /** Recast the spell card grid (SPELLS tab). One-shot render — the grid
+   *  is static data; clicks fire the cast hook directly. */
+  private spellsRendered = false;
+  /** Spell the R key fires; defaults to the first card. */
+  private selectedSpellId = SPELLS[0]?.id ?? "";
+  private renderSpells(): void {
+    if (this.spellsRendered) return;
+    this.spellsRendered = true;
+    const grid = this.invSpellsWrap.querySelector(".spells-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    for (const s of SPELLS) {
+      const card = document.createElement("button");
+      card.className = "spell-card";
+      card.title = s.desc;
+      card.dataset.spellId = s.id;
+      card.innerHTML =
+        `<img class="spell-icon" src="ui/fx/spells/${s.dir}/fly_00.png" alt="" draggable="false">` +
+        `<span class="spell-name">${s.name}</span>` +
+        `<span class="spell-mana">💧 ${s.mana}</span>`;
+      card.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (this.selectedSpellId === s.id) {
+          // Already selected: clicking again CASTS.
+          this.onCastSpell?.(s.id);
+        } else {
+          this.selectedSpellId = s.id;
+          this.refreshSpellSelection();
+          this.toast(`${s.name} — nhấn R hoặc bấm lại để phóng`);
+        }
+      });
+      grid.appendChild(card);
+    }
+    this.refreshSpellSelection();
+  }
+
+  private refreshSpellSelection(): void {
+    const grid = this.invSpellsWrap.querySelector(".spells-grid");
+    if (!grid) return;
+    grid.querySelectorAll<HTMLElement>(".spell-card").forEach((el) => {
+      el.classList.toggle("selected", el.dataset.spellId === this.selectedSpellId);
+    });
+  }
+
+  /** R key: cast the currently selected spell (same path as a card click). */
+  castSelectedSpell(): void {
+    if (this.selectedSpellId) this.onCastSpell?.(this.selectedSpellId);
+  }
+
   openEquipTab(): void {
     this.invClosed = false;
     this.craftClosed = false;
@@ -893,6 +952,7 @@ export class Hud {
   private applyTabLayout(slideInv = false): void {
     const craftActive = this.craftTab.classList.contains("active");
     const equipActive = this.equipTab.classList.contains("active");
+    const spellsActive = this.spellsTab.classList.contains("active");
     // Tab strip: hide the tabs entirely only when BOTH panels are closed.
     const tabsEl = this.craftTab.parentElement;
     if (tabsEl) {
@@ -905,12 +965,23 @@ export class Hud {
       this.invItemsWrap.classList.add("hidden");
       this.invCraftWrap.classList.add("hidden");
       this.invItemsCraftWrap.classList.add("hidden");
+      this.invSpellsWrap.classList.add("hidden");
       if (showEquip) this.playTabIn(this.invEquipWrap);
+    } else if (spellsActive) {
+      // SPELLS tab: the spell card grid ALONE (self-contained panel).
+      const showSpells = this.visiblyShow(this.invSpellsWrap, false);
+      this.invItemsWrap.classList.add("hidden");
+      this.invCraftWrap.classList.add("hidden");
+      this.invItemsCraftWrap.classList.add("hidden");
+      this.invEquipWrap.classList.add("hidden");
+      if (showSpells) this.playTabIn(this.invSpellsWrap);
+      this.renderSpells();
     } else if (craftActive) {
       const showCraft = this.visiblyShow(this.invCraftWrap, this.craftClosed);
       const showBag = this.visiblyShow(this.invItemsCraftWrap, this.invClosed);
       this.invItemsWrap.classList.add("hidden");
       this.invEquipWrap.classList.add("hidden");
+      this.invSpellsWrap.classList.add("hidden");
       // Tab-swap entrance animation on whichever wrap(s) just appeared.
       if (showCraft) this.playTabIn(this.invCraftWrap);
       if (showBag) this.playTabIn(this.invItemsCraftWrap);
@@ -919,6 +990,7 @@ export class Hud {
       this.invCraftWrap.classList.add("hidden");
       this.invItemsCraftWrap.classList.add("hidden");
       this.invEquipWrap.classList.add("hidden");
+      this.invSpellsWrap.classList.add("hidden");
       if (showBag) this.playTabIn(this.invItemsWrap);
     }
     if (slideInv && !this.invClosed) {
