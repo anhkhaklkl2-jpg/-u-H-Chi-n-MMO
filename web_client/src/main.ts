@@ -13,7 +13,7 @@ import { openShop, closeShop, isShopOpen } from "./shop_ui";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
-import { SPELLS as SPELL_DEFS, spellFx, spellById } from "./spells";
+import { SPELLS as SPELL_DEFS, spellFx, spellById, fireChannelStart, fireChannelEnd } from "./spells";
 import { bindWandSpell, getBoundSpell } from "./spells_bridge";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
@@ -1270,8 +1270,19 @@ castSpellAtNearest(
     let target = spellAimTile;
     spellAimTile = null;
     if (!target) {
-      target = scene.nearestZombieTile(4);
-      if (!target) return { toast: "Không có địch trong tầm 4 ô!" };
+      // CARD/R CAST (README cơ chế chung 8 spell): bắn về hướng LOOK gần nhất
+      // — không cần địch trong tầm; đích = 4 ô theo hướng nhìn (server tự
+      // hit-test tỉm ra địch quanh điểm đích). Auto-target mob gần vẫn ưu
+      // tiên khi có mob đứng ≤4 ô.
+      const near = scene.nearestZombieTile(4);
+      if (near) target = near;
+      else {
+        // hướng nhìn gần nhất (lastMoveX/Y chuẩn hoá) → đích 4 ô phía đó
+        const v = scene.aimVec?.();
+        if (!v) return { toast: "Không xác định được hướng bắn!" };
+        const sp = scene.getSelfPos();
+        target = { x: Math.floor(sp.x + v.x * 4), y: Math.floor(sp.y + v.y * 4) };
+      }
     }
     scene.faceTile(target.x, target.y);
     const self = scene.getSelfPos();
@@ -1384,6 +1395,8 @@ const input = new KeyboardInput({
     hud.castSelectedSpell();
   },
   onChatFocus: () => document.activeElement === document.getElementById("chat-input"),
+  // FIRE BREATH channel (README): thả tay bất kỳ đâu = kết thúc thổi.
+  onFireChannelEnd: () => fireChannelEnd(),
   onCanvasAction: (kind, sx, sy) => {
     // Resolve the tile from the CLICK's own coordinates — always the cell
     // under the cursor at this exact instant, never a cached value.
@@ -1397,6 +1410,15 @@ const input = new KeyboardInput({
         const bound = getBoundSpell();
         if (!bound) {
           hud.toast("Giữ Tab để chọn phép cho Đũa phép trước!");
+          return;
+        }
+        // FIRE BREATH (README: giữ để thổi): pointerdown bắt đầu channel,
+        // thả tay = kết thúc (input.ts gọi onFireChannelEnd).
+        if (bound === "fire01") {
+          const self = scene.getSelfPos();
+          const t = scene.tilePxPublic;
+          fireChannelStart({ x: self.x * t + t / 2, y: self.y * t + t / 2 }, tile);
+          net.castSpell("fire01", tile.x, tile.y);
           return;
         }
         spellAimTile = tile; // flight destination = clicked tile

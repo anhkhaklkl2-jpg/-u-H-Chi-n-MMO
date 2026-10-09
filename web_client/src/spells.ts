@@ -101,7 +101,7 @@ interface ActiveSpell {
   spell: SpellDef;
   img: Phaser.GameObjects.Image | null;
   overlay: Phaser.GameObjects.Image | null;
-  phase: "cast" | "fly" | "impact";
+  phase: "cast" | "fly" | "impact" | "channel";
   phaseT0: number;
   fromX: number; fromY: number;
   toX: number; toY: number;
@@ -136,36 +136,42 @@ export class SpellFx {
     const scene = this.scene;
     if (!scene || this.loadedDirs.has(spell.dir)) return;
     this.loadedDirs.add(spell.dir);
+    // URL FILE NAMES follow the PACK's own convention: `fly_00.png` (.File
+    // stem + underscore + TWO digits), while the Phaser KEY suffix is the
+    // short unpadded form (`fly0`) that cast()/update() reference. Mismatch
+    // here = every spell renders as a green missing-texture box (bug 10/10:
+    // `fx0.png` 404 while the pack only has `fx_00.png`).
     const dir = spell.dir;
-    const names: string[] = [];
+    const pad = (i: number) => String(i).padStart(2, "0");
+    const pairs: Array<{ key: string; file: string }> = [];
     if (spell.kind === "rocklift") {
-      for (let i = 0; i < 11; i++) names.push(`rock${i}`);
-      for (let i = 0; i < spell.hitCount; i++) names.push(`hit${i}`);
+      for (let i = 0; i < 11; i++) pairs.push({ key: `rock${i}`, file: `rock_${pad(i)}` });
+      for (let i = 0; i < spell.hitCount; i++) pairs.push({ key: `hit${i}`, file: `hit_${pad(i)}` });
     } else if (spell.kind === "debuff") {
       // Dark02: ONE 15-frame sequence — fx_00..14.
-      for (let i = 0; i < 15; i++) names.push(`fx${i}`);
+      for (let i = 0; i < 15; i++) pairs.push({ key: `fx${i}`, file: `fx_${pad(i)}` });
     } else if (spell.kind === "bump") {
       // Bump: one 13-frame sequence — fx_00..12.
-      for (let i = 0; i < 13; i++) names.push(`fx${i}`);
+      for (let i = 0; i < 13; i++) pairs.push({ key: `fx${i}`, file: `fx_${pad(i)}` });
     } else if (spell.kind === "wall") {
       // Wall: grow_00..05 + final + end_00..05.
-      for (let i = 0; i < 6; i++) names.push(`grow${i}`);
-      names.push("final");
-      for (let i = 0; i < 6; i++) names.push(`end${i}`);
+      for (let i = 0; i < 6; i++) pairs.push({ key: `grow${i}`, file: `grow_${pad(i)}` });
+      pairs.push({ key: "final", file: "final" });
+      for (let i = 0; i < 6; i++) pairs.push({ key: `end${i}`, file: `end_${pad(i)}` });
     } else if (spell.kind === "cone") {
       // Fire breath: row01_00..02, row02_00..03, row03_00..06, hit_00..03.
-      for (let i = 0; i < 3; i++) names.push(`row01_${i}`);
-      for (let i = 0; i < 4; i++) names.push(`row02_${i}`);
-      for (let i = 0; i < 7; i++) names.push(`row03_${i}`);
-      for (let i = 0; i < 4; i++) names.push(`hit_${i}`);
+      for (let i = 0; i < 3; i++) pairs.push({ key: `row01_${i}`, file: `row01_${pad(i)}` });
+      for (let i = 0; i < 4; i++) pairs.push({ key: `row02_${i}`, file: `row02_${pad(i)}` });
+      for (let i = 0; i < 7; i++) pairs.push({ key: `row03_${i}`, file: `row03_${pad(i)}` });
+      for (let i = 0; i < 4; i++) pairs.push({ key: `hit_${i}`, file: `hit_${pad(i)}` });
     } else {
-      for (let i = 0; i < spell.flyCount; i++) names.push(`fly${i}`);
-      for (let i = 0; i < spell.hitCount; i++) names.push(`hit${i}`);
+      for (let i = 0; i < spell.flyCount; i++) pairs.push({ key: `fly${i}`, file: `fly_${pad(i)}` });
+      for (let i = 0; i < spell.hitCount; i++) pairs.push({ key: `hit${i}`, file: `hit_${pad(i)}` });
     }
-    for (const n of names) {
-      const key = `sp_${dir}_${n}`;
+    for (const p of pairs) {
+      const key = `sp_${dir}_${p.key}`;
       if (scene.textures.exists(key)) continue;
-      scene.load.image(key, `ui/fx/spells/${dir}/${n}.png`);
+      scene.load.image(key, `ui/fx/spells/${dir}/${p.file}.png`);
     }
     scene.load.start();
   }
@@ -182,12 +188,24 @@ export class SpellFx {
 
     // ---- ONE-SHOT AT-TARGET KINDS (no flight) ----
     if (spell.kind === "debuff") {
-      // Dark02: 15-frame sequence AT THE TARGET, feet-anchored, x2 optional
-      // per README; player set width: 48x64 art — anchor bottom-centre on
-      // the mob's feet, no rotation, 1 loop then done.
+      // Dark02: 15-frame sequence AT THE TARGET, feet-anchored,
+      // no rotation, 1 loop then done.
+      // STACKING (README Dark02, preview STACK_GAP_MS=200): re-trigger trên
+      // cùng tile trong 200ms → instance cũ bị thay (xóa), không chồng.
+      const nowMs = performance.now();
+      for (let i = this.active.length - 1; i >= 0; i--) {
+        const old = this.active[i];
+        if (old.spell.kind !== "debuff") continue;
+        const fresh = nowMs - old.phaseT0 < 200;
+        const sameSpot = Math.hypot(old.toX - toX, old.toY - toY) < 1;
+        if (fresh && sameSpot) {
+          old.img?.destroy();
+          this.active.splice(i, 1);
+        }
+      }
       const img = scene.add.image(toX, toY, `sp_dark02_fx0`)
-        .setDepth(SPELL_DEPTH).setScale(spell.scale).setOrigin(0.5, 1 - 8 / 32);
-      // 48x64 frame: anchor the BOTTOM to tile centre+8 (mob feet zone).
+        .setDepth(SPELL_DEPTH).setScale(spell.scale);
+      // 48x64 frame: anchor the BOTTOM to tile centre (mob feet zone).
       img.setOrigin(0.5, 1);
       this.active.push({
         spell, img, overlay: null, phase: "impact", phaseT0: performance.now(),
@@ -202,7 +220,9 @@ export class SpellFx {
       const bumpX = fromPx.x + Math.cos(angle) * emerge;
       const bumpY = fromPx.y + Math.sin(angle) * emerge;
       const img = scene.add.image(bumpX, bumpY, `sp_bump_fx0`)
-        .setDepth(SPELL_DEPTH).setScale(spell.scale);
+        .setDepth(SPELL_DEPTH).setScale(spell.scale)
+        // preview: feet anchored ~b.y + h*0.35 (center origin ~0.85 height)
+        .setOrigin(0.5, 0.85);
       img.setFlipX(Math.cos(angle) < 0); // flip horizontal ONLY (README)
       this.active.push({
         spell, img, overlay: null, phase: "impact", phaseT0: performance.now(),
@@ -243,12 +263,45 @@ export class SpellFx {
       // the head leads (README: flip quanh trục bay, chỉ áp cho frame BAY).
       if (spell.kind === "dark") act.img.setFlipY(Math.abs(angle) > Math.PI / 2);
       else act.img.setRotation(angle);
-      // FIRE: rotate so the cone points at the aim (README: XỒI lửa từ chấm
-      // vàng — origin at the caster muzzle, cone art extends eastward).
-      if (spell.kind === "cone") act.img.setRotation(0);
+      // FIRE: art tỏa về phía ĐÔNG — trái thì lật NGANG (preview: Lật nguồn
+      // sprite), KHÔNG xoay 180° (lửa bị lộn ngược).
+      if (spell.kind === "cone") {
+        act.img.setRotation(0);
+        if (Math.abs(angle) > Math.PI / 2) act.img.setFlipX(true);
+      }
     }
     this.active.push(act);
   }
+
+  /** Fire breath channel: bắt đầu thổi theo hướng aim (angle khoá). */
+  channelStart(s: SpellDef, fromPx: { x: number; y: number }, aimTile: { x: number; y: number }): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const t = (scene as Phaser.Scene & { tilePx: number }).tilePx;
+    const toX = (aimTile.x + 0.5) * t;
+    const toY = (aimTile.y + 0.5) * t;
+    const angle = Math.atan2(toY - fromPx.y, toX - fromPx.x);
+    const img = scene.add.image(fromPx.x, fromPx.y, `sp_${s.dir}_row01_0`)
+      .setDepth(SPELL_DEPTH).setScale(s.scale).setRotation(angle);
+    // README: lật khi bắn sang trái (|angle|>90°) — sprite gốc hướng PHẢI
+    img.setFlipY(Math.abs(angle) > Math.PI / 2);
+    this.channelAct = {
+      spell: s, img, overlay: null, phase: "channel", phaseT0: performance.now(),
+      fromX: fromPx.x, fromY: fromPx.y, toX, toY, angle, done: false,
+    };
+    this.active.push(this.channelAct);
+  }
+
+  /** Thả tay: chuyển sang row03 (7f, play 1 lần) rồi tự tắt. */
+  channelEnd(): void {
+    if (this.channelAct) {
+      this.channelAct.phase = "impact";
+      this.channelAct.phaseT0 = performance.now();
+      this.channelAct = null;
+    }
+  }
+
+  private channelAct: ActiveSpell | null = null;
 
   private frameIndex(act: ActiveSpell, now: number, count: number): number {
     const elapsed = now - act.phaseT0;
@@ -262,6 +315,8 @@ export class SpellFx {
     for (const act of this.active) {
       const s = act.spell;
       // ---- DEBUFF (dark02): 15 fx frames at the mob, one loop, then done.
+      // STACKING (README Dark02): re-cast lên CÙNG mob trong 200ms → instance
+      // cũ bị xóa (STACK_GAP_MS preview), chỉ giữ 1 instance/mob.
       if (s.kind === "debuff") {
         const fi = this.frameIndex(act, now, 15);
         act.img?.setTexture(`sp_dark02_fx${fi}`);
@@ -269,6 +324,8 @@ export class SpellFx {
         continue;
       }
       // ---- BUMP: 13 fx frames at the bump spot (flipX already set).
+      // KNOCK CENTER = bump spot (preview): server pos = best mob nhưng
+      // client VFX center = bump px point (fromX/fromY set at cast).
       if (s.kind === "bump") {
         const fi = this.frameIndex(act, now, 13);
         act.img?.setTexture(`sp_bump_fx${fi}`);
@@ -296,30 +353,27 @@ export class SpellFx {
         }
         continue;
       }
-      // ---- CONE (fire breath) — not a real channel: press = 1 burst.
-      // row01 open (3f) → row02 loop (4f) while the mini fly window (~0.22s)
-      // runs, then row03 end (7f) + hit on the target. README's hold-channel
-      // needs pointer tracking v2; this burst reads correctly at range.
+      // ---- CONE (fire breath) — TRUE CHANNEL per README: giữ chuột = thổi.
+      // phase "channel": row01 mở 3f (12fps) → row02 LOOP liên tục, v geile
+      // tại caster. phase "impact" (từ channelEnd): row03 7f play 1 lần.
       if (s.kind === "cone") {
         const el = now - act.phaseT0;
-        const openMs = (3 / s.fps) * 1000;
-        if (el < openMs) {
-          act.img?.setTexture(`sp_${s.dir}_row01_${Math.floor(el / 1000 * s.fps)}`);
+        const f = s.fps;
+        if (act.phase === "channel") {
+          const openMs = (3 / f) * 1000;
+          if (el < openMs) {
+            act.img?.setTexture(`sp_${s.dir}_row01_${Math.min(2, Math.floor(el / 1000 * f))}`);
+          } else {
+            const li = Math.floor((el - openMs) / 1000 * f) % 4;
+            act.img?.setTexture(`sp_${s.dir}_row02_${li}`);
+          }
           act.img?.setPosition(act.fromX, act.fromY);
-          act.img?.setAlpha(Math.min(1, el / 80));
-        } else if (el < openMs + s.flyMs) {
-          const li = Math.floor((el - openMs) / 1000 * s.fps) % 4;
-          act.img?.setTexture(`sp_${s.dir}_row02_${li}`);
-          act.img?.setPosition(act.fromX, act.fromY);
-          act.img?.setAlpha(1);
+          act.img?.setAlpha(Math.min(1, el / 60));
         } else {
-          const t = Math.min(1, (el - openMs - s.flyMs) / 500);
-          const x = act.fromX + (act.toX - act.fromX) * t * 0.55;
-          const y = act.fromY + (act.toY - act.fromY) * t * 0.55;
-          const ei = Math.min(6, Math.floor((el - openMs - s.flyMs) / 1000 * s.fps));
+          // end burst: row03 7f @fps, giữ vị trí + angle đã khoá
+          const ei = Math.min(6, Math.floor(el / 1000 * f));
           act.img?.setTexture(`sp_${s.dir}_row03_${ei}`);
-          act.img?.setPosition(x, y);
-          if (t >= 1 && ei >= 6) act.done = true;
+          if (ei >= 6 && el > (7 / f) * 1000) act.done = true;
         }
         continue;
       }
@@ -342,7 +396,11 @@ export class SpellFx {
         // rock frames (README rock lift loop).
         const t = Math.min(1, (now - (act.liftT0 ?? now)) / (s.liftMs ?? 600));
         act.img?.setPosition(act.fromX, act.fromY - t * 26);
-        const ri = Math.floor((now - (act.liftT0 ?? now)) / 1000 * 8) % 8;
+        // lift loop 6fps, rock 0..5 (bản preview final: ROCK_FPS=6,
+        // ROCT.length=6). Lift kết thúc ĐÚNG tại frame 5 (frame_06) và
+        // pha bay GIỮ NGUYÊN frame 5 (cứng) → chuyển lift→fly không lóe
+        // (fix "nháy 1 frame" user 10/10).
+        const ri = Math.min(5, Math.floor((now - (act.liftT0 ?? now)) / 1000 * 6) % 6);
         act.img?.setTexture(`sp_rocklift_rock${ri}`);
         if (t >= 1) {
           act.lift = false;
@@ -352,15 +410,20 @@ export class SpellFx {
         continue;
       }
       if (act.phase === "fly") {
-        const t = Math.min(1, (now - act.phaseT0) / s.flyMs);
-        const x = act.fromX + (act.toX - act.fromX) * t;
-        // rock lift arcs DOWN from the lifted height; others fly straight.
+        const raw = Math.min(1, (now - act.phaseT0) / s.flyMs);
+        // rock lift: ease-in (bị QUĂNG đi) + arc giảm 20% (11px) đúng bản
+        // preview final; điểm bắt đầu bay trùng khít điểm lift kết thúc —
+        // không nhảy gây lóe.
         const liftH = s.kind === "rocklift" ? 26 : 0;
-        const y = act.fromY - liftH * (1 - t) + (act.toY - act.fromY) * t;
+        const prog = s.kind === "rocklift" ? raw * raw : raw;
+        const x = act.fromX + (act.toX - act.fromX) * prog;
+        const y0 = act.fromY - liftH * (1 - raw) + (act.toY - act.fromY) * raw;
+        const y = y0 - (s.kind === "rocklift" ? Math.sin(raw * Math.PI) * 11 : 0);
         act.img?.setPosition(x, y);
         if (s.kind === "rocklift") {
-          const ri = Math.floor((now - act.phaseT0) / 1000 * 8) % 8;
-          act.img?.setTexture(`sp_rocklift_rock${ri}`);
+          // Frame bay CỨNG duy nhất rock_05 (frame_06) — không anim, đúng
+          // bản preview final (fix loop ngược frame đầu).
+          act.img?.setTexture(`sp_rocklift_rock5`);
         } else if (s.kind !== "dark") {
           // wood/earth: their frames carry the spin — just step them at the
           // pack's FPS without extra rotation (README: cả hai loop 6fps và
@@ -374,7 +437,7 @@ export class SpellFx {
           act.img?.setTexture(`sp_dark_fly${fi}`);
           act.img?.setFlipY(Math.abs(act.angle) > Math.PI / 2);
         }
-        if (t >= 1) {
+        if (raw >= 1) {
           act.phase = "impact";
           act.phaseT0 = now;
           // IMPACT frames never rotate (README rule).
@@ -417,3 +480,20 @@ export class SpellFx {
 }
 
 export const spellFx = new SpellFx();
+
+// ---- FIRE BREATH CHANNEL (README Fire Breath: giữ để thổi) -----------------
+// `channelStart`: bắt đầu thổi theo hướng aim — row01 mở (3f, 12fps) rồi
+// row02 LOOP kh liên tục. `channelEnd`: chuyển row03 (7f) play 1 lần rồi mất.
+// Xoay MỌI hướng theo README, angle KHOÁ tại lúc bắt đầu (không tự theo chuột).
+// Trả cái SpellFx cùng object; dmg tick do server lo, client chỉ vẽ.
+export function fireChannelStart(
+  fromPx: { x: number; y: number }, aimTile: { x: number; y: number },
+): void {
+  const s = SPELLS.find((sp) => sp.id === "fire01");
+  if (!s) return;
+  spellFx.loadTextures(s);
+  spellFx.channelStart(s, fromPx, aimTile);
+}
+export function fireChannelEnd(): void {
+  spellFx.channelEnd();
+}

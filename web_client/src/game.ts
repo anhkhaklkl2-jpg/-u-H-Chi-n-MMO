@@ -484,6 +484,15 @@ export class WorldScene extends Phaser.Scene {
     return { x: this.selfX, y: this.selfY };
   }
 
+  /** Hướng nhìn gần nhất (lastMoveX/Y chuẩn tuần hoá) — spell cast 
+   * không-địch dùng để lấy 
+   * hướng bắn (README: bắn về hướng look khi trống mục tiêu). */
+  aimVec(): { x: number; y: number } | null {
+    const len = Math.hypot(this.lastMoveX, this.lastMoveY);
+    if (len < 1e-4) return null;
+    return { x: this.lastMoveX / len, y: this.lastMoveY / len };
+  }
+
   /** Server-side truth (last snapshot self pos) — debug overlay reads this. */
   getServerPos(): { x: number; y: number } {
     return { x: this.selfServerPos.x, y: this.selfServerPos.y };

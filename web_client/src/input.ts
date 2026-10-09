@@ -20,6 +20,10 @@ export interface InputHooks {
   onChatFocus: () => boolean; // true while the chat input has focus
   /** Canvas clicks: "primary" = chop/break/mine, "secondary" = place block. */
   onCanvasAction?: (kind: "primary" | "secondary", sx: number, sy: number) => void;
+  /** Fire breath channel: pointerdown bắt đầu thổi (fire01, README giữ-chuột). */
+  onFireChannelStart?: (sx: number, sy: number) => void;
+  /** Fire breath channel end (thả tay). */
+  onFireChannelEnd?: () => void;
   /** Mouse hover over the canvas (normalized; -1,-1 = left). */
   onCanvasHover?: (sx: number, sy: number) => void;
 }
@@ -167,6 +171,11 @@ export class KeyboardInput {
       this.hooks.onCanvasHover?.(sx, sy);
       if (e.button === 0) {
         this.hooks.onCanvasAction?.("primary", sx, sy);
+        // FIRE BREATH CHANNEL (README Fire Breath: giữ để thổi): pointer
+        // bấm xuống = bắt đầu thổi, thả tay = kết thúc. Chỉ fire khi wand
+        // đang gắn fire01 — main tự quyết qua onFireChannel.
+        this.hooks.onFireChannelStart?.(sx, sy);
+        window.addEventListener("mouseup", this.fireEnd);
       } else if (e.button === 2) {
         this.hooks.onCanvasAction?.("secondary", sx, sy);
       }
@@ -182,4 +191,10 @@ export class KeyboardInput {
     // context menu mid-game.
     document.getElementById("game-root")?.addEventListener("contextmenu", (e) => e.preventDefault());
   }
+
+  /** pointerup toàn cục: kết thúc fire channel (dùng arrow để remove 1-1). */
+  private fireEnd = (): void => {
+    this.hooks.onFireChannelEnd?.();
+    window.removeEventListener("mouseup", this.fireEnd);
+  };
 }
