@@ -118,6 +118,7 @@ ITEM_ICON_CODEPOINTS = {
     "floor": "1f7e4",
     "crafting_table": "1f6e0",
     "furnace": "1f525",
+    "magic_wand": "1fa84",       # 🪄 magic wand (user 10/10)
 }
 # Tool families: every tier shares the family emoji (no per-tier art in the
 # pack; tiers differ by name/tooltip). Added via fetch_item_icons.py too.

@@ -128,8 +128,6 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
       iconImg.src = url;
       iconImg.onerror = () => { iconImg?.remove(); }; // broken img = the stray
       // square on icon-less slots (2/8 slots 404 in probe) — drop it.
-      el.appendChild(iconImg); // only when there IS an icon: an empty <img>
-      // box was rendering as the stray square on icon-less slots.
     }
 
     const ringImg = document.createElement("img");
@@ -141,8 +139,14 @@ export function radialOpen(actions: RadialAction[], onRelease: (a: RadialAction 
     // Ring BEHIND the slot art: its inner half is hidden by the slot disc,
     // so the soft anti-aliased stroke never presses on the slot's pixels —
     // it reads as a clean halo around the slot (user 10/10).
+    // 
+    // PAINT ORDER FIX (user 10/10: "chả thấy icon spell nào cả"): DOM order
+    // = ring, slot bg, icon — absolute-positioned siblings paint in DOM
+    // order, so the old icon-ring-slot order put the icon FIRST = UNDER the
+    // opaque slot art. The icon was always there, just completely covered.
     el.appendChild(ringImg);
     el.appendChild(slotImg);
+    if (iconImg) el.appendChild(iconImg);
     root!.appendChild(el);
     wedges.push({ el, slotImg, ringImg, iconImg, angle: ang, cx: sx, cy: sy, action: a, highlighted: false });
   }

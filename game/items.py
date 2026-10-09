@@ -45,9 +45,11 @@ ITEM_REGISTRY: Dict[str, ItemDef] = {
     # Smelting chain (game/smelting.py): ores from mining, ingots/fuel/food
     # from the furnace, cooked meat is a real consumable.
     "iron_ore": ItemDef("iron_ore", "Quặng sắt", "🟤", "material", {}, "Nung ở lò ra thỏi sắt"),
+    "copper_ore": ItemDef("copper_ore", "Quặng đồng", "🟠", "material", {}, "Nung ở lò ra thỏi đồng"),
     "gold_ore": ItemDef("gold_ore", "Quặng vàng", "🟡", "material", {}, "Nung ở lò ra thỏi vàng"),
     "coal": ItemDef("coal", "Than đá", "⚫", "material", {}, "Nhiên liệu tốt nhất cho lò nung"),
     "iron_ingot": ItemDef("iron_ingot", "Thỏi sắt", "🥈", "material", {}, "Nguyên liệu chế tạo công cụ sắt"),
+    "copper_ingot": ItemDef("copper_ingot", "Thỏi đồng", "🥉", "material", {}, "Nguyên liệu chế tạo công cụ đồng"),
     "gold_ingot": ItemDef("gold_ingot", "Thỏi vàng", "🥇", "material", {}, "Nguyên liệu chế tạo công cụ vàng"),
     "steel_ingot": ItemDef("steel_ingot", "Thỏi thép", "🔩", "material", {}, "Nguyên liệu công cụ thép — hợp kim sắt + than"),
     "charcoal": ItemDef("charcoal", "Than củi", "🌑", "material", {}, "Nhiên liệu nung gỗ trong lò"),
@@ -78,6 +80,17 @@ ITEM_REGISTRY: Dict[str, ItemDef] = {
         {"armor_slot": "legs", "armor_stem": "leatherleggings"},
         "Quần giáp da — mặc vào ô Chân trong Trang bị",
     ),
+    # WEB MAGIC WAND (user 10/10): the spell-casting weapon. Held in the
+    # hotbar it UNLOCKS spell casting: hold Tab (radial) to pick/bind a
+    # spell, then click to fire the bound spell toward the cursor. The
+    # "wand" rides the same held-item pipeline as tools (hotbar, hub
+    # label, bag icons) — effect["wand"] = True is the client's can-cast
+    # flag; the server gates spell actions on the held id directly.
+    "magic_wand": ItemDef(
+        "magic_wand", "Đũa phép", "🪄", "equipment",
+        {"wand": True},
+        "Đũa phép — cầm lên, giữ Tab chọn phép, click chuột phóng phép theo hướng nhìn",
+    ),
 }
 
 # --- Tool tiers (game/tools.py): dirt/wood/stone x shovel/pickaxe/axe/sword
@@ -107,7 +120,6 @@ WEAPON_ITEM_IDS = {
     "wood_axe", "wood_pickaxe",
     *[tool_item_id(f, m) for m in MATERIALS for f in TOOL_FAMILIES],
 }
-
 
 def is_weapon(item_id: Optional[str]) -> bool:
     """True when the held item grants weapon-class attack damage."""

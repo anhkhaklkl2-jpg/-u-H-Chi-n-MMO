@@ -36,6 +36,7 @@ ITEM_ICON_CODEPOINTS = {
     "rotten_flesh": "1f969",    # 🥩 cut of meat
     "hide": "1f7e5",            # 🟤 brown circle (tấm da thú — twemoji không có hide)
     "coin": "1fa99",            # 🪙 coin
+    "magic_wand": "1fa84",      # 🪄 magic wand (correct cp, user 10/10)
     # --- smelting chain (game/smelting.py) ---
     "iron_ore": "1f348",        # 🍈 chestnut-like brown blob (fallback ore)
     "coal": "26ab",             # ⚫ black circle

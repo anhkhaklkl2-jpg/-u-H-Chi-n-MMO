@@ -743,6 +743,23 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     if not player.alive:
         return ActionResult(False, "dead")
 
+    # WAND GATE (user 10/10): spells are a WAND-ONLY verb. The held hotbar
+    # slot must BE the magic wand — no wand, no cast. _held_item_id reads
+    # the state.held_slots mirror (same pipeline as chop/attack); magic_wand
+    # is NOT in WEAPON_ITEM_IDS so scan-fallback never fakes a wand.
+    held_items = getattr(state, "held_slots", None)
+    if held_items is None:
+        return ActionResult(False, "no_wand")
+    try:
+        _slot = int(held_items.get(user_id, 0) or 0)
+    except (TypeError, ValueError):
+        _slot = 0
+    inventories = getattr(state, "inventories", None) or {}
+    _inv = inventories.get(user_id)
+    _held = _inv.hotbar().get(_slot) if _inv is not None else None
+    if _held != "magic_wand" or (_inv is not None and _inv.count(_held) <= 0):
+        return ActionResult(False, "no_wand")
+
     now_s = _t.monotonic()
     if now_s - getattr(player, "last_spell_at", 0.0) < spell["cooldown"]:
         return ActionResult(False, "cooldown")
@@ -763,30 +780,50 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     # TARGET: the mob nearest the CAST TILE (not the player) within the
     # spell's impact radius; falls back to the nearest mob around the
     # player (keyboard casts / stale clicks), same pattern as apply_attack.
+    # AIM-CAST (user 10/10): the click tile is the FLIGHT DESTINATION — the
+    # spell travels player -> target tile and hits the FIRST hostile whose
+    # body intersects the flight path (segment-circle test), not merely
+    # whoever stands at the endpoint. Endpoint hit still counts (a mob AT
+    # the click tile eats it), so aim feels 1:1 with the cursor.
     web = getattr(state, "web_zombies", {})
     candidates = web.values() if isinstance(web, dict) else (web or [])
-    cx = player.x + dx + 0.5
-    cy = player.y + dy + 0.5
+    ox = player.x_f
+    oy = player.y_f
+    ex = ox + dx + 0.5
+    ey = oy + dy + 0.5
+    # Clamp the flight length to SPELL_CAST_RANGE so long flicks stop at
+    # max range instead of sniping across the map.
+    fl = _math.hypot(ex - ox, ey - oy)
+    if fl > SPELL_CAST_RANGE + 0.75:
+        k = (SPELL_CAST_RANGE + 0.75) / fl
+        ex = ox + (ex - ox) * k
+        ey = oy + (ey - oy) * k
     best = None
     best_d = float("inf")
     for enemy in candidates:
         if not enemy.alive:
             continue
-        d = _math.hypot(getattr(enemy, "x_f", enemy.x) - cx,
-                        getattr(enemy, "y_f", enemy.y) - cy)
+        mx = (getattr(enemy, "x_f", enemy.x))
+        my = (getattr(enemy, "y_f", enemy.y))
+        # Segment-circle intersection with the impact radius as the body
+        # radius; zero-length flights degenerate to the endpoint ring.
+        vx, vy = ex - ox, ey - oy
+        seg2 = vx * vx + vy * vy
+        if seg2 <= 1e-9:
+            d_end = _math.hypot(mx - ex, my - ey)
+            if d_end <= spell["radius"] and d_end < best_d:
+                best, best_d = enemy, d_end
+            continue
+        t = ((mx - ox) * vx + (my - oy) * vy) / seg2
+        t = max(0.0, min(1.0, t))
+        px_ = ox + vx * t
+        py_ = oy + vy * t
+        d = _math.hypot(mx - px_, my - py_)
         if d <= spell["radius"] and d < best_d:
             best, best_d = enemy, d
     if best is None:
-        for enemy in candidates:
-            if not enemy.alive:
-                continue
-            d = _math.hypot(getattr(enemy, "x_f", enemy.x) - player.x_f,
-                            getattr(enemy, "y_f", enemy.y) - player.y_f)
-            if d <= spell["radius"] + 0.5 and d < best_d:
-                best, best_d = enemy, d
-    if best is None:
         return ActionResult(False, "no_target", state_changed=True,
-                            pos=(player.x + dx, player.y + dy))
+                            pos=(int(ex), int(ey)))
 
     import random as _r
     dmg = max(1, spell["dmg"] + _r.randint(-spell["variance"], spell["variance"]))

@@ -14,6 +14,7 @@ import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
 import { SPELLS as SPELL_DEFS, spellFx, spellById } from "./spells";
+import { bindWandSpell, getBoundSpell } from "./spells_bridge";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
 import { previewPanel } from "./preview_panel";
@@ -1071,9 +1072,10 @@ function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
     // rocklift pack has NO fly frames (lift/throw only) — use rock frame.
     iconUrl: `ui/fx/spells/${s.dir}/${s.kind === "rocklift" ? "rock_00" : "fly_00"}.png`,
     onFire: () => {
-      const cast = getSpellCastHook?.();
-      if (cast) cast(s.id);
-      else hud.castSelectedSpellWithId(s.id);
+      // WAND BINDING (user 10/10): releasing on a spell wedge while the
+      // wand is held ATTUNES the wand (no cast). Un-attune = the same.
+      bindWandSpell(s.id);
+      hud.toast(`${s.name} đã gắn vào Đũa phép — click chuột để phóng`);
     },
   }));
   return [...spellActs, ...radialActions()];
@@ -1245,17 +1247,25 @@ hud.onArmorEquip((action, slot, itemId, slotIndex) => {
 // Slot selection: numbers 1-8, mouse wheel, or click — changes the held
 // tool only. Silent on purpose: no chat spam. The self hand updates
 // INSTANTLY from the local hotbar; the server echo/snapshot converge it.
-// WEB SPELLS: click a spell card = cast it at the nearest living mob
-// within 4 tiles. The client plays the projectile VFX instantly; the
-// server (rules.apply_spell) resolves the actual damage/loot and the
-// action_result splat rides the normal zombie kill echo.
-// Shared cast path (SpellFx singleton can't reach this module's closures).
+// WEB SPELLS cast path — dual mode:
+//  - WAND AIM-CAST (user 10/10): click tile = flight DESTINATION (aimed at
+//    whatever direction the player clicked; the server flight-path test hits
+//    the first mob ON the line). aimCastTile set by onCanvasAction;
+//  - CARD/R CAST (fallback): no aim tile -> auto-target nearest mob (R key
+//    with no aim) — still the old behavior for the skills tab.
+/** Aim tile for the CURRENT cast (set by wand clicks; null = auto-target). */
+let spellAimTile: { x: number; y: number } | null = null;
+
 castSpellAtNearest(
   (spellId) => {
     const spell = spellById(spellId);
     if (!spell) return null;
-    const target = scene.nearestZombieTile(4);
-    if (!target) return { toast: "Không có địch trong tầm 4 ô!" };
+    let target = spellAimTile;
+    spellAimTile = null;
+    if (!target) {
+      target = scene.nearestZombieTile(4);
+      if (!target) return { toast: "Không có địch trong tầm 4 ô!" };
+    }
     scene.faceTile(target.x, target.y);
     const self = scene.getSelfPos();
     const t = scene.tilePxPublic;
@@ -1372,6 +1382,21 @@ const input = new KeyboardInput({
     // under the cursor at this exact instant, never a cached value.
     const tile = scene.screenToTile(sx, sy);
     if (kind === "primary") {
+      // WAND AIM-CAST (user 10/10): holding the attuned magic wand, left
+      // click FIRES the bound spell toward the clicked tile (flight path
+      // hit-test server-side) — click REPLACES chop/attack while the wand
+      // is up. Secondary (right) click stays chop/place for building.
+      if (hud.heldItem === "magic_wand" && tile) {
+        const bound = getBoundSpell();
+        if (!bound) {
+          hud.toast("Giữ Tab để chọn phép cho Đũa phép trước!");
+          return;
+        }
+        spellAimTile = tile; // flight destination = clicked tile
+        const cast = getSpellCastHook();
+        if (cast) cast(bound);
+        return;
+      }
       if (!tile) {
         net.action("chop");
         return;

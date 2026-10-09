@@ -44,6 +44,7 @@ SOURCES: dict[str, tuple[str, str] | tuple[str, str, tuple[float, float, float]]
     "charcoal": ("kaetram", "coal"),
     "coal": ("kaetram", "coal"),
     "coin": ("kaetram", "gold"),
+    "magic_wand": ("twemoji", "1fa84"),   # 🪄 (Kaetram has no wand sprite)
     "cooked_meat": ("kaetram", "cookedbeef"),
     "gold_axe": ("kaetram", "goldaxe"),
     "gold_pickaxe": ("kaetram", "goldpickaxe"),

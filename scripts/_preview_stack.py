@@ -516,7 +516,7 @@ class PreviewStack(LocalStack):
             rt.inventories[uid] = inv
         parts = str(value or "").split()
         demo = ["potion_hp", "potion_mp", "iron_sword", "iron_pickaxe",
-                "wood_axe", "stone", "torch", "leatherhelmet"]
+                "wood_axe", "stone", "torch", "leatherhelmet", "magic_wand"]
         item_id = parts[0] if parts else "demo"
         try:
             qty = int(parts[1]) if len(parts) > 1 else 1

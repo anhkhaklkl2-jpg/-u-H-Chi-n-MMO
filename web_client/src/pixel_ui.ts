@@ -230,7 +230,7 @@ export const ITEM_ICONS: Record<string, string> = Object.fromEntries(
     "dirt", "floor", "furnace", "gold_axe", "gold_ingot", "gold_ore",
     "gold_pickaxe", "gold_sword", "hide", "iron_axe", "iron_ingot", "iron_ore",
     "iron_pickaxe", "iron_sword", "key_stone", "leatherchest", "leatherhelmet",
-    "leatherleggings", "leaves", "mushroom_brown",
+    "leatherleggings", "leaves", "magic_wand", "mushroom_brown",
     "mushroom_purple", "plank", "potion_hp", "potion_mp", "raw_meat",
     "rotten_flesh", "seed", "steel_axe", "steel_ingot", "steel_pickaxe",
     "steel_sword", "stick", "stone", "stone_axe", "stone_pickaxe",
