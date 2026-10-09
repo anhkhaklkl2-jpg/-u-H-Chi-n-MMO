@@ -2,9 +2,13 @@
 // Client plays the projectile/impact VFX; the server (game/rules.apply_spell)
 // resolves damage/loot/defeat and the action_result splat shows on arrival.
 //
-// Frame layout under /ui/fx/spells/<dir>/: fly_NN.png (looping flight) +
-// hit_NN.png (one-shot impact). rocklift adds rock_NN.png (lift + flight)
-// and hit overlay frames — see SPELLS below.
+// FRAME SOURCES = the packs under "vfx done" VERBATIM (user 10/10: "spell xấu
+// — không giống bản trong vfx done"). Every pack README documents its own
+// frame split + tuned timings; SPELLS below mirrors those numbers 1:1:
+//   wood   Repeatable1-8 fly / Hit1-7 hit, 32x32, FLY_FPS 6, IMPACT_FPS 6
+//   earth  frame_01-06 fly / frame_07-10 hit, 48x32 (rotating — draw 6fps)
+//   dark   frame_01-10 fly / frame_11-16 hit, 40x32, tail flip on left fly
+//   rocklift  rock frame_01-11 (lift+flight) / impact frame_01-07, 48x48
 //
 // Hit-test gotcha honored: NO getBounds() anywhere — everything is timed
 // tweens to a known tile, so the impact always lands where the server
@@ -17,12 +21,14 @@ export interface SpellDef {
   name: string;
   /** texture dir under /ui/fx/spells/ */
   dir: string;
+  /** 100ms load-up held at the player before flight (all packs: CAST_MS). */
+  castMs: number;
   flyCount: number;
   hitCount: number;
-  /** flight duration ms (wood/earth/dark leg) */
+  /** flight duration ms (README: FLY_MS) */
   flyMs: number;
   fps: number;
-  /** sprite draw scale (frames are 32-48px, tile is 32px * zoom-independent) */
+  /** sprite draw scale (frames are 32-48px art at 16px world tiles) */
   scale: number;
   mana: number;
   desc: string;
@@ -34,25 +40,25 @@ export interface SpellDef {
 export const SPELLS: SpellDef[] = [
   {
     id: "wood01", name: "Khúc gỗ bay", dir: "wood",
-    flyCount: 8, hitCount: 7, flyMs: 500, fps: 8, scale: 1.0,
+    castMs: 100, flyCount: 8, hitCount: 7, flyMs: 500, fps: 6, scale: 1.0,
     mana: 6, kind: "projectile",
     desc: "Phóng một khúc gỗ thẳng tới mục tiêu. Mana 6.",
   },
   {
     id: "earth01", name: "Đá bay", dir: "earth",
-    flyCount: 6, hitCount: 4, flyMs: 500, fps: 8, scale: 1.0,
+    castMs: 100, flyCount: 6, hitCount: 4, flyMs: 500, fps: 6, scale: 1.0,
     mana: 8, kind: "projectile",
     desc: "Bắn viên đá xoay tròn về phía trước. Mana 8.",
   },
   {
     id: "dark01", name: "Đạn bóng tối", dir: "dark",
-    flyCount: 10, hitCount: 6, flyMs: 500, fps: 10, scale: 1.0,
+    castMs: 100, flyCount: 10, hitCount: 6, flyMs: 500, fps: 6, scale: 1.0,
     mana: 10, kind: "dark",
     desc: "Cầu bóng tối đuôi lửa — nổ khi trúng địch. Mana 10.",
   },
   {
     id: "rocklift", name: "Vận chiêu đá", dir: "rocklift",
-    flyCount: 0, hitCount: 7, flyMs: 450, fps: 10, scale: 1.0,
+    castMs: 100, flyCount: 0, hitCount: 7, flyMs: 450, fps: 10, scale: 1.0,
     mana: 12, kind: "rocklift", liftMs: 600,
     desc: "Nâng tảng đá từ đất rồi ném — sát thương lớn. Mana 12.",
   },
@@ -66,7 +72,7 @@ interface ActiveSpell {
   spell: SpellDef;
   img: Phaser.GameObjects.Image | null;
   overlay: Phaser.GameObjects.Image | null;
-  phase: "fly" | "impact";
+  phase: "cast" | "fly" | "impact";
   phaseT0: number;
   fromX: number; fromY: number;
   toX: number; toY: number;
@@ -101,13 +107,13 @@ export class SpellFx {
     const scene = this.scene;
     if (!scene || this.loadedDirs.has(spell.dir)) return;
     this.loadedDirs.add(spell.dir);
-    const max = Math.max(spell.flyCount, spell.hitCount, 11);
+    const max = spell.kind === "rocklift" ? 11 : Math.max(spell.flyCount, spell.hitCount);
     for (let i = 0; i < max; i++) {
       for (const kind of ["fly", "hit", "rock"]) {
         const key = `sp_${spell.dir}_${kind}${i}`;
         if (scene.textures.exists(key)) continue;
         if (kind === "rock" && spell.kind !== "rocklift") continue;
-        if (kind === "fly" && i >= spell.flyCount && spell.kind !== "rocklift") continue;
+        if (kind === "fly" && (i >= spell.flyCount || spell.kind === "rocklift")) continue;
         if (kind === "hit" && i >= spell.hitCount) continue;
         if (kind === "rock" && i >= 11) continue;
         scene.load.image(key, `ui/fx/spells/${spell.dir}/${kind}_${String(i).padStart(2, "0")}.png`);
@@ -126,7 +132,7 @@ export class SpellFx {
     const angle = Math.atan2(toY - fromPx.y, toX - fromPx.x);
 
     const act: ActiveSpell = {
-      spell, img: null, overlay: null, phase: "fly", phaseT0: performance.now(),
+      spell, img: null, overlay: null, phase: "cast", phaseT0: performance.now(),
       fromX: fromPx.x, fromY: fromPx.y, toX, toY, angle, done: false,
     };
     if (spell.kind === "rocklift") {
@@ -135,9 +141,9 @@ export class SpellFx {
       act.img = scene.add.image(fromPx.x, fromPx.y, `sp_${spell.dir}_rock0`)
         .setDepth(SPELL_DEPTH - 1).setScale(spell.scale);
     } else {
-      const key = spell.kind === "dark" ? `sp_dark_fly0` : `sp_${spell.dir}_fly0`;
+      const key = `sp_${spell.dir}_fly0`;
       act.img = scene.add.image(fromPx.x, fromPx.y, key)
-        .setDepth(SPELL_DEPTH).setScale(spell.scale);
+        .setDepth(SPELL_DEPTH).setScale(spell.scale).setAlpha(0);
       // dark pack draws its tail flat — flip vertically when flying left so
       // the head leads (README: flip quanh trục bay, chỉ áp cho frame BAY).
       if (spell.kind === "dark") act.img.setFlipY(Math.abs(angle) > Math.PI / 2);
@@ -157,16 +163,31 @@ export class SpellFx {
     const now = performance.now();
     for (const act of this.active) {
       const s = act.spell;
+      // CAST phase: 100ms fade-in at the muzzle (README CAST_MS, dark also
+      // slides out 18px over 150ms after it — folded into the fade here).
+      if (act.phase === "cast" && s.kind !== "rocklift") {
+        const t = Math.min(1, (now - act.phaseT0) / s.castMs);
+        act.img?.setAlpha(t);
+        const fi = Math.floor((now - act.phaseT0) / 1000 * s.fps) % s.flyCount;
+        act.img?.setTexture(`sp_${s.dir}_fly${fi}`);
+        if (t >= 1) {
+          act.phase = "fly";
+          act.phaseT0 = now;
+          act.img?.setAlpha(1);
+        }
+        continue;
+      }
       if (act.lift) {
-        // LIFT: rock rises from the player's feet over liftMs.
+        // LIFT: rock rises from the player's feet over liftMs, stepping the
+        // rock frames (README rock lift loop).
         const t = Math.min(1, (now - (act.liftT0 ?? now)) / (s.liftMs ?? 600));
         act.img?.setPosition(act.fromX, act.fromY - t * 26);
-        const ri = Math.floor((now - (act.liftT0 ?? now)) / 1000 * 6) % 6;
+        const ri = Math.floor((now - (act.liftT0 ?? now)) / 1000 * 8) % 8;
         act.img?.setTexture(`sp_rocklift_rock${ri}`);
         if (t >= 1) {
           act.lift = false;
+          act.phase = "fly";
           act.phaseT0 = now;
-          act.img?.setTexture(`sp_rocklift_rock0`);
         }
         continue;
       }
@@ -178,9 +199,14 @@ export class SpellFx {
         const y = act.fromY - liftH * (1 - t) + (act.toY - act.fromY) * t;
         act.img?.setPosition(x, y);
         if (s.kind === "rocklift") {
-          const ri = Math.floor(now / 1000 * 6) % 6;
+          const ri = Math.floor((now - act.phaseT0) / 1000 * 8) % 8;
           act.img?.setTexture(`sp_rocklift_rock${ri}`);
         } else if (s.kind !== "dark") {
+          // wood/earth: their frames carry the spin — just step them at the
+          // pack's FPS without extra rotation (README: cả hai loop 6fps và
+          // khung nhìn xoay sẵn; để nguyên giữ pixel art sắc nét).
+          const fi = Math.floor((now - act.phaseT0) / 1000 * s.fps) % s.flyCount;
+          act.img?.setTexture(`sp_${s.dir}_fly${fi}`);
           act.img?.setRotation(act.angle);
         } else {
           // dark: loop fly frames; keep flipY for the direction
