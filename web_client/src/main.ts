@@ -1068,7 +1068,8 @@ function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
   const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.map((s) => ({
     id: `spell_${s.id}`,
     label: s.name,
-    iconUrl: `ui/fx/spells/${s.dir}/fly_00.png`,
+    // rocklift pack has NO fly frames (lift/throw only) — use rock frame.
+    iconUrl: `ui/fx/spells/${s.dir}/${s.kind === "rocklift" ? "rock_00" : "fly_00"}.png`,
     onFire: () => {
       const cast = getSpellCastHook?.();
       if (cast) cast(s.id);
