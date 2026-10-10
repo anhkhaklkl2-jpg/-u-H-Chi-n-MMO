@@ -1354,9 +1354,14 @@ const markSwingSent = (): void => { lastSwingSentAt = performance.now(); };
 // EXHAUSTED SWING GATE (user 11/10): stamina 0 = no attack at all — the
 // swing stays LOCAL (no packet, no anim). The server already answers
 // "exhausted" for parity; blocking here means the arm never even moves.
-const selfStaminaRaw = (): number =>
-  (scene as unknown as { selfStamina: number }).selfStamina;
-const attackAllowed = (): boolean => selfStaminaRaw() > 0;
+const selfStaminaRaw = (): number => {
+  // scene.selfStamina is the SERVER TRUTH (set from snapshots, game.ts 5365)
+  // but it is a NUMBER (stamina units, e.g. 0..200) — take max(<=0) as 0.
+  const v = (scene as unknown as { selfStamina: number }).selfStamina;
+  return typeof v === "number" ? v : 1;
+};
+const attackAllowed = (): boolean =>
+  scene && selfStaminaRaw() > 0 && typeof scene.getSelfPos().x === "number";
 
 const input = new KeyboardInput({
   onVector: (dx, dy, running) => {
