@@ -2405,6 +2405,7 @@ export class Hud {
       if (e.key === "Enter") go();
     });
     row.append(input, btn, cb);
+    */
   }
 
   /** Set by main.ts: launch a web preview session for the typed map id. */
