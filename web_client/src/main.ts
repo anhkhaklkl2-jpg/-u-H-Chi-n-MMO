@@ -14,9 +14,10 @@ import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
 import { SPELLS as SPELL_DEFS, spellFx, spellById, fireChannelStart, fireChannelEnd } from "./spells";
+void SPELL_DEFS; // spell wedges removed; kept so the import stays tree-shakeable
 import { spellEngine } from "./spell_engine";
 import { SPELL_ENGINE_DEFS } from "./spell_defs";
-import { bindWandSpell, getBoundSpell } from "./spells_bridge";
+import { getBoundSpell } from "./spells_bridge";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
 import { previewPanel } from "./preview_panel";
@@ -1080,8 +1081,9 @@ function radialActions(): import("./radial_menu").RadialAction[] {
 // Release on a spell wedge casts it at the nearest mob (same cast path as the
 // Skills tab card + R key).
 function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
-  // Icon per pack kind (8 wedges now hold ALL 8 spells):
-  const iconFor = (s: import("./spells").SpellDef): string =>
+  // KING 11/10: spell wedges removed entirely — hotbar-only radial.
+  return radialActions();
+  /* const iconFor = (s: import("./spells").SpellDef): string =>
     s.kind === "rocklift" ? "rock_00"
     : s.kind === "debuff" ? "fx_00"
     : s.kind === "bump" ? "fx_00"
@@ -1099,7 +1101,7 @@ function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
       hud.toast(`${s.name} đã gắn vào Đũa phép — click chuột để phóng`);
     },
   }));
-  return [...spellActs, ...radialActions()];
+  return [...spellActs, ...radialActions()]; */
 }
 window.addEventListener("keydown", (e) => {
   // TAB-HOLD RADIAL MENU. Two browser-hostility gotchas handled here:
