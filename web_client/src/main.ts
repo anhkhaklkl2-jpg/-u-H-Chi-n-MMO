@@ -1351,6 +1351,12 @@ let lastSwingSentAt = 0;
 const swingGateOpen = (): boolean =>
   performance.now() - lastSwingSentAt >= SWING_COOLDOWN_MS;
 const markSwingSent = (): void => { lastSwingSentAt = performance.now(); };
+// EXHAUSTED SWING GATE (user 11/10): stamina 0 = no attack at all — the
+// swing stays LOCAL (no packet, no anim). The server already answers
+// "exhausted" for parity; blocking here means the arm never even moves.
+const selfStaminaRaw = (): number =>
+  (scene as unknown as { selfStamina: number }).selfStamina;
+const attackAllowed = (): boolean => selfStaminaRaw() > 0;
 
 const input = new KeyboardInput({
   onVector: (dx, dy, running) => {
@@ -1390,6 +1396,7 @@ const input = new KeyboardInput({
     // SHOP GATE: vung tay khi đang mở shop là nhầm phím — bỏ qua.
     if (isShopOpen()) return;
     if (!swingGateOpen()) return;
+    if (!attackAllowed()) { hud.toast("Hết thể lực — không thể tấn công!"); return; }
     markSwingSent();
     net.action("attack");
     scene.combatSwing();
@@ -1488,6 +1495,7 @@ const input = new KeyboardInput({
       // server-side; tile targeting only picks the swing direction).
       if (scene.zombieNear(target)) {
         if (!swingGateOpen()) return;
+        if (!attackAllowed()) { hud.toast("Hết thể lực — không thể tấn công!"); return; }
         markSwingSent();
         // Send the clicked tile: server resolves the hit against the mob
         // near THAT tile (an animal 2 tiles away was un-hittable when the
@@ -1641,6 +1649,7 @@ const mobile = new MobileControls({
     scene.faceTile(target.x, target.y); // face the tap target
     if (scene.zombieNear(target)) {
       if (!swingGateOpen()) return;
+      if (!attackAllowed()) { hud.toast("Hết thể lực — không thể tấn công!"); return; }
       markSwingSent();
       // Clicked tile rides along (see onScreenClick attack path).
       net.actionAt("attack", target.x, target.y);
