@@ -3198,10 +3198,18 @@ export class Hud {
 
   // ----- Quick-craft catalog scrolling + category filter -----
 
-  /** The recipe list AFTER the active category filter ("all" = everything). */
+  /** The recipe list AFTER the active category filter ("all" = everything).
+   *  USER 11/10: away from a crafting table, recipes flagged needs_table
+   *  are HIDDEN entirely — the hand catalog shows only the basic recipes
+   *  (bàn chế tạo, đuốc, que, ván gỗ, lò nung…). Stand near a table to
+   *  reveal the full list. */
   private get filteredRecipes(): RecipePayload[] {
-    if (this.craftCategory === "all") return this.recipes;
-    return this.recipes.filter((r) => (r.group ?? "usable") === this.craftCategory);
+    let list = this.recipes;
+    if (!(this.nearTable || this.stationOpen)) {
+      list = list.filter((r) => !r.needs_table);
+    }
+    if (this.craftCategory === "all") return list;
+    return list.filter((r) => (r.group ?? "usable") === this.craftCategory);
   }
 
   /** Highest valid scroll offset = index of the LAST possible window start.
