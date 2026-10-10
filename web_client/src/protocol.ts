@@ -103,6 +103,9 @@ export interface WelcomePayload {
     /** Sprint stamina drain per second (server config.STAMINA_RUN_DRAIN).
      *  The prediction mirrors the server's sprint drain tick-for-tick. */
     stamina_run_drain?: number;
+    /** Server truth of the stamina bank (snapshots.py "self"). Exhausted
+     *  gate (attackAllowed) reads this — server-scaled, not client-drained. */
+    stamina?: number;
     dir: string;
     color?: string;
   };
@@ -230,6 +233,8 @@ export interface SnapshotPayload {
     y: number;
     dir: string;
     aim: { dx: number; dy: number } | null;
+    /** Server stamina truth (20 Hz) — feeds the exhausted attack gate. */
+    stamina?: number;
   // Item id currently held by self (mirrors welcome.held, 20 Hz echo).
   held: string | null;
   // Equipped Kaetram armor {helmet|chest|legs: stem}. Absent on older
