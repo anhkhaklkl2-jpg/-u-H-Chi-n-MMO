@@ -2368,6 +2368,9 @@ export class Hud {
       b.addEventListener("click", () => onPick(it.channel_id));
       this.listEl.appendChild(b);
     }
+    // USER 11/10: preview row + F3 checkbox removed from the main menu —
+    // dev-only transport, not for players.
+    /*
     // ---- Web preview row: type a map id, press Preview to join a solo
     // runtime for ANY map in the server catalog (no Discord needed).
     const row = document.createElement("div");
@@ -2402,7 +2405,6 @@ export class Hud {
       if (e.key === "Enter") go();
     });
     row.append(input, btn, cb);
-    this.listEl.appendChild(row);
   }
 
   /** Set by main.ts: launch a web preview session for the typed map id. */
