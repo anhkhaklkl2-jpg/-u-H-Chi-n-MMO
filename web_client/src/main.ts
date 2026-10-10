@@ -994,6 +994,7 @@ const net = new Net({
       no_wand: "Cần cầm Đũa phép để cast!",
       no_mana: "Không đủ mana!",
       no_target: "Không có địch trong tầm!",
+      exhausted: "Hết thể lực — không thể tấn công!",
       bad_spell: "Phép lạ gì đó?",
     };
     const msg = REASONS[frame.reason];

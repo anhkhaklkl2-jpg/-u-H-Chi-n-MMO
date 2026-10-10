@@ -295,6 +295,11 @@ def apply_attack(state: GameState, action: AttackAction, blocks: BlockGrid = Non
                         True, state_changed=True, pos=(tx, ty), block_id=block_id,
                     )
             return ActionResult(False, "no_target")
+        # EXHAUSTED GATE (user 11/10): stamina 0 = NO attack, no damage, no
+        # stamina spend — the client gets an explicit reason so it can gate
+        # the swing animation too.
+        if player.stamina <= 0.0:
+            return ActionResult(False, "exhausted")
         base = _attack_damage(state, player)
         # ATTACK COST: every swing (hit or miss) spends breath — spamming
         # runs the stamina bank dry, and an empty bank raises miss chance
@@ -405,6 +410,10 @@ def apply_attack(state: GameState, action: AttackAction, blocks: BlockGrid = Non
                     True, state_changed=True, pos=(tx, ty), block_id=block_id,
                 )
         return ActionResult(False, "no_target")
+    # EXHAUSTED GATE (user 11/10): stamina 0 = NO attack — same rule as the
+    # web melee path above.
+    if player.stamina <= 0.0:
+        return ActionResult(False, "exhausted")
     # Damage depends on what the player is holding: per-family/per-tier tool
     # damage (sword > axe > pickaxe > shovel, each scaled by material tier);
     # a bare hand punches for BARE_HAND_ATTACK_DAMAGE.
@@ -714,8 +723,11 @@ WEB_SPELLS: dict = {
                     radius=1.25, cooldown=1.0),
     "dark01": dict(name="Đạn bóng tối", dmg=12, variance=4, mana=10,
                    radius=1.25, cooldown=1.0),
+    # rocklift = hitbox RỘNG hơn (user 11/10: "nhắm dễ hơn, hitbox thật gây
+    # sát thương"): impact VFX ~40px ≈ 2.5 ô ở 16px/ô — radius 2.2 là bán
+    # kính hit-test quanh điểm đích + flight path; cooldown nhẹ hơn (1.2s).
     "rocklift": dict(name="Vận chiêu đá", dmg=18, variance=5, mana=12,
-                     radius=1.4, cooldown=1.6),
+                     radius=2.2, acquire_range=9.0, cooldown=1.2),
     # ---- 4 spell mới (user 10/10, packs vfx done 10/10) ----
     # dark02 = debuff HIỂN THỊ tại địch (README Dark VFX 02): damage nhẹ
     # (user duyệt "chỉ để hiển thị — thêm damage sau" → 0 dmg, mana 4).
@@ -815,8 +827,19 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     # the click tile eats it), so aim feels 1:1 with the cursor.
     web = getattr(state, "web_zombies", {})
     candidates = web.values() if isinstance(web, dict) else (web or [])
-    ox = player.x_f
-    oy = player.y_f
+    # Player origin: the float centre can STALE (spawn-time value while the
+    # web player walked elsewhere — client moves predict, server float mirror
+    # only syncs on dispatched moves; spell actions bypass dispatch). Trust
+    # the int tile walk position over a float that disagrees with it by
+    # more than half a tile — that mismatch made casts fly from the wrong
+    # corner of the map and silently miss every mob (user 11/10 hitbox)
+    px_int, py_int = float(player.x) + 0.5, float(player.y) + 0.5
+    if abs(getattr(player, "x_f", 0.0) - px_int) > 1.0 \
+            or abs(getattr(player, "y_f", 0.0) - py_int) > 1.0:
+        ox, oy = px_int, py_int
+    else:
+        ox = getattr(player, "x_f", px_int) or px_int
+        oy = getattr(player, "y_f", py_int) or py_int
     ex = ox + dx + 0.5
     ey = oy + dy + 0.5
     # Clamp the flight length to SPELL_CAST_RANGE so long flicks stop at
@@ -829,8 +852,8 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     best = None
     best_d = float("inf")
     for enemy in candidates:
-        if not enemy.alive:
-            continue
+        if not enemy.alive or getattr(enemy, "ambient", False):
+            continue  # spells target hostile mobs, never neutral wildlife
         mx = (getattr(enemy, "x_f", enemy.x))
         my = (getattr(enemy, "y_f", enemy.y))
         # Segment-circle intersection with the impact radius as the body
@@ -850,8 +873,30 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
         if d <= spell["radius"] and d < best_d:
             best, best_d = enemy, d
     if best is None:
-        return ActionResult(False, "no_target", state_changed=True,
-                            pos=(int(ex), int(ey)))
+        # AUTO-AIM FALLBACK: rocklift is a heavy, forgiving lob. If the aimed
+        # segment misses, acquire the nearest living hostile within its
+        # configured acquire_range (9 tiles) instead of requiring pixel-perfect
+        # alignment with the player's look vector. Other spells retain their
+        # narrow path+impact acquisition. The impact pos below is the mob itself,
+        # so the client VFX snaps to the actual server-authoritative hit point.
+        # Forgiving auto-aim for every spell: moving mobs and tile-center
+        # rounding make a narrow segment miss even when the player clicked
+        # near the target. If the segment misses, acquire a nearby hostile.
+        pr = float(spell.get("acquire_range", 14.0))
+        ref_d = float("inf")
+        for enemy in candidates:
+            if not enemy.alive or getattr(enemy, "ambient", False):
+                continue  # don't acquire neutral animals as spell targets
+            mx = getattr(enemy, "x_f", enemy.x)
+            my = getattr(enemy, "y_f", enemy.y)
+            d = _math.hypot(mx - ox, my - oy)
+            if d <= pr and d < ref_d:
+                best, ref_d = enemy, d
+        if best is None:
+            return ActionResult(False, "no_target", state_changed=True,
+                                pos=(int(ex), int(ey)))
+        # Snap flight destination onto the mob so the client VFX flies there
+        ex, ey = best.x_f, best.y_f
 
     # SPECIAL MODES (user 10/10 packs) ---------------------------------
     mode = spell.get("mode", "projectile")
