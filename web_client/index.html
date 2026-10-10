@@ -488,6 +488,11 @@
             <button class="panel-close" data-panel="equip" type="button" title="Đóng trang bị"></button>
           </div>
           <div id="craft-detail" class="hidden"></div>
+          <!-- Stub only: spells panel REMOVED (user 11/10) — kept as hidden
+               node so old ui.ts references (invSpellsWrap.classList in the
+               branch table) never hit a null getElementById → the HUD
+               constructor crashed and B-key/tab-click could never open inv. -->
+          <div id="inv-spells-wrap" class="panel-wrap hidden"></div>
         </div>
         <!-- Loading overlay: shown ONLY when the world genuinely needs to
              fetch assets (fresh session). When everything is already cached

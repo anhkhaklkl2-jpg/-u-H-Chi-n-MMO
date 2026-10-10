@@ -369,10 +369,18 @@ export class Hud {
     [this.itemsTab, this.craftTab, this.equipTab].forEach((tab) => {
       tab.addEventListener("click", () => {
         // Tab click while fully closed reopens BOTH panels (reset state).
+        (
+          [
+            [this.invItemsWrap, this.invClosed],
+            [this.invCraftWrap, this.craftClosed],
+          ] as const
+        ).forEach(([_, wasClosed]) => {
+          if (wasClosed) {
+            if (_ === this.invItemsWrap) this.invClosed = false;
+            if (_ === this.invCraftWrap) this.craftClosed = false;
+          }
+        });
         if (this.invPanel.classList.contains("hidden")) {
-          this.invClosed = false;
-          this.craftClosed = false;
-          this.equipClosed = false;
           this.lastBagSig = "";
           this.toggleInventory(true);
         }
