@@ -1,5 +1,28 @@
 # Discord Map Game — Engineering Rules
 
+## 🚨 ⚡ TỐC ĐỘ TRƯỚC CHẤT LƯỢNG (user 11/10 — NHẤN MẠNH) 🚨
+
+**KẾT QUẢ TRẢ VỀ NGAY — tốc độ là ưu tiên số 1, chất lượng/k chính xác "kệ mẹ nó"
+(theo lời user). Áp dụng cho MỌI task từ giờ:**
+
+- KHÔNG đọc/sủa/tìm hiểu file liên quan nhiều hơn mức THIẾT THIẾT cần để
+  tìm ra 5–10 dòng phải sửa — không "rà soát toàn bộ", không checklist dài.
+- KHÔNG hỏi lại làm rõ nếu task đủ hiểu: chọn phương án hiển nhiên nhất,
+  làm luôn, trả kết quả,_user muốn gì lúc đó they sẽ nói tiếp.
+- Trả kết quả bằng ngắn gọn nhất: đã làm gì, commit/push/deploy hay chưa,
+  user cần bấm gì (Restart / Ctrl+Shift+R). KHÔNG khối "summary" dài, khổng
+  lịch sử phân tích, không bảng so sánh.
+- Test chỉ mức bắt lỗi cú pháp/import/build (tsc/build 1 phát, pytest nhanh
+  1 file) — không viết test mới, không mở preview harness, không verify
+  sâu nếu không bắt buộc.
+- Deploy ngay khi build pass (deploy_files.py / git commit + push 2 remote
+  kha2 + origin) — không dừng để chờ user duyệt deployment khi task là
+  FIX/CHANGE nhỏ.
+- Nếu sai (user báo sai), fix CAU gốc bằng nhỏ nhất edit và nộp lại —
+  không phân tích thử lại từ đầu.
+
+---
+
 ## 🚨 DEVELOPMENT FOCUS — READ FIRST 🚨
 
 **DISCORD CLIENT ĐANG TẠM NGƯNG PHÁT TRIỂN (paused).**
@@ -273,3 +296,16 @@ Do not proceed to the next phase until the current acceptance tests pass.
 3. **Không quá đà kiểm thử lý thuyết** — chỉ chạy test nhanh để bắt lỗi cú
    pháp/import/logic nghiêm trọng; không dành quá nhiều thời gian cho test
    khi tính năng đã ổn. Người dùng sẽ test thực tế trên Discord để xác nhận.
+4. **🚨 CẤM SPAM VÒNG LẶP "CHỤP ẢNH PREVIEW → TỰ ĐỌC/PHÂN TÍCH" (user
+   06/10/2026 — NHẤN MẠNH) 🚨** — vòng lặp `preview_screenshot` → nhìn ảnh →
+   đoán → chỉnh → chụp lại... là CỰC KỲ MẤT THỜI GIAN và hầu như không bao
+   giờ khai sáng hơn hỏi user. Preview verification phải tuân thủ:
+   - Mặc định **KHÔNG chụp ảnh**. Verify bằng DOM/probe (`preview_evaluate`
+     đọc state scene, console, network) hoặc bằng test tự động — nhanh và
+     chính xác hơn ảnh.
+   - User đang MỞ tab preview song song và là nguồn xác nhận nhanh + chính
+     xác nhất. Thay vì tự chụp 10 lần, hỏi user 1 câu: "bạn thấy gì?".
+   - Chỉ chụp ảnh khi THẬT SỰ cần thiết: lỗi render mà probe DOM không
+     thấy được, hoặc user yêu cầu rõ ràng. TỐI ĐA 1–2 lần chụp cho mỗi
+     nghi vấn, KHÔNG lặp chụp-nhìn-đoán nhiều vòng.
+   - Khi 1 vòng chụp không cho kết luận → DỪNG, hỏi user thay vì chụp tiếp.
