@@ -461,7 +461,6 @@
             <button class="inv-tab active" data-tab="items" type="button">Túi đồ</button>
             <button class="inv-tab" data-tab="craft" type="button">Chế tạo</button>
             <button class="inv-tab" data-tab="equip" type="button">Trang bị</button>
-            <button class="inv-tab" data-tab="spells" type="button">Kỹ năng</button>
           </div>
           <!-- INVENTORY (V5 frame_01): 98×101 frame, 20 slots 5×4 at
                (10,17) pitch 16, currency overlays at kit bboxes -->
@@ -488,14 +487,6 @@
             <img class="panel" src="ui/v5/layers/equip_frame.png" alt="" draggable="false">
             <button class="panel-close" data-panel="equip" type="button" title="Đóng trang bị"></button>
           </div>
-          <!-- SPELLS (web spells, user 08/10): 4 projectile spells from the
-               VFX packs. Plain DOM panel (no kit frame needed); click a card
-               = cast at the nearest mob (server resolves damage). -->
-          <div id="inv-spells-wrap" class="panel-wrap hidden">
-            <div class="spells-grid"></div>
-            <div class="spells-hint">Bấm phép = phóng tới con quái gần nhất (tầm 4 ô)</div>
-          </div>
-          <!-- Selected recipe detail (inputs → output, needs-table hint) -->
           <div id="craft-detail" class="hidden"></div>
         </div>
         <!-- Loading overlay: shown ONLY when the world genuinely needs to

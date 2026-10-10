@@ -14,6 +14,8 @@ import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
 import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
 import { SPELLS as SPELL_DEFS, spellFx, spellById, fireChannelStart, fireChannelEnd } from "./spells";
+import { spellEngine } from "./spell_engine";
+import { SPELL_ENGINE_DEFS } from "./spell_defs";
 import { bindWandSpell, getBoundSpell } from "./spells_bridge";
 import { weatherFx } from "./weather";
 import { meteorFx } from "./meteors";
@@ -640,6 +642,7 @@ const net = new Net({
     // rings / falls / impacts with the server timeline from these rows.
     meteorFx.attach(scene as unknown as Phaser.Scene);
     spellFx.attach(scene as unknown as Phaser.Scene);
+    spellEngine.attach(scene as unknown as Phaser.Scene);
     meteorFx.sync(frame.meteors);
     hud.setClock(frame.clock);
     hud.setWeather(frame.weather);
@@ -921,6 +924,12 @@ const net = new Net({
   },
   onActionResult: (frame) => {
     if (frame.needed != null) scene.noteChopNeeded(frame.tx, frame.ty, frame.needed);
+    // SPELL ENGINE impact event (user 11/10): khi server resolve spell và
+    // trả về điểm đích — engine sẽ snap flight→impact ĐÚNG nơi mob dính đòn
+    // (damage + VFX vỡ cùng moment).
+    if (frame.name === "spell" && frame.tx != null && frame.ty != null) {
+      spellEngine.notifyServerImpact(frame.tx, frame.ty);
+    }
     // place/break verdict: confirm or revert the optimistic collision tile
     // EXACTLY (tx/ty = the tile the server acted on, possibly clamped). This
     // closes the "đặt rồi xóa rồi chạy xuyên" gap in one RTT — a rejected
@@ -980,6 +989,11 @@ const net = new Net({
       own_tile: "Không thể đặt lên chỗ mình đứng.",
       out_of_range: "Quá xa.",
       already_block: "Ô đó đã có khối.",
+      // SPELL cast reasons (user 11/10: "tại sao không gây sát thương?")
+      no_wand: "Cần cầm Đũa phép để cast!",
+      no_mana: "Không đủ mana!",
+      no_target: "Không có địch trong tầm!",
+      bad_spell: "Phép lạ gì đó?",
     };
     const msg = REASONS[frame.reason];
     if (msg) hud.toast(msg);
@@ -1074,7 +1088,7 @@ function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
     : s.kind === "wall" ? "final"
     : s.kind === "cone" ? "row01_00"
     : "fly_00";
-  const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.map((s) => ({
+  const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.filter((s) => s.kind === "rocklift").map((s) => ({
     id: `spell_${s.id}`,
     label: s.name,
     iconUrl: `ui/fx/spells/${s.dir}/${iconFor(s)}.png`,
@@ -1273,24 +1287,40 @@ castSpellAtNearest(
       // CARD/R CAST (README cơ chế chung 8 spell): bắn về hướng LOOK gần nhất
       // — không cần địch trong tầm; đích = 4 ô theo hướng nhìn (server tự
       // hit-test tỉm ra địch quanh điểm đích). Auto-target mob gần vẫn ưu
-      // tiên khi có mob đứng ≤4 ô.
-      const near = scene.nearestZombieTile(4);
+      // tiên khi có mob đứng ≤6 ô (user 11/10 rocklift: "nhắm dễ hơn" — hitbox
+      // rộng 2.2 nên tự-aim 6 lệch cũng đủ rơi vào bán kính impact).
+      const near = scene.nearestZombieTile(6);
       if (near) target = near;
       else {
-        // hướng nhìn gần nhất (lastMoveX/Y chuẩn hoá) → đích 4 ô phía đó
+        // hướng nhìn gần nhất (lastMoveX/Y chuẩn hoá) → đích 4 ô phía đó.
+        // User 11/10 auto-aim: server có auto-aim fallback bắt mob gần player
+        // nhất trong tầm — client đồng bộ đích VFX về mob đó khi có.
         const v = scene.aimVec?.();
         if (!v) return { toast: "Không xác định được hướng bắn!" };
         const sp = scene.getSelfPos();
         target = { x: Math.floor(sp.x + v.x * 4), y: Math.floor(sp.y + v.y * 4) };
+        const nearAny = scene.nearestZombieTile(7);
+        if (nearAny) target = nearAny; // VFX bay về mob gần nhất dù aim lệch
       }
     }
     scene.faceTile(target.x, target.y);
     const self = scene.getSelfPos();
     const t = scene.tilePxPublic;
-    spellFx.cast(spell, {
-      x: self.x * t + t / 2,
-      y: self.y * t + t / 2,
-    }, target);
+    // SPELL ENGINE (user 11/10): rocklift chạy qua engine mới — flight theo
+    // quãng đường thật + impact event từ server. Các spell khác vẫn spellFx.
+    if (spell.kind === "rocklift") {
+      // Đổi kiểu SpellDef cũ (spells.ts) → engine def (spell_defs.ts)
+      const engineDef = SPELL_ENGINE_DEFS.find(d => d.id === spell.id);
+      if (engineDef) spellEngine.cast(engineDef, {
+        x: self.x * t + t / 2,
+        y: self.y * t + t / 2,
+      }, target);
+    } else {
+      spellFx.cast(spell, {
+        x: self.x * t + t / 2,
+        y: self.y * t + t / 2,
+      }, target);
+    }
     net.castSpell(spellId, target.x, target.y);
     return null;
   },
