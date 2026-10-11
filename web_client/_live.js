@@ -107,7 +107,7 @@
           <!-- Main lobby (NEXT GAME style): logo + 3 columns — account |
                play menu | server selection. Shown after login. -->
           <div class="nx hidden" id="lobby">
-            <h1 class="nx-logo">ĐẬU HŨ<span>CHIÊN&nbsp;MMO</span></h1>
+            <h1 class="nx-logo">PROJECT&nbsp;KATOPIA</h1>
             <div class="nx-cols">
               <!-- LEFT: account -->
               <section class="nx-panel">
