@@ -455,11 +455,64 @@ class GameManager:
         self.sessions.discard(channel_id, user_id)
         self._session_notice_at.pop((channel_id, user_id), None)
 
+    def _ghost_sweep(self) -> int:
+        """GHOST-PLAYER FIX (user 07/10: "user còn ko có tên" — a body whose
+        owner left, standing forever): hide every Player whose user_id has NO
+        live web session AND no tracked session on any runtime of any channel.
+        Both grace paths (web disconnect grace, short Discord pauses) are
+        covered: a chat-mode body with no tracked session is invisible until
+        its owner returns (register_web_session un-hides on rejoin).
+        Returns the number of hidden bodies.
+        """
+        live_web = {
+            uid
+            for rt in list(self.runtimes.values())
+            + list(self.side_runtimes.values())
+            for uid in getattr(rt, "web_sessions", {})
+        }
+        tracked = {
+            uid for (_cid, uid) in self.sessions.all()
+        }
+        hidden = 0
+        for rt in list(self.runtimes.values()) + list(
+            self.side_runtimes.values()
+        ):
+            for uid, p in list(rt.state.players.items()):
+                # BOOT-RESTORE FIX (user 07/10 screenshot round 3): also hide
+                # CHAT-mode bodies — a body restored at boot (or leaked by any
+                # path) with no session of ANY kind must not stand forever.
+                # A live Discord screen means a live session, so bodies with
+                # a screen are spared from the chat branch.
+                screen = rt.screens.get(uid)
+                has_screen = (
+                    screen is not None and screen.message_id is not None
+                )
+                if (
+                    uid not in live_web
+                    and uid not in tracked
+                    and not has_screen
+                    and p.visible
+                ):
+                    p.visible = False
+                    p.is_web = False
+                    p.mode = "chat"
+                    self._schedule_save(rt, p)
+                    hidden += 1
+        return hidden
+
     async def _session_loop(self) -> None:
         """End every session idle past the timeout, one adapter call at a time."""
         import time as _time
 
         while True:
+            # GHOST-PLAYER SWEEP: piggyback the watchdog cadence. Every body
+            # with no live session of ANY kind gets hidden — covers the
+            # dropped-socket and interrupted-teleport paths the per-key
+            # due() logic never reaches.
+            try:
+                self._ghost_sweep()
+            except Exception:  # noqa: BLE001 — the watchdog must survive
+                log.exception("[SESSION] ghost sweep failed (loop survives)")
             await asyncio.sleep(self.session_check_interval)
             now = _time.monotonic()
             timeout = self.session_timeout_minutes * 60.0
@@ -477,6 +530,19 @@ class GameManager:
                     # Activity without an open screen (e.g. legacy shared-screen
                     # presses): nothing to tear down — drop the ledger entry.
                     self.discard_session(channel_id, user_id)
+                    # GHOST-PLAYER FIX (user 07/10): a WEB-ONLY player never
+                    # opens a Discord screen, so the old "drop the ledger and
+                    # continue" left their body visible=True forever — the
+                    # standing, un-interactable ghost that survived reloads.
+                    # Hide it exactly like the inactivity path below.
+                    rt2 = self.get_runtime_for(channel_id, user_id)
+                    if rt2 is not None:
+                        ghost = rt2.state.get_player(user_id)
+                        if ghost is not None and user_id not in rt2.web_sessions:
+                            ghost.visible = False
+                            ghost.is_web = False
+                            ghost.mode = "chat"
+                            self._schedule_save(rt2, ghost)
                     continue
                 # Inactivity end is authoritative: stop tracking FIRST so a
                 # slow adapter call cannot re-queue the same session next tick.
@@ -532,7 +598,15 @@ class GameManager:
         """
         from config import WEB_MAX_PLAYERS
 
-        rt = self.runtimes.get(channel_id)
+        # GHOST-PLAYER FIX (user 07/10: "có player đứng im, không tương tác
+        # được, reload vẫn còn"): resolve the runtime that ALREADY holds the
+        # body first. The old code always looked on the MAIN runtime — a body
+        # living in a side world (cave/forest, or migrated there after a
+        # portal step) returned None here and a FRESH body was minted at the
+        # main spawn on every reload. The real body kept standing in the side
+        # world with no session (uncontrollable) while the fresh main body
+        # then got migrated by ensure_player_world — duplicates and ghosts.
+        rt = self.runtime_of(channel_id, user_id) or self.runtimes.get(channel_id)
         if rt is None:
             return False
         player = rt.state.get_player(user_id)
@@ -551,6 +625,10 @@ class GameManager:
             from game.state import random_name_color
             player.name_color = random_name_color()
         player.is_web = True
+        # A session attaching means the body is controlled again — undo any
+        # earlier watchdog/drop hiding (visible=False) or the rejoin renders
+        # an invisible player.
+        player.visible = True
         # "Web wins": while a web session is attached it controls the shared
         # body; the Discord side reads this flag to pause its own refresh +
         # input (no continuous screen re-renders chasing the web player).
@@ -1420,6 +1498,12 @@ class GameManager:
     def _stamina_regen_beat(self, rt: ScenarioRuntime, player, now: float) -> None:
         """Refill stamina after a short grace period since the last exertion
         (sprint tick / harvest hit). Fast refill (~20 s to full)."""
+        # DEBUG PIN (/tietluc 0, user 12/10): any web session with
+        # stamina_lock=True skips the refill entirely so the exhausted
+        # gate can be tested without the bar refilling in ~1s.
+        for _sess in getattr(rt, "web_sessions", {}).values():
+            if getattr(_sess, "stamina_lock", False) and _sess.user_id == player.user_id:
+                return
         last = getattr(player, "last_exert_at", None)
         if last is not None and now - last < STAMINA_REGEN_DELAY_S:
             return
@@ -3075,7 +3159,8 @@ class GameManager:
         self._notify_travel_change(src_rt, user_id)
         self._notify_travel_change(dst_rt, user_id)
 
-    async def ensure_player_world(self, channel_id: int, user_id: int):
+    async def ensure_player_world(self, channel_id: int, user_id: int,
+                                  display_name: str = ""):
         """WORLD PERSISTENCE (user 25/09): put the player's body back in the
         world they logged out of.
 
@@ -3144,9 +3229,13 @@ class GameManager:
             move_player_between_runtimes(current, dst_rt, user_id, saved)
         else:
             # No live body (fresh join after restart): create it directly in
-            # the saved world at the saved tile.
+            # the saved world at the saved tile. NAMELESS-GHOST FIX (user
+            # 07/10): display_name="" rendered a body with NO name label —
+            # pass the caller's real name through.
             x, y = saved
-            dst_rt.state.add_player(user_id, "", int(x), int(y))
+            dst_rt.state.add_player(
+                user_id, display_name or f"player-{user_id}", int(x), int(y)
+            )
             p = dst_rt.state.get_player(user_id)
             if p is not None:
                 p.world_map = saved_map

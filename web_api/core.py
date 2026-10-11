@@ -213,7 +213,9 @@ class WebHub:
             # then echoes the held item so the client can label it.
             slot = frame.get("slot")
             sess = conn.session
-            if sess is not None and isinstance(slot, int) and 0 <= slot < 8:
+            # band 0..7 → 0..9: hotbar 10 ô (HOTBAR_SLOTS=10) — chặn ở 8 làm
+            # slot 6-9 (Đũa phép…) không thể chọn, held luôn null (bug wand 11/10).
+            if sess is not None and isinstance(slot, int) and 0 <= slot < 10:
                 sess.selected_slot = slot
                 rt0 = self.manager.get_runtime_for(sess.channel_id, sess.user_id)
                 if rt0 is not None:
@@ -534,6 +536,18 @@ class WebHub:
         )
         if moved_rt is not None:
             rt = moved_rt
+        # DEATH-IN-SIDE-WORLD RELOAD FIX (user 10/10: "chết trong hang,
+        # reload lại ra ngoài thảo nguyên nhưng không tương tác được gì"):
+        # ensure_player_world returns None when the body ALREADY stands in
+        # its saved side world (the common quick-reload case) — the old code
+        # then kept rt = the MAIN runtime and welcomed bigmap while the
+        # body, session and 20 Hz snapshots all lived in the cave. The
+        # client rendered the grassland but every click dispatched to the
+        # cave runtime: tiles never matched ("no_node"/"out_of_range"),
+        # nothing interacted. Resolve the WORLD THE BODY IS ACTUALLY IN.
+        body_rt = self.manager.runtime_of(channel_id, sess.user_id)
+        if body_rt is not None:
+            rt = body_rt
         welcome = build_welcome(rt, sess.user_id)
         await self.send_to_client(conn.cid, welcome)
         self.start_snapshots()
@@ -639,6 +653,12 @@ class WebHub:
             if rt_s is None:
                 spell_result = ActionResult(False, "no_scenario")
             else:
+                # Expose the runtime mirrors to the pure rule layer BEFORE
+                # apply_spell — dispatch does this for other verbs, but spell
+                # bypasses dispatch and used to answer no_wand forever
+                # (state.held_slots/inventories never linked outside dispatch).
+                rt_s.state.inventories = rt_s.inventories
+                rt_s.state.held_slots = rt_s.held_slots
                 spell_result = _rules.apply_spell(
                     rt_s.state, uid, str(frame.get("spell_id", "")),
                     abs_dx, abs_dy,
@@ -1220,7 +1240,7 @@ class WebHub:
             stamp = "meteor-fix-4d16382"
             await self.send_to_client_conn(sess, {
                 "type": MSG_PUSH,
-                "message": "Lệnh: /help, /cuahang <hang|rung|ban do>, /khutraodoi in|out, /kill (tự chết để test hồi sinh), /weather, /time, /setweather <key> (admin), /give <item> [số lượng] (admin), /spawnmob <kind> [số lượng] (admin), /mac leather|off (mặc giáp da demo), /meteor [rand] (admin — gọi thiên thạch)"
+                "message": "Lệnh: /help, /cuahang <hang|rung|ban do>, /khutraodoi in|out, /kill (tự chết để test hồi sinh), /weather, /time, /mapreset (admin), /setweather <key> (admin), /give <item> [số lượng] (admin), /spawnmob <kind> [số lượng] (admin), /mac leather|off (mặc giáp da demo), /meteor [rand] (admin — gọi thiên thạch)"
                 + f" — build {stamp} ({_dt.datetime.now().strftime('%H:%M')})",
             })
         elif cmd == "cuahang":
@@ -1389,12 +1409,16 @@ class WebHub:
             await self._cmd_mac(sess, args)
         elif cmd == "kill":
             await self._cmd_kill(sess)
+        elif cmd == "tietluc":
+            await self._cmd_tietluc(sess, args)
         elif cmd == "meteor":
             # /meteor       -> hits the caller's tile exactly
             # /meteor rand  -> hits a tile 6-12 tiles away from the caller
             await self._cmd_meteor(sess, near_random=(args and args[0].lower() == "rand"))
         elif cmd == "meteorinfo":
             await self._cmd_meteorinfo(sess)
+        elif cmd == "mapreset":
+            await self._cmd_mapreset(sess)
         else:
             await self.send_to_client_conn(sess, {
                 "type": MSG_PUSH, "message": f"Lệnh không rõ: /{cmd}",
@@ -1645,6 +1669,48 @@ class WebHub:
             "kind": "system_private",
         })
 
+    async def _cmd_tietluc(self, sess: WebSession, args: List[str]) -> None:
+        """/tietluc 0   -> stamina = 0 NGAY (cạn sạch, không regen dâng lại
+                          cho tới khi người dùng gõ /tietluc <số>) — dùng để
+                          test gate "hết thể lực không thể vung tay".
+        /tietluc <n>  -> set stamina về n (0..max). Không số = full.
+        The hold-off uses last_exert_at stamping re-wrapped at a huge value
+        each snapshot tick: easier — set stamina AND a huge negative regen
+        delay via player.last_exert_at stamping later (regen waits grace 1s).
+        To make it STICK, we re-zero stamina on every snapshot until cleared
+        by another /tietluc — tracked on the session via stamina_lock.
+        """
+        rt = self.manager.get_runtime_for(sess.channel_id, sess.user_id)
+        if rt is None:
+            return
+        player = rt.state.get_player(sess.user_id)
+        if player is None:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Chưa có player trên map.",
+                "kind": "system_private",
+            })
+            return
+        if args:
+            try:
+                val = max(0.0, min(player.max_stamina, float(args[0])))
+            except (TypeError, ValueError):
+                val = player.max_stamina
+        else:
+            val = player.max_stamina
+        player.stamina = val
+        # LOCK: val == 0 pins stamina at 0 across every 20 Hz regen beat —
+        # the regen beat runs on the web tick AFTER our /tietluc 0, so without
+        # the pin the bar refills in ~1s and the gate "không test được".
+        sess.stamina_lock = (val <= 0.0)
+        msg = (
+            "⚡ Đã KHOÁ thể lực về 0 — tấn công bị chặn. Gõ /tietluc để mở khoá."
+            if val <= 0.0 else f"⚡ Thể lực = {val:.0f}/{player.max_stamina:.0f}"
+        )
+        await self.send_to_client_conn(sess, {
+            "type": MSG_PUSH, "message": msg,
+            "kind": "system_private",
+        })
+
     async def _cmd_mac(self, sess: WebSession, args: List[str]) -> None:
         """Demo equip command for the Kaetram armor paperdoll layers.
 
@@ -1803,6 +1869,47 @@ class WebHub:
                 await save_scenario_weather(self.manager.db, sess.channel_id, rt.weather_key, True)
         await self.send_to_client_conn(sess, {
             "type": MSG_PUSH, "message": f"Đã đổi thời tiết: {args[0]}",
+        })
+
+    async def _cmd_mapreset(self, sess: WebSession) -> None:
+        """Admin /mapreset: wipe the web-visible scenario the same way the
+        Discord /mapreset slash command does (players/zombies/blocks cleared,
+        resources + terrain regrown, DB rows deleted). Web sessions stay —
+        the client re-syncs from the next snapshot."""
+        if not await self._is_web_admin(sess):
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Chỉ admin mới được reset map.",
+            })
+            return
+        rt = self.manager.get_runtime(sess.channel_id)
+        if rt is None:
+            await self.send_to_client_conn(sess, {
+                "type": MSG_PUSH, "message": "Chưa có map.",
+            })
+            return
+        db = self.manager.db
+        async with rt.lock:
+            rt.state.players.clear()
+            rt.state.zombies.clear()
+            if hasattr(rt, "members"):
+                rt.members.clear()
+            for _side in list(getattr(self.manager, "side_runtimes", {}).values()):
+                if getattr(_side, "channel_id", None) != rt.channel_id:
+                    continue
+                _side.state.players.clear()
+                _side.state.zombies.clear()
+                _side.web_sessions.clear()
+            rt.state.blocks.clear()
+            if rt.resources is not None:
+                rt.resources.reset()
+            if rt.terrain is not None:
+                rt.terrain.reset()
+            if db is not None:
+                for tbl in ("players", "inventory", "blocks", "resources", "terrain"):
+                    await db.execute(f"DELETE FROM {tbl} WHERE channel_id=?", (sess.channel_id,))
+        await self.send_to_client_conn(sess, {
+            "type": MSG_PUSH, "message": "♻️ Map đã được reset.",
+            "kind": "system_private",
         })
 
     async def _cmd_clouds(self, sess: WebSession, args: List[str]) -> None:

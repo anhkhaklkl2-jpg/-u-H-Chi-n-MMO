@@ -72,6 +72,10 @@ class WebSession:
     # Discord avatar hash from OAuth profile (CDN avatar on the dashboard;
     # empty for guests — they get a letter badge client-side).
     avatar_hash: str = ""
+    # STAMINA LOCK (/tietluc 0 debug pin): True = every 20 Hz regen beat
+    # skips this player so stamina stays 0 (the user can test the exhausted
+    # attack gate without the bar refilling in ~1s). Cleared by /tietluc.
+    stamina_lock: bool = False
 
     def input_allowed(self) -> bool:
         now = time.monotonic()
