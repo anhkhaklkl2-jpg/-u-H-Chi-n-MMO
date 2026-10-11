@@ -149,7 +149,7 @@ function fmtClock(secondsOfDay: number): string {
 }
 
 /** One stack living in a grid (bag slot or craft material slot). */
-interface Stack { id: string; qty: number }
+interface Stack { id: string; qty: number; /** Ghost preview (bag short) — renders FADED, server skips ghosts at CREATE. */ ghost?: boolean }
 
 /** Drag payload: which grid a drag started from + the stack. */
 interface DragSrc {
@@ -1485,7 +1485,9 @@ export class Hud {
   /** Compact the 9 material cells into the CREATE input list. */
   private compactMatGrid(): { id: string; qty: number }[] {
     return this.matGrid
-      .filter((s): s is Stack => !!s && s.qty > 0)
+      // GHOST cells are a PREVIEW of items the bag does NOT hold — they
+      // must never ride to the server as if they were real ingredients.
+      .filter((s): s is Stack => !!s && s.qty > 0 && !s.ghost)
       .map((s) => ({ id: s.id, qty: s.qty }));
   }
 
@@ -1775,17 +1777,13 @@ export class Hud {
           e.stopPropagation();
           e.preventDefault();
           this.selectedQuick = rIdx;
-          // AUTO-FILL ONLY WHEN THE BAG CAN REALLY AFFORD IT (user 12/10:
-          // "chưa đủ đồ thì đừng tự add lên ô craft, chỉ fill khi ĐỦ vật
-          // liệu"). Short-bag recipes just select + highlight the slot.
-          if (this.canCraftNow(rec)) {
-            // QUICK CRAFT — REAL takeover: take the recipe's materials out of
-            // the BAG VIEW (local, instant) onto the grid. First return any
-            // previously placed stacks, then pull from the bag stacks.
-            this.fillMatGridFromBag(rec);
-            this.renderInventory(); // bag cells that lost stacks repaint now
-            this.renderCraftPanel();
-          }
+          // AUTO-FILL ONLY WHEN THE BAG CAN REALLY AFFORD IT. Short-bag
+          // recipes still get a PREVIEW (user 12/10): the fill runs in
+          // ghost mode — real bags-only placements stay solid, missing
+          // items render FADED on their grid cells.
+          this.fillMatGridFromBag(rec, !this.canCraftNow(rec));
+          this.renderInventory(); // bag cells that lost stacks repaint now
+          this.renderCraftPanel();
         });
         // TOUCH parity: mousedown never fires for a finger tap — mirror the
         // quick-craft body on pointerdown (non-mouse pointers only).
@@ -1794,11 +1792,9 @@ export class Hud {
           e.stopPropagation();
           e.preventDefault();
           this.selectedQuick = rIdx;
-          if (this.canCraftNow(rec)) {
-            this.fillMatGridFromBag(rec);
-            this.renderInventory();
-            this.renderCraftPanel();
-          }
+          this.fillMatGridFromBag(rec, !this.canCraftNow(rec));
+          this.renderInventory();
+          this.renderCraftPanel();
         });
       }
       this.invCraftWrap.appendChild(slot);
@@ -1823,6 +1819,8 @@ export class Hud {
         qty: st ? String(st.qty) : "",
         title: st ? this.itemName(st.id) : undefined,
       });
+      // GHOST (bag short) — icon faded like a template preview.
+      if (st && st.ghost) slot.classList.add("mat-ghost");
       slot.dataset.slot = String(i);
       if (st) {
         // Material buffer slots carry the same rich tooltip (fresh element
@@ -1946,20 +1944,18 @@ export class Hud {
    *  When the recipe has a grid ``pattern`` (Minecraft-style), the stacks
    *  are auto-arranged into the EXACT layout — the pickaxe fills the top
    *  row, sticks the middle column, etc. (user: "click nhanh vào công thức
-   *  thì nó tự sắp dùm"). Multiset-only recipes keep the compact fill. */
-  private fillMatGridFromBag(rec: RecipePayload): void {
-    // 1) Put back whatever sits on the grid (bag view first).
-    for (let i = 0; i < this.matGrid.length; i++) {
-      const st = this.matGrid[i];
-      if (!st) continue;
-      const slot = this.inventory.bag.findIndex((b) => b?.id === st.id);
-      if (slot >= 0) this.inventory.bag[slot]!.qty += st.qty;
-      else {
-        const free = this.inventory.bag.findIndex((b) => !b);
-        if (free >= 0) this.inventory.bag[free] = st;
-      }
-      this.matGrid[i] = null;
-    }
+   *  thì nó tự sắp dùm"). Multiset-only recipes keep the compact fill.
+   *
+   *  ``ghost`` mode (user 12/10): the recipe gets a PREVIEW even when the
+   *  bag is short — cells the bag cannot actually fill render FADED
+   *  (class ``mat-ghost``) and are silently dropped from the CREATE
+   *  payload, so a ghost grid can never fake a successful craft. */
+  private fillMatGridFromBag(rec: RecipePayload, _ghost = true): void {
+    // Start every quick fill from a CLEAN slate: put everything back to the
+    // bag view FIRST (fixes user 12/10: clicking a second recipe kept the
+    // OLD fill — the pattern fill overwrote only its own cells, leaving
+    // compact stacks mixed in). One return-all makes the swap honest.
+    this.returnMatGridToBag();
     if (rec.pattern && rec.pattern.length > 0) {
       // PATTERN fill: one unit per pattern cell, at its exact (col,row).
       // Every pattern cell needs 1 unit; the recipe's ``inputs`` totals must
@@ -1976,7 +1972,7 @@ export class Hud {
         const src = this.inventory.bag.find(
           (b) => b && b.id === cell.id && b.qty > 0);
         if (!src) continue; // bag short: leave the cell empty (partial)
-        this.matGrid[idx] = { id: cell.id, qty: 1 };
+        this.matGrid[idx] = { id: cell.id, qty: 1, ghost: !src };
         src.qty -= 1;
         if (src.qty <= 0) {
           this.inventory.bag[this.inventory.bag.indexOf(src)] = null;
@@ -1993,15 +1989,38 @@ export class Hud {
       let need = inp.qty;
       while (need > 0 && cell < cellCap) {
         const src = this.inventory.bag.find((b) => b && b.id === inp.id && b.qty > 0);
-        if (!src) break; // bag short — partial fill, desc shows the lack
+        if (!src) {
+          // BAG SHORT → ghost preview (user 12/10: "vật phẩm không có thành
+          // mờ mờ"). One faded unit per missing unit, up to cellCap.
+          this.matGrid[cell] = { id: inp.id, qty: 1, ghost: true };
+          cell++;
+          need -= 1;
+          continue;
+        }
         const take = Math.min(src.qty, need);
-        this.matGrid[cell] = { id: inp.id, qty: take };
+        this.matGrid[cell] = { id: inp.id, qty: take, ghost: false };
         cell++;
         src.qty -= take;
         need -= take;
         if (src.qty <= 0) {
           this.inventory.bag[this.inventory.bag.indexOf(src)] = null;
         }
+      }
+    }
+  }
+
+  /** Put every grid stack back into the bag view (and clear the grid). */
+  private returnMatGridToBag(): void {
+    for (let i = 0; i < this.matGrid.length; i++) {
+      const st = this.matGrid[i];
+      if (!st) continue;
+      this.matGrid[i] = null;
+      if (st.ghost) continue; // ghosts never came FROM the bag — just drop
+      const slot = this.inventory.bag.findIndex((b) => b?.id === st.id);
+      if (slot >= 0) this.inventory.bag[slot]!.qty += st.qty;
+      else {
+        const free = this.inventory.bag.findIndex((b) => !b);
+        if (free >= 0) this.inventory.bag[free] = st;
       }
     }
   }
@@ -2037,7 +2056,7 @@ export class Hud {
     const n = big ? 9 : 4;
     for (let i = 0; i < n && i < this.matGrid.length; i++) {
       const st = this.matGrid[i];
-      if (!st) continue;
+      if (!st || st.ghost) continue; // ghosts are preview-only, never sent
       out.push({ id: st.id, col: big ? i % 3 : i % 2, row: big ? Math.floor(i / 3) : Math.floor(i / 2) });
     }
     return out;

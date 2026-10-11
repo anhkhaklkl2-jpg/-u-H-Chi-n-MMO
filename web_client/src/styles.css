@@ -2012,6 +2012,16 @@ body.mobile-ui #mc-actions.mc-hidden {
   100% { transform: scale(1); }
 }
 
+/* GHOST preview cell (user 12/10): recipe quick-fill when the bag lacks
+   the ingredient — rendered like a template: faded icon + dashed border. */
+.mat-ghost {
+  opacity: .38;
+  filter: grayscale(.55);
+  outline: 2px dashed rgba(255,255,255,.28);
+  outline-offset: -3px;
+}
+.mat-ghost .icon-img { opacity: .5; }
+
 /* ==================== LOBBY — "NEXT GAME" 3-column layout ====================
    Logo on top, three panels: account | play menu | server selection.
    Dark slate + orange/green accents (pure CSS, no framework). */
