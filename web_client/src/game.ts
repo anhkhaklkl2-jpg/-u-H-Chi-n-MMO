@@ -1011,8 +1011,11 @@ export class WorldScene extends Phaser.Scene {
     }
     this.assetFetch = fetchAsset;
     this.welcome = welcome;
-    // GPU day/night tint (daynight_phaser.ts): attach once per scene, before
-    // any snapshot can try to update it. Idempotent on re-welcome.
+    // Stamina baseline straight from the welcome (a stale 1.0 default made
+    // the exhausted gate pass on the FIRST attack after rejoin — the first
+    // snapshot fixes it, but that one shot already swung).
+    const stWelcome = (welcome.self as { stamina?: number }).stamina;
+    if (typeof stWelcome === "number") this.selfStamina = stWelcome;
     if (perf.daynight) dayNightPhaser.attach(this);
     // Indoor trade maps: no day/night indoors — always evenly lit.
     dayNightPhaser.setIndoor(
@@ -5301,6 +5304,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   applySnapshot(snap: SnapshotPayload): void {
+    // STAMINA ALWAYS WINS (user 12/10 "hết thể lực vẫn vung tay"): read it
+    // BEFORE any early-return guard — a map-switch guard that drops ALL
+    // snapshots (stale map_id vs welcome after a reload/portal) left
+    // selfStamina frozen at its 1.0 default forever: the exhausted gate
+    // (main.ts attackAllowed) never saw the server's 0 and swings always
+    // passed. Stamina is client-session state (no map semantics).
+    const stEarly = (snap.self as { stamina?: number }).stamina;
+    if (typeof stEarly === "number") this.selfStamina = stEarly;
     // MAP-SWITCH GUARD (user 16/09): the server moves the body to the
     // destination runtime on the portal tick, but the matching welcome (the
     // payload that actually swaps map/collision) arrives a frame later.
