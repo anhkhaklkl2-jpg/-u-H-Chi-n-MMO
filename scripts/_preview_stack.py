@@ -420,7 +420,10 @@ class PreviewStack(LocalStack):
     async def _cmd_bar(self, cid: int, uid: int, rt, value) -> None:
         """Set HP/mana/stamina to exact numbers for bar-widget testing:
         value = "hp,mana,stamina" (each optional: "hp,", ",mana", "50,10,5").
-        Bypasses regen via last_damaged_at so values STICK for observation."""
+        Bypasses regen via last_damaged_at so values STICK for observation.
+        Stamina 0 also pins the web session (stamina_lock) so the 20 Hz
+        regen beat cannot refill it — the exhausted-attack gate test.
+        """
         player = self._player_or_msg(cid, uid, rt)
         if player is None:
             return
@@ -437,6 +440,9 @@ class PreviewStack(LocalStack):
         player.hp = max(1, round(hp))
         player.mana = round(mana)
         player.stamina = round(stamina)
+        if stamina <= 0:
+            from game.stamina_pin import pin_stamina
+            pin_stamina(rt, uid, True)
         player.last_damaged_at = time.time()  # hold off regen so values stick
         await self._send(cid, {"type": "push", "message":
             f"[preview] 📊 HP {player.hp}/{player.max_hp} | mana {player.mana}/{getattr(player, 'max_mana', '?')} | stamina {player.stamina}/{getattr(player, 'max_stamina', '?')}"})

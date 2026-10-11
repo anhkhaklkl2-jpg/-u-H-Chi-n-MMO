@@ -115,6 +115,10 @@ class WebSession:
     dy: float = 0.0
     running: bool = False
     last_tick: float = 0.0
+    # DEBUG PIN (/tietluc 0 / preview bar tester): True = the 20 Hz stamina
+    # regen beat skips this player so the exhausted-attack gate can be
+    # tested without the bar refilling in ~1s. Runtime-only.
+    stamina_lock: bool = False
     # Debt of integration time owed to the client after a stall. When the
     # event loop hiccups (heavy Discord PNG renders at night, GC), raw dt
     # exceeds the 0.2s sweep-collision clamp and the excess used to be thrown
@@ -1501,8 +1505,8 @@ class GameManager:
         # DEBUG PIN (/tietluc 0, user 12/10): any web session with
         # stamina_lock=True skips the refill entirely so the exhausted
         # gate can be tested without the bar refilling in ~1s.
-        for _sess in getattr(rt, "web_sessions", {}).values():
-            if getattr(_sess, "stamina_lock", False) and _sess.user_id == player.user_id:
+        for _sid, _sess in getattr(rt, "web_sessions", {}).items():
+            if getattr(_sess, "stamina_lock", False) and _sid == player.user_id:
                 return
         last = getattr(player, "last_exert_at", None)
         if last is not None and now - last < STAMINA_REGEN_DELAY_S:
