@@ -99,7 +99,7 @@ def test_apply_chop_progress_then_felling():
     rng = random.Random(1)
 
     # hits-1 swings: progress only, no drops, tree still visible.
-    for _ in range(NODE_DEFS["tree"].hits - 1):
+    for _ in range(round(NODE_DEFS["tree"].hits * 3) - 1):  # bare-hand x3 (user 12/10)
         r = apply_chop(s, ChopAction(10), g, inv, rng=rng, now=100.0)
         assert r.success and r.state_changed and r.drops is None
     assert g.is_chopped(TREE_ANCHOR) is False
@@ -124,7 +124,7 @@ def test_chopped_node_disappears_and_regrows():
     g = _bigmap_grid()
     inv = Inventory()
     s = _make_state(g, TREE_ANCHOR[0], TREE_ANCHOR[1] + 1, "NORTH")
-    for _ in range(NODE_DEFS["tree"].hits):
+    for _ in range(round(NODE_DEFS["tree"].hits * 3)):  # bare-hand x3 (user 12/10)
         apply_chop(s, ChopAction(10), g, inv, rng=random.Random(2), now=100.0)
     assert g.is_chopped(TREE_ANCHOR)
 
@@ -151,10 +151,11 @@ def test_bush_requires_two_hits_and_less_drops():
     assert NODE_DEFS["bush"].hits == 3
     inv = Inventory()
     s = _make_state(g, BUSH_ANCHOR[0], BUSH_ANCHOR[1] + 1, "NORTH")
-    r = apply_chop(s, ChopAction(10), g, inv, rng=random.Random(4), now=200.0)
-    assert r.drops is None
-    r = apply_chop(s, ChopAction(10), g, inv, rng=random.Random(4), now=200.0)
-    assert r.drops is None
+    bare = round(NODE_DEFS["bush"].hits * 3)  # x3 (user 12/10)
+    r = None
+    for i in range(bare - 1):
+        r = apply_chop(s, ChopAction(10), g, inv, rng=random.Random(4), now=200.0)
+        assert r.drops is None
     r = apply_chop(s, ChopAction(10), g, inv, rng=random.Random(4), now=200.0)
     assert r.drops is not None and g.is_chopped(BUSH_ANCHOR)
 
@@ -182,7 +183,7 @@ def test_render_kwargs_hides_chopped_trees():
 
     inv = Inventory()
     s = _make_state(g, TREE_ANCHOR[0], TREE_ANCHOR[1] + 1, "NORTH")
-    for _ in range(NODE_DEFS["tree"].hits):
+    for _ in range(round(NODE_DEFS["tree"].hits * 3)):  # bare-hand x3 (user 12/10)
         apply_chop(s, ChopAction(10), g, inv, rng=random.Random(5), now=100.0)
     assert len(render_kwargs(rt)["resource_tiles"]) == 661  # 665 - 4 tree tiles
 
@@ -223,7 +224,7 @@ def test_manager_dispatch_chop_persists_inventory():
 
     async def main():
         last = None
-        for _ in range(NODE_DEFS["tree"].hits):
+        for _ in range(round(NODE_DEFS["tree"].hits * 3)):  # bare-hand x3 (user 12/10)
             _rt, last = await mgr.dispatch(1, ChopAction(10))
         assert last.drops is not None
         inv = mgr.get_inventory(1, 10)

@@ -636,12 +636,18 @@ def apply_break_block(
     # Damage now scales with the tier multiplier (wood 1.0 ... steel 3.2),
     # rounded — stone hardness 6: wood 6 hits, stone 5, iron 4, gold 3,
     # steel 2. Wrong family / bare hand still deals the legacy damage 1.
+    _bare_penalty = 1.0
     if right_tool and td is not None:
         from game.tools import mult_of
 
         damage = max(1, round(2.0 * mult_of(td.material)))
     else:
+        # BARE HAND x3 slow (user 12/10): tay không đập chậm gấp 3 — cooldown
+        # dài gấp 3 lần swing thường, để TỐN THỜI GIAN thật (không đổi số
+        # hit, đổi nhịp đập). Wrong-family tool giữ nhịp cũ.
         damage = 1
+        if td is None:
+            _bare_penalty = 3.0
     if tired:
         # Out of stamina (user rule): still works, HALF damage — the block
         # breaks eventually, just twice as slow. Min 1 so it never stalls.
@@ -649,6 +655,10 @@ def apply_break_block(
     # Stamp wall-clock time for the block self-repair countdown (user rule
     # 13/09): nobody hitting the block for 3.5 s heals its crack gradually.
     import time as _time
+
+    if _bare_penalty > 1.0:
+        import time as _bare_time
+        player.last_swing_at = _bare_time.monotonic() + (_bare_penalty - 1.0) * PLAYER_SWING_COOLDOWN
 
     total = blocks.add_damage(tx, ty, damage, _time.time())
     if total < hardness:
@@ -775,22 +785,8 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     if not player.alive:
         return ActionResult(False, "dead")
 
-    # WAND GATE (user 10/10): spells are a WAND-ONLY verb. The held hotbar
-    # slot must BE the magic wand — no wand, no cast. _held_item_id reads
-    # the state.held_slots mirror (same pipeline as chop/attack); magic_wand
-    # is NOT in WEAPON_ITEM_IDS so scan-fallback never fakes a wand.
-    held_items = getattr(state, "held_slots", None)
-    if held_items is None:
-        return ActionResult(False, "no_wand")
-    try:
-        _slot = int(held_items.get(user_id, 0) or 0)
-    except (TypeError, ValueError):
-        _slot = 0
-    inventories = getattr(state, "inventories", None) or {}
-    _inv = inventories.get(user_id)
-    _held = _inv.hotbar().get(_slot) if _inv is not None else None
-    if _held != "magic_wand" or (_inv is not None and _inv.count(_held) <= 0):
-        return ActionResult(False, "no_wand")
+    # WAND GATE REMOVED (user 12/10): spells are now a FREE verb — no held
+    # wand required. Cast = fire; nothing to attune, nothing to hold.
 
     now_s = _t.monotonic()
     if now_s - getattr(player, "last_spell_at", 0.0) < spell["cooldown"]:

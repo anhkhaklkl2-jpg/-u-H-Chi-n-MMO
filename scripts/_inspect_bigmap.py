@@ -26,7 +26,7 @@ async def main():
     p.x, p.y = 20, 1
     p.direction = "NORTH"
     last = None
-    for _ in range(NODE_DEFS["tree"].hits):
+    for _ in range(round(NODE_DEFS["tree"].hits * 3)):  # bare-hand x3 (user 12/10)
         _rt, last = await mgr.dispatch(7, ChopAction(10))
     assert last.drops is not None, "felling should drop"
     kw = render_kwargs(rt)

@@ -76,7 +76,7 @@ def test_chop_fells_meteor_ore():
 
     result = None
     # Bare hands: 65*1.4 = 91 swings — drive progress straight to the fell.
-    for _ in range(200):
+    for _ in range(400):  # bare-hand x3 = 273 swings max (user 12/10)
         result = apply_chop(state, ChopAction(user_id=1, dx=0, dy=-1),
                             g, inventory=None)
         if result.success and result.drops:

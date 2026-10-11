@@ -36,6 +36,9 @@ RESOURCE_LAYER_NAMES = {
     # would resurrect the minable-dead-tree bug (gid 47/48).
     # "cây cầu(đi qua được)" (the lobbytrade bridge) must never match "cây":
     # it is decor art on a walkable carve, not harvestable nodes.
+    # Ekonia cave props (user 30/09: "đá và nấm trong cave đập được như ngoài
+    # thảo nguyên"): the cave's decor layer is named "Props".
+    "props", "props2",
 }
 
 # Data-driven tile registry: resource-layer GID -> (kind, dx, dy from anchor).
@@ -52,6 +55,16 @@ _FORAGE_NODE_KINDS = frozenset({
 # The node covers 2x2 tiles like a tree ("to hơn, kiểu như cây") but mines
 # like a rock: pickaxe + stone drops ("đập rớt ra đá, tương tác y như đá").
 METEOR_ORE_GID = -77
+
+# Cave ore veins (ekonia/cave_area1): runtime-minted nodes like the meteor
+# ore — no Tiled gid exists for them on the cave's baked sheet, so negative
+# pseudo-gids map to bundled node sprites (assets/node/<id>.png).
+COPPER_ORE_GID = -78
+IRON_ORE_GID = -79
+
+# Maps whose runtimes get a deterministic scatter of cave ore veins
+# (minted in ResourceGrid.from_map — see spawn_ore_veins).
+ORE_VEIN_MAPS = {"ekonia/cave_area1"}
 
 TILE_NODE_PARTS: Dict[int, Tuple[str, int, int]] = {
     9: ("tree", 0, 0),
@@ -88,6 +101,18 @@ TILE_NODE_PARTS: Dict[int, Tuple[str, int, int]] = {
     640: ("flower", 0, 0),
     643: ("flower", 0, 0),
     648: ("flower", 0, 0),
+    # ---- Ekonia cave props (layer "Props", baked-sheet firstgid 1):
+    # pixel-audited from the contact sheet — brown mushrooms with stems
+    # (forage) and boulders (mineable rocks). The sharp wall spikes
+    # (247-250) and ground scatter (3365/3366) stay unmapped: pure decor.
+    157: ("mushroom_brown", 0, 0),
+    292: ("mushroom_brown", 0, 0),
+    293: ("mushroom_brown", 0, 0),
+    309: ("mushroom_brown", 0, 0),
+    3379: ("mushroom_brown", 0, 0),
+    331: ("rock_big", 0, 0),
+    3368: ("rock_small", 0, 0),
+    168: ("rock_small", 0, 0),
     # Ore/rock vein tiles ("vật phẩm ko liên quan" layer on the bigmap):
     # mined with the ⛏️ pickaxe morph instead of the axe.
     # Gids 47/48 also draw dead-tree tiles on the "cây chết" layer (same
@@ -103,6 +128,9 @@ TILE_NODE_PARTS: Dict[int, Tuple[str, int, int]] = {
     # exists for it), so every tile carries the same negative pseudo-gid and
     # the anchor part marks the top-left corner.
     METEOR_ORE_GID: ("meteor_ore", 0, 0),
+    # Cave ore veins (runtime-minted, 1 tile each): copper + iron.
+    COPPER_ORE_GID: ("copper_ore", 0, 0),
+    IRON_ORE_GID: ("iron_ore", 0, 0),
 }
 
 
@@ -157,6 +185,32 @@ NODE_DEFS: Dict[str, ResourceDef] = {
     # Meteor-ore (spawned at meteor craters): interaction mirrors rock_big
     # (pickaxe tiers / bare-hand slow path handled in apply_chop) but the
     # node is BIGGER — a 2x2 cluster — and yields more stone per fell.
+    # Cave ore veins (ekonia/cave_area1): mined like rocks — pickaxe fast,
+    # bare-hand brutally slow (65 swings scaled below). Copper is the soft
+    # tier (intro ore), iron the step up.
+    "copper_ore": ResourceDef(
+        "copper_ore",
+        "Quặng đồng",
+        hits=65,
+        respawn_s=420.0,
+        # Always 1 copper ore, +50% stone rubble.
+        drops=[
+            ("copper_ore", 1.0, 1),
+            ("stone", 0.5, 1),
+        ],
+    ),
+    "iron_ore": ResourceDef(
+        "iron_ore",
+        "Quặng sắt",
+        hits=85,
+        respawn_s=420.0,
+        # Always 1 iron ore, +35% for a second, +50% stone rubble.
+        drops=[
+            ("iron_ore", 1.0, 1),
+            ("iron_ore", 0.35, 1),
+            ("stone", 0.5, 1),
+        ],
+    ),
     "meteor_ore": ResourceDef(
         "meteor_ore",
         "Quặng thiên thạch",
@@ -228,6 +282,156 @@ class ResourceNode:
     kind: str
     anchor: Tuple[int, int]  # top-left tile; chop progress is keyed by this
     tiles: List[Tuple[int, int]]  # every tile the sprite covers
+
+
+# Cave ore vein scatter (per cave map): copper is the common vein, iron the
+# rarer step-up. Deterministic per map_id — every boot/restart scatters the
+# SAME veins, so a felled-and-regrown vein never teleports around the cave.
+CAVE_ORE_COUNTS = {"copper_ore": 10, "iron_ore": 8}
+
+
+def _ores_companion_path(map_data):
+    """Companion file pinning the cave's vein anchors (like .solids.json).
+
+    ``<map>.ores.json`` next to the map: [{kind, x, y}, ...]. Pins the
+    scatter so every boot/process mines the SAME veins — the runtime
+    walkable set can drift slightly between loads (cave carve refinement),
+    and a hash-seeded scatter alone would teleport veins across restarts.
+    """
+    import json
+    from pathlib import Path
+
+    p = getattr(map_data, "image_path", None)
+    if p is not None:
+        return Path(p).with_suffix(".ores.json")
+    # No baked-image companion (Tiled maps): fall back to the assets dir
+    # convention (config.ASSETS_DIR / <map_id>.ores.json).
+    map_id = getattr(map_data, "map_id", "")
+    if not map_id:
+        return None
+    try:
+        from config import ASSETS_DIR
+
+        return Path(ASSETS_DIR) / f"{map_id}.ores.json"
+    except Exception:
+        return None
+
+
+def _mint_vein(grid, kind: str, x: int, y: int) -> None:
+    gid = COPPER_ORE_GID if kind == "copper_ore" else IRON_ORE_GID
+    node = ResourceNode(kind, (x, y), [(x, y)])
+    grid.nodes[(x, y)] = node
+    grid._tile_index[(x, y)] = node
+    grid._tile_gids[(x, y)] = gid
+
+
+def spawn_ore_veins(grid: "ResourceGrid", map_data, rng=None) -> List[Tuple[int, int]]:
+    """Mint the cave's copper/iron ore veins onto ``grid`` (runtime nodes).
+
+    Same mechanism as the meteor-crater ore (game/meteors.py): 1-tile nodes
+    carrying a negative pseudo-gid so both renderers draw the bundled
+    sprites (client asset lane ``node/<id>.png``). Nodes land only on
+    walkable floor tiles that are free of other nodes, keeping at least one
+    tile between veins so a vein never walls a corridor.
+
+    First run SCATTERS + pins the anchors into ``<map>.ores.json``; every
+    later load reuses the pinned anchors (only skipping tiles that have
+    become blocked).
+
+    Returns the list of minted anchors (for tests / debug prints).
+    """
+    if grid is None or map_data is None:
+        return []
+    minted: List[Tuple[int, int]] = []
+    # ART PRESENCE set (computed once): a candidate must carry a non-zero
+    # gid on SOME layer. The cave's interior black-void cells pass
+    # is_walkable (the carve opens no-art cells) but draw NOTHING — a vein
+    # there renders floating in the void, visually "bên ngoài map" (user
+    # report).
+    art = set()
+    for _name, _grid in getattr(map_data, "tile_layers", None) or []:
+        for _y, _row in enumerate(_grid):
+            for _x, _gid in enumerate(_row):
+                if _gid:
+                    art.add((_x, _y))
+
+    def _fits(x: int, y: int) -> bool:
+        return (
+            map_data.is_walkable(x, y)
+            and (x, y) in art
+            and (x, y) not in grid._tile_index
+            and not any(
+                (nx, ny) in grid._tile_index
+                for nx in range(x - 1, x + 2)
+                for ny in range(y - 1, y + 2)
+            )
+        )
+
+    companion = _ores_companion_path(map_data)
+    if companion is not None and companion.exists():
+        try:
+            import json
+
+            rows = json.loads(companion.read_text(encoding="utf-8"))
+            for row in rows:
+                kind = str(row.get("kind", ""))
+                x, y = int(row["x"]), int(row["y"])
+                if kind not in CAVE_ORE_COUNTS or not _fits(x, y):
+                    continue  # map changed under the pins: skip that vein
+                _mint_vein(grid, kind, x, y)
+                minted.append((x, y))
+            return minted
+        except Exception:
+            pass  # corrupt companion: fall through to a fresh scatter
+
+    rng = rng if rng is not None else random.Random(
+        f"cave-ores-{getattr(map_data, 'map_id', '')}"
+    )
+    w, h = map_data.width, map_data.height
+    # ART PRESENCE: a candidate must carry a non-zero gid on SOME layer.
+    # The cave's interior black-void cells pass is_walkable (the carve opens
+    # no-art cells) but draw NOTHING — a vein there renders floating in the
+    # void, visually "bên ngoài map" (user report).
+    art = set()
+    for _name, _grid in getattr(map_data, "tile_layers", None) or []:
+        for _y, _row in enumerate(_grid):
+            for _x, _gid in enumerate(_row):
+                if _gid:
+                    art.add((_x, _y))
+    # SORTED before the seeded shuffle: same walkable set -> same scatter
+    # regardless of the iteration order that produced it.
+    candidates = sorted(
+        (x, y)
+        for y in range(1, h - 1)
+        for x in range(1, w - 1)
+        if map_data.is_walkable(x, y) and (x, y) in art
+        and (x, y) not in grid._tile_index
+    )
+    rng.shuffle(candidates)
+    pins: List[dict] = []
+    for kind, count in CAVE_ORE_COUNTS.items():
+        placed = 0
+        for (x, y) in candidates:
+            if placed >= count:
+                break
+            if not _fits(x, y):
+                continue
+            _mint_vein(grid, kind, x, y)
+            minted.append((x, y))
+            pins.append({"kind": kind, "x": x, "y": y})
+            placed += 1
+    # Pin the scatter for every future load (best-effort write).
+    if companion is not None and pins:
+        try:
+            import json
+
+            companion.parent.mkdir(parents=True, exist_ok=True)
+            companion.write_text(
+                json.dumps(pins, ensure_ascii=False, indent=1), encoding="utf-8"
+            )
+        except Exception:
+            pass  # read-only assets: the per-process scatter still works
+    return minted
 class ResourceGrid:
     """Per-scenario harvestable-node state. Pure, no IO.
 
@@ -283,6 +487,9 @@ class ResourceGrid:
                         for t in tiles:
                             g._tile_index[t] = g.nodes[anchor]
                     g._tile_gids[(x, y)] = gid
+        # Cave ore veins: runtime-minted scatter (deterministic per map).
+        if getattr(map_data, "map_id", "") in ORE_VEIN_MAPS:
+            spawn_ore_veins(g, map_data)
         return g
 
     # ----- lookups -----
@@ -404,7 +611,13 @@ PROGRESS_REGEN_STEP_S = 1.0  # one hit lost per this many seconds
 
 # Node kinds harvested with a PICKAXE instead of the axe (ore/rock veins).
 ORE_NODE_KINDS = {"ore", "rock", "stone_node", "iron_ore", "coal",
-                  "rock_small", "rock_big", "meteor_ore"}
+                  "rock_small", "rock_big", "meteor_ore",
+                  "copper_ore", "iron_ore"}
+
+# Cave ore veins scale the rock hit table (wood pickaxe 12 swings baseline):
+# copper = rock-equivalent, iron = 1.3x. Bare-hand = 65 swings scaled the
+# same way ("vẫn tay không đập được nhưng mà cực lâu").
+ORE_VEIN_SCALE = {"copper_ore": 1.0, "iron_ore": 1.3}
 
 
 def is_ore_kind(kind: str) -> bool:
@@ -414,7 +627,9 @@ def is_ore_kind(kind: str) -> bool:
 
 # Pickaxe swings to mine ONE rock, per pickaxe material (user tune 14/09:
 # wood = 12, NOT the generic pickaxe ladder's 5). Big rock scales 1.4x.
-ROCK_PICKAXE_HITS = {"wood": 12, "iron": 8, "gold": 5, "steel": 3}
+# stone = 12/1.3 (TIER_MULT) — bug 30/09: missing stone tier made the stone
+# pickaxe fall back to wood's 12 (identical swing count, user report).
+ROCK_PICKAXE_HITS = {"wood": 12, "stone": 9, "iron": 8, "gold": 5, "steel": 3}
 
 
 def _target_tile(player) -> Tuple[int, int]:
@@ -451,6 +666,7 @@ def apply_chop(state: GameState,
     rng=None,
     now: Optional[float] = None,
     tired: bool = False,
+    held_slot: Optional[int] = None,
 ) -> ActionResult:
     """One swing at the node on the target tile.
 
@@ -504,12 +720,32 @@ def apply_chop(state: GameState,
 
     ore = is_ore_kind(node.kind)
     family = "pickaxe" if ore else "axe"
+    # TOOL = WHAT THE HAND HOLDS (user bug 29/09: "cầm cúp rồi đổi sang tay
+    # khác đập vẫn nhanh như cầm cúp"). The old code fell back to
+    # best_tool_of_family(inventory) — the best pickaxe/axe ANYWHERE in the
+    # bag — so swapping hotbar slots changed nothing. Now: the tool only
+    # counts when it sits in the HELD hotbar slot (the slot the client
+    # selects); anything else swings bare-handed. ``held_slot=None`` (Discord
+    # path / legacy callers) keeps the old best-in-bag behaviour.
     tool_id = action.tool_id
     if tool_id is not None:
         td = parse_tool_id(tool_id)
         if td is None or td.family != family or inventory.count(tool_id) <= 0:
             tool_id = None
-    if tool_id is None:
+    if tool_id is None and held_slot is not None:
+        held_id = None
+        try:
+            held_id = inventory.hotbar().get(int(held_slot))
+        except Exception:
+            held_id = None
+        if held_id:
+            td = parse_tool_id(held_id)
+            if (
+                td is not None and td.family == family
+                and inventory.count(held_id) > 0
+            ):
+                tool_id = held_id
+    if tool_id is None and held_slot is None:
         tool_id = tool_mod.best_tool_of_family(inventory, family)
 
     # Pickaxe GATE applies to ORE veins only: rocks (rock_small/rock_big)
@@ -527,18 +763,28 @@ def apply_chop(state: GameState,
         if tool is not None:
             hits = round(ROCK_PICKAXE_HITS.get(tool.material, 12) * scale)
         else:
-            hits = round((65 if node.kind == "rock_small" else 65 * 1.4))
+            # Bare hand x3 (user 12/10): đập tay không phải tốn gấp 3 thời gian.
+            hits = round((65 if node.kind == "rock_small" else 65 * 1.4) * 3)
+    elif node.kind in ORE_VEIN_SCALE:
+        # Cave ore veins ride the SAME rock table (pickaxe fast, bare-hand
+        # slow) — copper at rock_small cost, iron 1.3x.
+        scale = ORE_VEIN_SCALE[node.kind]
+        if tool is not None:
+            hits = round(ROCK_PICKAXE_HITS.get(tool.material, 12) * scale)
+        else:
+            hits = round(65 * scale * 3)
     elif node.kind == "meteor_ore":
         if tool is not None:
             hits = round(ROCK_PICKAXE_HITS.get(tool.material, 12) * 1.4)
         else:
-            hits = round(65 * 1.4)
+            hits = round(65 * 1.4 * 3)
     else:
         hits_fn = tool_mod.pickaxe_hits if ore else tool_mod.axe_hits
         if tool is not None:
             hits = hits_fn(tool.material)
         else:
-            hits = NODE_DEFS[node.kind].hits
+            # Bare hand x3 (user 12/10): cây/bụi cứng tay không phải đập gấp 3.
+            hits = round(NODE_DEFS[node.kind].hits * 3)
 
     now = time.time() if now is None else now
     rng = rng if rng is not None else random
