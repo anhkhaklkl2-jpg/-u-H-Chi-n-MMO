@@ -1971,8 +1971,12 @@ export class Hud {
         const idx = idxOf(cell.col, cell.row);
         const src = this.inventory.bag.find(
           (b) => b && b.id === cell.id && b.qty > 0);
-        if (!src) continue; // bag short: leave the cell empty (partial)
-        this.matGrid[idx] = { id: cell.id, qty: 1, ghost: !src };
+        if (!src) {
+          // BAG SHORT → faded ghost cell on the pattern spot (user 12/10).
+          this.matGrid[idx] = { id: cell.id, qty: 1, ghost: true };
+          continue;
+        }
+        this.matGrid[idx] = { id: cell.id, qty: 1, ghost: false };
         src.qty -= 1;
         if (src.qty <= 0) {
           this.inventory.bag[this.inventory.bag.indexOf(src)] = null;
