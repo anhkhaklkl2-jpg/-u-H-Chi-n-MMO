@@ -1,0 +1,29 @@
+[preview-stack] ready on http://127.0.0.1:8901/?preview=1  (dist=D:\d? ?n mini build bot discord mmo event\web_client\relay\dist)
+[stack] browser connected cid=1
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] sealed 1847 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+Traceback (most recent call last):
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 166, in _preview_cmd
+    await handler(cid, uid, rt, value)
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 446, in _cmd_tp
+    remove_web_zombie(rt.state, z.id)
+                                ^^^^
+AttributeError: 'Zombie' object has no attribute 'id'
+Traceback (most recent call last):
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 166, in _preview_cmd
+    await handler(cid, uid, rt, value)
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 446, in _cmd_tp
+    remove_web_zombie(rt.state, z.id)
+                                ^^^^
+AttributeError: 'Zombie' object has no attribute 'id'
+Traceback (most recent call last):
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 166, in _preview_cmd
+    await handler(cid, uid, rt, value)
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 446, in _cmd_tp
+    remove_web_zombie(rt.state, z.id)
+                                ^^^^
+AttributeError: 'Zombie' object has no attribute 'id'
+[METEOR] crater ore spawned at (242,13)
+[METEOR] crater ore spawned at (71,118)
+[stack] browser disconnected cid=1

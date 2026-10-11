@@ -728,11 +728,16 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
     # The SPRITE silhouette (ground-free alpha >=128) wins where present —
     # the box must hug what the player SEES; the authored poly (often a
     # full-tile rect) only fills cells the sprite silhouette misses.
+    # Cells a SPRITE silhouette owns (poly_albedo): a poly cell with no
+    # albedo entry is a SPILL — the covering tile's art lives elsewhere, so
+    # nothing visible justifies a block there (poly-ghost carve below).
+    albedo_cells: set = set()
     if poly_albedo:
         for cx, cy, m in poly_albedo:
             gx, gy = cx - ox, cy - oy
             if 0 <= gx < width and 0 <= gy < height and m:
                 poly_exact_masks[(gx, gy)] = int(m) & ((1 << 64) - 1)
+                albedo_cells.add((gx, gy))
     # Sub-tile masks: for every blocked tile, remember the blocking layer's
     # GID (topmost blocking layer wins) so tile_masks can derive the sprite's
     # real opaque shape from the tileset alpha.
@@ -745,6 +750,10 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
     # also overlaps there — the wall body is solid regardless of the tree's
     # transparency (a mask hole in a wall reads as walking through it).
     wall_owned: set = set()
+    # wall_owned MINUS poly spill (wall_owned is later unioned with poly_set,
+    # so it cannot answer "does WALL ART own this cell"): kept separately for
+    # the poly-ghost carve.
+    wall_art_cells: set = set()
     for name, grid in tile_layers:
         nl = _normalize_layer_name(name)
         if not _is_blocking_layer(nl):
@@ -756,6 +765,7 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
                 for gx, gid in enumerate(row):
                     if gx < width and gid:
                         wall_owned.add((gx, gy))
+                        wall_art_cells.add((gx, gy))
             continue
         for gy, row in enumerate(grid):
             if gy >= height:
@@ -909,6 +919,67 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
                     _carved += 1
         if _carved:
             print(f"  [cave] carved {_carved} invisible-blocker cells (no art)")
+        # POLY-GHOST CARVE ("box vo hinh tren san — cua hang"): CaveProps
+        # polys are authored FULL-TILE RECTS that spill onto neighbour cells
+        # whose art is painted UNDER the wall ring. The alpha==0 carve above
+        # only opens fully-transparent cells — a cell with GROUND paint (or
+        # flat decor like moss) stayed SOLID with nothing visible to block:
+        # the player stopped on open floor (the cave-gate approach read as
+        # an invisible wall, "box chan o cua hang van chua on"). Carve every
+        # poly cell that NOTHING owns: no sprite silhouette (poly_albedo),
+        # no blocking-layer art. Sprite-owned poly cells (stalagmites,
+        # trunks, wall pieces) keep their authored shape.
+        _ghosts = 0
+        # Resource-node art cells (rocks/mushrooms — game.resources): the
+        # converter emits NO poly_albedo for the boulders, so albedo alone
+        # cannot vouch for them. A node sprite is a gameplay object — its
+        # box must stay until felled, never carved as a ghost.
+        from game.resources import TILE_NODE_PARTS as _NODE_PARTS
+
+        _node_art = set()
+        for _name, _grid in tile_layers:
+            for _gy, _row in enumerate(_grid):
+                if _gy >= height:
+                    break
+                for _gx, _gid in enumerate(_row):
+                    if _gid and _gx < width and _gid in _NODE_PARTS:
+                        _node_art.add((_gx, _gy))
+        # Floor-paint cells (ground layer gid present): a ghost poly may sit
+        # on PAINTED FLOOR the player plainly sees. NOTE: _cell_composite_alpha
+        # deliberately EXCLUDES ground layers, so it reads 0 here — the check
+        # must be the raw ground gid, not that map.
+        _ground_paint = set()
+        for _name, _grid in tile_layers:
+            _nl = _normalize_layer_name(_name)
+            if "ground" in _nl or "floor" in _nl or "san" in _nl:
+                for _gy, _row in enumerate(_grid):
+                    if _gy >= height:
+                        break
+                    for _gx, _gid in enumerate(_row):
+                        if _gid and _gx < width:
+                            _ground_paint.add((_gx, _gy))
+        for _cy in range(height):
+            for _cx in range(width):
+                if not collision[_cy][_cx]:
+                    continue
+                _key = (_cx, _cy)
+                if (
+                    _key in poly_set
+                    and _key not in albedo_cells
+                    and _key not in _node_art
+                    and _key not in blocking_gids
+                    and _key not in wall_art_cells
+                    # Only open cells where FLOOR is painted — never open a
+                    # cell with nothing drawn at all (void): the seal below
+                    # keeps those solid, rim or not. NOTE: no rim skip — the
+                    # cave-gate approach cells sit on the map's bottom EDGE
+                    # rows, inside the rim band.
+                    and _key in _ground_paint
+                ):
+                    collision[_cy][_cx] = 0
+                    _ghosts += 1
+        if _ghosts:
+            print(f"  [cave] carved {_ghosts} poly-ghost cells (no owner)")
         # VOID SEAL: any cell with NO art anywhere on the outer ring is
         # unconditionally solid — conversions leave the sheet edge without
         # wall coverage, and walkable void was reachable from inside.
@@ -922,6 +993,12 @@ def load_map(map_id: str, assets_dir: Path) -> MapData:
                 if not on_rim:
                     continue
                 if _comp_alpha is not None and _comp_alpha[_cy][_cx] == 0:
+                    # Ground-PAINTED cells are floor, not void (the cave-gate
+                    # approach row sits on the map's bottom edge and its
+                    # ground gid is present — sealing it rebuilt the invisible
+                    # wall the poly-ghost carve just removed).
+                    if (_cx, _cy) in _ground_paint:
+                        continue
                     if not collision[_cy][_cx]:
                         _sealed += 1
                     collision[_cy][_cx] = 1

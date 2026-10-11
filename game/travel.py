@@ -239,7 +239,7 @@ def check_portal_after_move(rt, portal_cfg: Portals, user_id: int,
 def move_player_between_runtimes(
     src_rt, dst_rt, user_id: int, to_tile: tuple
 ):
-    """Move one Player + PlayerScreen from ``src_rt`` to ``dst_rt``.
+    """Move one Player + PlayerScreen from ``src_rt`` to ``dst_rt`.
 
     Pure state move (no Discord I/O): the player object migrates wholesale,
     the screen keeps its Discord message ids and gets a fresh camera for the
@@ -252,8 +252,7 @@ def move_player_between_runtimes(
     # WORLD PERSISTENCE: remember the world the body now stands in so a
     # rejoin / bot restart respawns the player HERE, not in the main map.
     main_map = getattr(dst_rt, "main_map_id", None) or dst_rt.map_data.map_id
-    player.world_map = None if dst_rt.map_data.map_id == main_map \
-        else dst_rt.map_data.map_id
+    player.world_map = None if dst_rt.map_data.map_id == main_map else dst_rt.map_data.map_id
     # Teleports are tile-based: re-centre the continuous (web) position and
     # clear the continuous-moved flag so the save writes the new tile.
     player.float_moved = False

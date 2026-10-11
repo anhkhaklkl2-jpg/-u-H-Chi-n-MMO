@@ -1,0 +1,5 @@
+actor: NinjaGreen
+group: CharacterAnimated
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\CharacterAnimated\NinjaGreen
+preview: idle-crop
+spritesheet: SpriteSheet.png (256x544 px)

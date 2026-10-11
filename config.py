@@ -43,7 +43,7 @@ PAIR_CHECK_SECONDS = float(os.getenv("PAIR_CHECK_SECONDS", "60.0"))
 # Hotbar size: the FIRST N stacks of the player's ordered bag are projected
 # onto the hotbar automatically (D-pad rail, hub HUD, inventory grid). There
 # are no separate hotbar bindings to manage anymore.
-HOTBAR_SLOTS = 6
+HOTBAR_SLOTS = 10
 
 # Per-player session watchdog. A session (one player's screen+hub pair) that
 # sees no button press for SESSION_TIMEOUT_MINUTES is ended automatically so

@@ -1,0 +1,5 @@
+actor: LionCub
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\LionCub
+preview: faceset
+spritesheet: SpriteSheet.png (32x16 px)

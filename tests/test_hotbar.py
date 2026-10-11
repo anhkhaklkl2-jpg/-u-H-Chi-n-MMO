@@ -90,9 +90,9 @@ def test_manager_hotbar_runtime_and_db():
                 await migrate(db)
                 mgr.db = db
                 rt = mgr.create_runtime(1, "test-map")
-                # Default: 6 empty slots (empty bag).
+                # Default: HOTBAR_SLOTS (10) empty slots (empty bag).”
                 hb = mgr.get_hotbar(1, 10)
-                assert len(hb) == 6 and all(v is None for v in hb.values())
+                assert len(hb) == 10 and all(v is None for v in hb.values())
                 # Bag slot order projects onto the hotbar POSITIONALLY.
                 await mgr.add_item(1, 10, "potion_hp")
                 await mgr.add_item(1, 10, "potion_mp")
@@ -133,8 +133,8 @@ def test_map_view_hotbar_buttons_mirror_bindings():
             return self.get_runtime(cid)
 
     view = MapView(100, M(), 42)
-    # Exactly 6 hotbar buttons on the D-pad.
-    assert len(view.hotbar_btns) == 6
+    # Exactly HOTBAR_SLOTS (10) hotbar buttons on the D-pad.
+    assert len(view.hotbar_btns) == 10
     # First bag stack shows the item emoji + count and is pressable.
     btn0 = view.hotbar_btns[0]
     assert btn0.emoji is not None and btn0.emoji.name == "🧪"
@@ -159,20 +159,26 @@ def test_hub_hotbar_draws_bound_items():
     filled = renderer.render(rt, rt.map_data, rt.npc_map, 10,
                              hotbar={0: ("potion_hp", 3)})
     # Slot 0 (leftmost, vertically centred) now carries the item glyph.
-    # Internal layout: 6x84px slots, 12px gaps, centred +60 shift in 840x132.
-    total = 6 * 84 + 5 * 12
-    x0 = (840 - total) // 2 + 60
-    y0 = (132 - 84) // 2
-    probe = (x0 + 42, y0 + 42)  # centre of slot 0
+    # Internal layout: fit-to-width coalescing — 10 slots of 84px don't fit
+    # 840px, so _draw_hotbar shrinks the slot size (min 8) until the bar fits.
+    slot0 = 84
+    while (840 - 9 * 12) // 10 < slot0 and slot0 > 8:
+        slot0 -= 1
+    if (840 - 9 * 12) // 10 < slot0:
+        slot0 = (840 - 9 * 12) // 10
+    total = 10 * slot0 + 9 * 12
+    x0 = (840 - total) // 2
+    y0 = (132 - slot0) // 2
+    probe = (x0 + slot0 // 2, y0 + slot0 // 2)  # centre of slot 0
     assert plain.image.getpixel(probe) != filled.image.getpixel(probe)
     # A different slot (far right) stays empty in both.
-    probe_empty = (x0 + 5 * (84 + 12) + 42, y0 + 42)
+    probe_empty = (x0 + 9 * (slot0 + 12) + slot0 // 2, y0 + slot0 // 2)
     assert (plain.image.getpixel(probe_empty) == filled.image.getpixel(probe_empty))
 
 
 def test_hub_hotbar_only_six_slots_render():
-    """The hub bar shows hotbar slots 0-5; bindings in slots 6-8 (D-pad only)
-    must NOT be drawn on the hub."""
+    """The hub bar renders exactly HOTBAR_SLOTS cells — a hotbar dict keyed
+    outside that window must not change the drawing."""
     from game.state import GameState
 
     renderer = HubRenderer(ASSETS)
@@ -180,13 +186,9 @@ def test_hub_hotbar_only_six_slots_render():
     rt.state.add_player(10, "A", 5, 5)
     plain = renderer.render(rt, rt.map_data, rt.npc_map, 10)
     filled = renderer.render(rt, rt.map_data, rt.npc_map, 10,
-                             hotbar={7: ("potion_hp", 3)})
-    total = 6 * 84 + 5 * 12
-    x0 = (840 - total) // 2 + 60
-    y0 = (132 - 84) // 2
-    # Slot 6 and beyond do not exist on the hub bar — nothing changes.
+                             hotbar={99: ("potion_hp", 3)})
+    # Key 99 maps to no rendered cell — nothing changes.
     assert plain.image.tobytes() == filled.image.tobytes()
-    assert x0 > 0 and y0 >= 0  # sanity for the layout math above
 
 
 def test_block_items_are_not_question_marks():
@@ -207,7 +209,7 @@ def test_hotbar_strip_format():
 
     strip = _format_hotbar_strip({0: ("potion_hp", 2), 3: ("stone", 5)})
     assert "🧪x2" in strip and "🪨x5" in strip
-    assert strip.count("⬛") == 4  # the 4 empty slots (6 total)
+    assert strip.count("⬛") == 8  # the 8 empty slots (10 total)
     assert "🔥" in strip
 
 

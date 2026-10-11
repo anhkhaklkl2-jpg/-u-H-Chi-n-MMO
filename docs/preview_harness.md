@@ -80,6 +80,23 @@ scripts/_preview_stack.py (PreviewStack extends LocalStack) │ preview_state
 3. Build lại client nếu bước 2 sửa → restart stack → mở `?preview=1`.
 4. Người dùng bấm nút, xem ngay; log `[preview]` hiện trong panel.
 
+## ⚠️ QUY TẮC VERIFY TRONG PREVIEW (user 06/10/2026 — NHẤN MẠNH)
+
+**CẤM SPAM VÒNG LẶP "CHỤP ẢNH → TỰ ĐỌC/PHÂN TÍCH → ĐOÁN → CHỤP LẠI".**
+Vòng lặp `preview_screenshot` nhiều vòng là CỰC KỲ MẤT THỜI GIAN, ảnh chụp
+qua browser automation còn hay dính fluke WebGL (canvas trắng/đen) khiến
+kết luận sai. Thay thế:
+
+1. **Verify bằng probe, không bằng ảnh**: `preview_evaluate` đọc thẳng state
+   (scene npc/mob maps, vị trí, console, network) — nhanh, chính xác, không
+   fluke. 1 lần probe = 1 câu trả lời dứt khoát.
+2. **User là nguồn xác nhận nhanh nhất**: user đang mở tab preview song song.
+   Không chắc điều gì hiển thị thế nào → HỎI user 1 câu thay vì chụp 5 lần.
+3. **Chỉ chụp ảnh khi thật sự cần**: lỗi render/pixel mà DOM probe không thấy
+   được, hoặc user yêu cầu. Tối đa 1–2 lần chụp mỗi nghi vấn, KHÔNG lặp.
+4. **1 vòng chụp không cho kết luận → DỪNG, hỏi user.** Không chuyển sang
+   vòng chụp thứ 3.
+
 ## Lỗi đã gặp (đừng lặp lại)
 
 - **Root 403**: `add_static("/")` đăng ký trước `add_get("/")` → mọi route

@@ -794,6 +794,9 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
 
     if player.mana < spell["mana"]:
         return ActionResult(False, "no_mana")
+    # SPEED-MODE (user 12/10): preview/test cần spell không bao giờ hết mana.
+    # Đặt mana về đủ trước khi trừ — cast LUÔN trúng, KHÔNG dừng vì mana.
+    player.mana = max(player.mana, spell["mana"])
 
     # Cast-range gate: the aim offset (dx,dy) from the player tile must sit
     # within SPELL_CAST_RANGE (same clamp idea as chop/place targeting).

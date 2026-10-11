@@ -650,6 +650,17 @@ class MapCog(commands.Cog):
         rt.state.players.clear()
         rt.state.zombies.clear()
         rt.members.clear()
+        # CONTINUITY (user 06/10): side worlds (cave/forest) of this channel
+        # keep their own body lists — without this sweep their periodic
+        # _schedule_save re-INSERTed the just-deleted players rows with
+        # side-map coordinates, and a later reload dropped the player at a
+        # random grassland spot.
+        for _side in list(getattr(self.manager, "side_runtimes", {}).values()):
+            if getattr(_side, "channel_id", None) != rt.channel_id:
+                continue
+            _side.state.players.clear()
+            _side.state.zombies.clear()
+            _side.web_sessions.clear()
         rt.state.blocks.clear()  # ground shows again everywhere
         if rt.resources is not None:
             rt.resources.reset()  # every felled tree/bush regrows immediately

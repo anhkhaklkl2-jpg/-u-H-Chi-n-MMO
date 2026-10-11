@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Earth Rock Lift — Spell Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🪨 Earth Rock Lift — vận chiêu (đá nổi từ chân → ném) → impact đôi</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click = ném đá tới điểm đó. G = caster. Đá vận chiêu dưới chân, nổi lên ~5px rồi bay. Impact = rock 7-11 + overlay impact chạy ĐỒNG THỜI.</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// FRAME DATA (base64 nhúng bởi script)
+const FRAME_DATA = {
+"rock/frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABDklEQVR4nO2ZyxGEIAyGI7NleLcB+q/ABrzbB3tiZkFhkyCYaL6j8vgTkxBGAMN4N1PrAn5eQv5s3bfmdbGwNzoTnjPCENdzcT8voWRo7R2FD3fiyDBhcYV3RnDw4t1JSSURlouXLDxSTGIN4g9oiXsVYMts13OAy6/wf0aIinNtFdB4DprLp4viJRlB6VTdum+T1EzHGCFSOEAqvuZgkQcZQCq69iUcZtBdYEJ7AtDZRkdOQ+iq++oIHIBcj6uuQgC4SiTWgJL3pUZLEU35aBhXQI13Ub0Qp7UnG9CrKmC7zxzUwJaa7OclYAVxejK0pTWvlzbiepUCOoSknoCkHxzYS0ZtnjqsDTAM49l8ASVtgWSHmsF0AAAAAElFTkSuQmCC",
+"rock/frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABOElEQVR4nO2YSxKDIAyGa6e3cec9PK33cOd57MoZykD48yBoJ9+uDIS8SX29giAIAgWTVsA6L2e+th27Wi6K+KKS4jkehrx7Cl/n5cwNLa1p+EgPeqYJBaTEOi8npXDu0dvUAFqgIwvZ3auXXCt5XYu4hkt00ghcncOye1D3cu6BPWER+lQxpJaQu9xbYcmI0a/5PUFz0aMuKH7CxA1lK6fRPV3QeJaKnnXEzD2CdKvSnpphrah1C2muJNIipUY8GtVgZj3XSBDPQq1i9Bo9qhdbKnDJ6fG2uBVxbY06i+x1zV3uw5dS22/6WcWymN0bxKiZyPQf2ejBToymY2m7nSq/Wp9bUBnpb648dgrlbwTlPa5nJc5gHeC2OI9Ooiri7dgnRLmexQ0bIMnVW43Bj22RQRAEwV/zBaBj4j5GWha2AAAAAElFTkSuQmCC",
+"rock/frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAB6UlEQVR4nO2Yu43DMAyG6UN6T6AJAjXewJ0bL5QBslAad94gTZAJMkEm8BUBDzyC1Nu5HMAPCAJblkSKPynZAIZhGIbxj+lqBzhN48bvnZe1etxUiieSDOe8w5GvPQc/TePGHZXu1ZDsAJ/0nTIJETRCWylqfMoz0pitFkCMQE6YY4bm9ClBHSjmwKdISM2BHAPn46A6S9swsi2TO2sVQ/qdj8N2uV87eg0AQO9phaCmQDSVAY8Ed+hyv3Z0EXbdBLVQS89RI2Nyktpr9gW1CqVMgPfxH1ecPk8XwrsevOuDOZNLchWioeV61/pKcpDaTtO48XxIlVKR3qQE5QZyJM3/WRJrEghVHE4L4wEKHaCT3h7PX20haVHm47B51/9cl1afaKdQqeNtkjPa/oDtVP8lHEo7So5xCXn3esa7cePOAbycqa372Q6EkhHhlQRLqDQOOonXb8mBECmSqzmOc4odCFUiyajb4wmhpC11pOlLPepcqkSxzY+Pt1sEqMFcCjRRYyfTVmQlcWxz8q6H87J20qGNG9/q1bJ6I6OgMWi8dz3cHk915bVo5lC8D3C4AZiwr/+4hEojkv1dKHa0Rqgh3vWqhLQ+qTT/sEWrTeiLBbadl7XDX8l8VTkgHQ/2qDSGYRiGYXwq33Leipc++5nIAAAAAElFTkSuQmCC",
+"rock/frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAB6UlEQVR4nO2YvY3DMAyF6UOmMNy7cekF0hiZKQN4JsONF0jpJn3gNXQVEx4hSqQkH3AHfaWjn/dEUaICUKlUKpXKH6bJHeB+uzr+bV627HG1JE/kE875DSNfZw5+v10dN+r7loPaQM6kJQVzgiGWJp6XrbGK8vUpscW8ESgdZhwTBZfMDa+BdT+iYrRtOaUT2zvY2PUOAGAaWrEjFy61pe2kNjmmggaQx+vZAHxWXlp1FDgvW8PHoL9LpBgRO/gEII/Xsxm73lFBkmjeL5RbKQa8OUC30DS07whQ+Gpqkn7serfux1sojWTqNvJ2CpUHdJW5CYxCbKv48ifVgPoUGrvejV3vaDT4pPfbNSoeIJ4LFlRJzEETmtUOgQtFk986RlISS1jMcPEAhQ0AhPc7F4JoTxpf9IoaSCkl+FGKx63UnpstdoyWqIOmoX0ntRS9setdbmlRJAK4jXwXnASvTlONXKwdpDLCKp5/o9WqhaT3AMBPIyg+ZGLdD/UpZTGibqjZUut+BBP3jGJOtYUs+cBva01pnpPI0TexRTwXmXIZWokasKwOzQuaCyVrH47qXwmNCXqUAnxET0NreqJaUf+tEjOBgnHb0PaxcvnUHMiZKNZ+XrbmtJs4ROht7Hu9VSqVSqVS+a98AyKqOF8AR3k3AAAAAElFTkSuQmCC",
+"rock/frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA/0lEQVR4nO2YQRLCIBAEF8uH+SBveYe3PCg/ixexEszCZLMIVE1fPJACesOAQYQQQggh7Qi5xmWekD5WdIzH85Xte9uOctMagMmvUp58fG7XJ1gYiEMBzwE+bCVQcYg7OnBCdumB/a0X+vmiCbhVqDZqBgpYBKsUxSrgxeU8tBaImEU0gcvh+heaQIsQm4rWyxIyQwFHGOKUISRyAkP8nehpGzXRUwaGPwdcdyGRQUJc+qDZStTORdUl1OXkRRSB5Hag6x0JeQPVs2C5TomgS6imRFjmySxx5lrlrET6vMcl2g9nzwFUImR+Xd9maRs9Ikg+2EjlhzhjCCGEEFLiDQmZMibHDEROAAAAAElFTkSuQmCC",
+"rock/frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAADBElEQVR4nO2YPW8aQRCGX6J0FFcgIYHuyogiICLDDwgNckGqFC7SuLWUjkh2/APiRAqdJbduXKRwRxHRwA/Ali27QS45GcmSiyuoz4U1y94w98Hd2Smyj2SZ477ed2Z2dhfAYDAYDAbDv6OQ9QGH2x2/1Syr45JjB85//DrI/I4oUj/8cLvjA0CrWVaiH+cugNc18SaPh3Dhj3NX/QHA5Ljv07Xn+zv++f6OLzwmFW+jTupR1vn864+K6MX1A1rNshKrwzNDwkuOjclx388jM6IBEs5F6oxu7wEA3Xo1IDZwzfASwCoAp8M79Pc6gXNZESPQtms+CePCSey3n0MAQMUqouFYaDXLuLh+EF8yur1HxSoCABqOpb7/8Xf8MhkAgJu5h4ZjqehLEdavDYMyRSZ1Jr3nsZGllEIzAECMGhdH1/DreIkBcjaBVfmlMRJ6AzfBBVKG9PoGgIW3DDyHB4Gb0DObmwFpDJDAhmOtiSchNC4kAzo8o93eVuoyEseANID7ex0MTsaqNOjFhN5Vvn/5EPrC0+GdCgAhteCkhGbg90Ev8B0JJANR40NaWugiS46NwclY3d9qlgNzSy4GqD1ydAMLbxkYpFx8mAk61k2kLSOxhKburNBGzZcEEjRYAyVVr4qTHo8+F5+FSMfUibr1amgLPDq7ChxXrKKabSWoFPk4SFtGsW00SR8nyEySzkOTn95e0xgQS4iLjxNecmxVJtI91HkkeCY2JVEGojYswPrCLMqwPqD1z7l2IWBlAIhfUgBQi7mo5YK0b3iRmZiQTMRBLZEzGl6+7lqI8+n9lk8CAblM9OUG52buRXanXJcSnLZd83nLC4PmB77wA+RNTJZZGEiwJ9bLiF4Yxm7vnZqhOQtvudaJ4rpbEmIzMHVnhbZd8/W1f1RX2u09zwf69ZKhvEhUQmQCEHZfbBupm1t4y8Dg141QiWUpH2CDn1Wm7qywSSSn7qwArETz47zY6HchMhG1Bz46u1Jipf+bBiKOVOmjlqrDI20wGAwGg+F/4AnoQYOSYpQIdgAAAABJRU5ErkJggg==",
+"rock/frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACL0lEQVR4nO2YPW7CQBCFx1F6d+5cpkKWJXyCdClCRUGbWyDlAEjcIi0FFSnoOAGWEHKVko6OEzgFGmcyzP7ZS9LMJyHL3vXue97dmREAiqIoiqL8H0mMQdbzWWtqmy5XUeYw8TB0AJt4n/ahDDLgK472W89nbUxTTgPvL88t/vjEH59fXpPsD+duLHwWy4TVAE5YlRlUZXYz8aapE5cJFM/v+fO+PJoaJqNxJ3R/OHcGAK7GFttddzjRRJGn4ljY93i6QJGn0cQDOKIQmijytDOAk1MD1Cw3YetHP0rfaOV8ySSOCsN+rnY+DjUA0M+E1wt0Jag4ekZ8J5dWFeBOK7Cez9r94QzH0wU2TZ3QvU/F9xGB7/OVCsX4MkYbNFDk6c1+LvK0a6Ni+IohaJYa5QEhmgEc/Hi6dPfUhCRysd0l0nO+15EYZYYxjKIgKpayaerker3e0yRFMYmPxV0KLVO4xHwSs8ALihwmcDV4f1NiAxh+eBHnIKatAQDi4Q4BA8FdDrFvscUz82Q0bvmKAMjRxpX8fLAeYhdSWYHCAOxbCKFhuE9INVaj0+UqsR02n4KMhmAUSK8UWvGGEDUK4Rfkh15aCbrl3l6ffrWFRKlBWwgxRSkpmUkrx8v1EIIM2MIpjyamTFyVmdVEaI7wNsAjBkIPoYTry26aOsFsDltfNT94GcCqVBJj2xomqjLrJVbC+1+JkD0q5QHKn5cSiJTcbGJC+yuKoiiKoihhfAMZV0A1NcKADgAAAABJRU5ErkJggg==",
+"rock/frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACAElEQVR4nO2YoW7DMBCGr9P4WNlgUTRVSp+grKBBA6F9i0h9gEl7i9CBoAaU7QlaqaqKAsfK9gQemFxdHN/Vji9RgT8YR/Z/5z++cwAikUgkEsBEYpKqyBU19v75JbIGxVPoBJx4l/FQggMo60ZCR2+CAwCggzicrnA4XTvPqyJXUjvzzA2ai9j8vLscJ1mSqrJuYLOe3Z7bhNvmDMVrB6oiV9vVsiNgdzlOAP53oqwbUrx+B4AO0Bc2ADPj3KI6CJOP/XfnuZR4AMdj1My6TZQmS1IFYA+IG+uL80Q6CCwe+9nlvM+SVEmKBwgoZFWRK3z6bNYzr6Kld+Pt9QUW82lrzGcesWxsV0vFWQvDide4BjFombeBxWtCdqADdVQOyXa17L1mK9KqyBU+4lwtwZElqRos20BYyMfPHKZdKL8D9A/EWsgkxGPOP7+S07UY5SM2bYQJTdbdioqRLkISWAWZHWNZNzcfS9srlM4pxL2sT6hHCsK5nX5E8QCOFjqcrqMI79PsPUw2zZrhmjCROzElxoRrF3DmF/Op89UzKABOkBmEa6/DVWsb7KWeEkMVJQosXrcpZruSJanCPwXE2mks3hTucrXkgpU4GLx+qwD4X8htlpC81DtZCNMStOffxZYw5xjttwrlxXseHatvGnwRmw2H/mMdiUQikUhkLP4Aug78nKN9LowAAAAASUVORK5CYII=",
+"rock/frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABxklEQVR4nO2YO47CMBCG/6y2p6OjpIpQpOQEdBSkoqDlFpFygJX2FrRbpIJiuz0BkSiouAGX8BZg8iCO7WSCHclfm8gzv+fhsQGHwzFqvL4LxH7Iduu58Pvm+6e3jTY+KBbZH6/Cb+lqyShsiOgt4HDJPeBVxOl8w+l867u8FLLwxn7IAGC3nj8d//r9GzR9AEIBQCECKCIjIku2DOhfI58yA8A9HVR283DJvdgPmcx5LpQixYQCOLpGZM5z9ser8r9tCAUMXYAUzgOSGuAtUJQ+5TQbut87bMV42HlHWswmiIJp5ZtKWpKMEl1pcx6o1pgIYwLKzgPNXW90jSFdLZnu8OcB91C9W209Al3nJiMhqjtfzn/djTRaxBQYLZJ6vr9j/LaOF8XlmX4xm1i/K5UayJLt84I+BueBxzitcuLZSmMX4u1tDFRShEdC9QrpEKAzTlh3kPEuqCrCOgGcKJiabS7l80SXLNky450x9kPWJoLqzbQ1hbgTZWO6husiusz8bSi9zAFACj2j/JXucbKzwyX30tWSRcGU9M1J2uubclF1Zq8/TwLF7E91gZI+LVIZarq0UzBoGxWJH91l3eFwOBzW8g/4BMJEiCQyrAAAAABJRU5ErkJggg==",
+"rock/frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAuklEQVR4nO3YuxGDMAyAYSdDZA2KTEBHn8Kj+I4NMkoKj5Iia2QJp8txnAkvGSTyfy13toSMbOMc8N9OEoPE4NPQs9v9ITLHENHBu4mUDryYX9WANjH4tLZi2XVqfi2zjgEgBp/aph7thuctglni+Xq7a3UZbekqE+i+eZMbKfbSNvXsw52ab2BKxwGQIXGt25OaLgTgoCx3SNvBr2J9c/s6TCJLbZF88aNEPwnpqha/8eeC5U8DAKjxARcKS6vgQZwSAAAAAElFTkSuQmCC",
+"rock/frame_11.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAW0lEQVR4nO3ZsQmAQAwF0HM0O3sLRxHcwFEsnPGsBLsDPcSc71Upwi8CgUBSgke6mmH7POWzHtetajYAAAEtQ5/LXR93vXJDaWL6cEPYpQUAAPiVVz6JvpdAuw7lbBD7+ktUiAAAAABJRU5ErkJggg==",
+"impact/frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABbUlEQVR4nO2VMW7CQBBFh4jOhbtItqCMKDBKRLgAjUURTpAm1wgHCNegyQmgiGi4AKAgoECUICzRuXDtFMirsVnbuzZFkP6TLO16Z2f/zKzHRAAAAAAAAAAAAAAA3CGVtIV+sx2Ot8vU9aL0m+2Qz8ue8aBzWJYdf8oI0t1fLeJcNWtcjMqeIsErB1A2sxGeH4jx/LgTQRX1n3mFZI65AP6OP6p0ao3SSVGugI4woos4vqdTa4Q847citwL/ncw2yueyCny+v4jx8Ps3tibLdtqVcR2b1gefiPTbauoVGm+XFR6EZRrk+YEQPZrsY/aWacTF0rVYbtOqm/T6/Cj1pYNWG02yWJ3F2PMDskyDPt6eYjajyV5avUg80SWY9cEv9FPLDCDpcNDrhpHoVt2M2bqOTdPN6coHr1oED3yxOtN0c5JeORW0KvD1M8s8hAeYB7dzHZvmx52OFMHN21qSQa8r/XDzkgEAAACAe+APqAKZ89IkLO0AAAAASUVORK5CYII=",
+"impact/frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABS0lEQVR4nO2UvUrEQBSFz4qdhZ1gsBULAy7qC9gEC60tbHwL0QcwT5JyKxvZxhdQiexaWK+sYJfCOhZy42T+MjNW4vkgMHNz79xzMjMBCCGEEEIIIYQQQggh5P8xUienu/utjG9fnkZmuh21bqg2JDdGx0poI4nZ4r41Ymti6RnQ3aqNY0Ucbu20vrmNFLPGDvhMuHhvPntPSq6tT8gxtibYFhsSpvPw9mqs7dqFIs8wWzS9WOgdDL5swI+JzfU1I26L6bhy9HjMD8SbqJvQG16cbHfvyqo2hPiESqzIMwDAbNFECReiCq6Pj9qDvQ0AwOPzB2Qs8+l86RQqiGAAXX1Z1dYjF0J00eTyrAW+BetM50tcnY97sbKqO9FisMgzw/zN3X2SgdXYAhHubjg27o6IVb+4upOp4oEEA0PNbDvjy/uNeEIIIeTP8wVe8LIF2ZWz9wAAAABJRU5ErkJggg==",
+"impact/frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABTElEQVR4nO2VvU4CQRSFD4aOYjsTCNQWYkiUF7AhFlpR0PIcvoDhQSyo6XgGNBqh2FqCCR2F9VqQi5fZmZ3Z4ac6X7LJ7p07d87Z3bkDEEIIIYQQQgghhBBCCCHnpnKMIk/Xt5l+nizenXVDcnVOUS0AqJaZLGO+ojFCYskZMAXIwlqMNtJtXmXmvNCYbb0Q0ZoLM+B6664F60kNP5vfvXg9qVnzzbieZ1sn5KsF/6s3rQTT+apQiEu4bVxivXYDAPD1vSktHihhANia0IghEWEzaH4dydXEigc8XSjEhMY0JDFt0GYA2JqI2ei5PaDxFbzrXO4uwSVQxsSknj+dr6K7VGEXAvImho+DDABeXj/2hGtRGi0Y+Deo82bLNLrFeg24mC3TSn+Uettjr93ImXr7XO/u+6PxQefDSQ4XzfPDfWYaOFQ0IYSQo/EHFWKTvm+5ph8AAAAASUVORK5CYII=",
+"impact/frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABBElEQVR4nO3Tsa4BQRgF4CPRKXQSG2oFIsEzqKi13saTeAKdZ+CGoLj1FRKdQr2qw+zsP2Ojk3u+avPPjD1nZAEREREREREREREREflvSv5g0u6nfF4ef0rW3F0fNlppvVrJzC+3OwDAnVsz/x2hHLF9maEVkodDawxnlfALWHvWp99ohlBws0Dsh7rNKlaHM4D8LYZuN7bO2aiTAAD2f7fcuXfhgUgBwC7hYiGGsAoyKHGv69PwwJsC5BbxS7j8Qpy5Ba0CwKtE0eBULrIp9A0MerXn82Z3BWDfMI06SaYEz88X29y3UFShAsDrZmbjacqXugXIn/FfIT88gI/Di4iIfL0H3wR+a+se8RAAAAAASUVORK5CYII=",
+"impact/frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA9ElEQVR4nO3TsQ7BUBQG4F9iM3STEJ0NiIQ+g4nZ6m08iSeweQaEqMFMSGwdzDUdOb1Ob25IJJL/m/S4vff/2xQgIiIiIiIiIiIiIiL6oUlnkH+7R9W36fK4rYQcdsseaEQ176xsjcU6S2fRCkNfyF4cYZVeAaA0iMzd4u7/+p5RtwkAOJwz89yy4GYBzSrTi6PCtRSSEKv0ivXl9LZn0mq/9pK12qfhAU8BIKyEJoV0iaTVznVBqwBQLBESXAQvlDK6wLBff/3e7O9mQHemr+X++WJnvrkQbx9xGXkqs/E0l0N1AeHO5K0INzyAj8MTERH9vSfCxXBzVJ+cXgAAAABJRU5ErkJggg==",
+"impact/frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABDElEQVR4nO3SsYrCQBAG4D9iZ5EuoGht4UnA5AVsxMbaRznwAfRJrrRKI2l8AQ13XFJcrUSws7g6Vhs26+6qKBbyf1WW7OzM7CxARERERERERERERET0QpPeoHj0jPozkh1O/2i6DQBAlCWOLlbeI8c9SptMt7HfcRGnOQAYC9ns/y7OE8J2t5DjRMzoowUA+N2drIXqLgZQGrg20n7HraxFQ7bCVbPx8CKHrXhT4YLxp20SJvPV2njebDws4jQvb1yla+Ja8YClAZVoSG4g8L3ye/tzRJzm2mnIty43IeIXX993TVFWu3VjlCVOlCVO4HsIfK98Pqrl57QyubDdrazV4oH7niAREdFbOQOg4mO6Xro1ewAAAABJRU5ErkJggg==",
+"impact/frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA60lEQVR4nO3SvQ4BQRQF4CPRb6cQWyvWhiwvoBHNVgqFBxH7AMSDKBQqjWi8AEJQqAmJbgv1qEYsO2v/opDzlTOZuefOHYCIiIiIiIiIiIiIiOiHbMMSSe/IplFselhn4txxde9hyyt9FFYFNXUN8/0FALA8H0MFVrENS8jwjVIeALA7uYFnVI/kWfw2UlPX0J8tEoV/5zTrIij8t+kqN4MmkUYTTrPuud+viTBfM3QQ2ZCpa8+1ajkHAGgNx5EakuHl+cFoE/tbRj406baFLNrrVJ7rq+3NdzK1QlHIf/5KhgeiPwAREdHfeADG5Uop8XP7NgAAAABJRU5ErkJggg=="
+};
+
+// frame BAY/ném = rock 1-6 (đá đang bay, loop)
+// frame VẬN CHIÊU cũng dùng rock 1-6 (loop chậm khi đá nổi lên)
+const ROCK = ["rock/frame_01.png","rock/frame_02.png","rock/frame_03.png","rock/frame_04.png","rock/frame_05.png","rock/frame_06.png"];
+// frame IMPACT rock = 7-11
+const ROCK_HIT = ["rock/frame_07.png","rock/frame_08.png","rock/frame_09.png","rock/frame_10.png","rock/frame_11.png"];
+// overlay impact dưới đá nổ, chạy SONG SONG
+const IMPACT_FX = ["impact/frame_01.png","impact/frame_02.png","impact/frame_03.png","impact/frame_04.png","impact/frame_05.png","impact/frame_06.png","impact/frame_07.png"];
+
+// ====== TIMING ======
+const LIFT_MS = 600;        // thời gian vận chiêu: đá nổi từ chân lên (frame 1-6 loop)
+const LIFT_RISE = 26;       // độ cao đá nổi (px, "hơn đầu player 1 tý" — chỉnh được)
+const FLY_MS = 450;         // thời gian ném bay tới đích
+const ROCK_FPS = 6;         // fps loop đá khi vận chiêu/bay
+const IMPACT_FPS = 10;      // fps animation impact (rock hit + overlay chạy song song)
+
+// ====== SPELL CONFIG ======
+const SPELL = {
+  name: "Earth Rock Lift",
+  dmg: 18,
+  dmgVariance: 5,
+  impactRadius: 30,
+  impactShake: 3,
+  impactShakeMs: 150,
+  impactScale: 1.0,
+  overlayYOffset: 14,     // overlay impact nằm BÊN DƯỚI frame rock hit bao nhiêu px
+  arcHeight: 11,          // độ cao vòng cung khi bay (px, 0 = bay thẳng) — giảm 20% từ 14
+  spinTurns: 0.4,         // số vòng xoay khi bay (0 = không xoay) — giảm 20% từ 0.5
+};
+
+// ====== ENGINE ======
+const imgs = new Map();
+function load(src){ return new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[src]; im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame: " + src)); }); }
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0;
+const caster = { x: 100, y: 150 };
+let projectiles = [];
+let shakeUntil = 0, shakeMag = 0;
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+const mobs = [{ x: 340, y: 110, hp: 60, maxHp: 60 }, { x: 160, y: 210, hp: 60, maxHp: 60 }];
+const MOB_R = 12;
+let floaters = [];
+
+function applyDamage(p){
+  if (p.hitApplied) return;
+  p.hitApplied = true;
+  for (const m of mobs){
+    const dx = m.x - p.targetX, dy = m.y - p.targetY;
+    if (dx*dx + dy*dy <= SPELL.impactRadius * SPELL.impactRadius){
+      const dmg = Math.max(1, SPELL.dmg + Math.round((Math.random()*2-1) * SPELL.dmgVariance));
+      m.hp = Math.max(0, m.hp - dmg);
+      p.hitMob = m; p.dmgDealt = dmg;
+      if (SPELL.impactShake > 0){ shakeUntil = performance.now() + SPELL.impactShakeMs; shakeMag = SPELL.impactShake; }
+      floaters.push({ x: m.x, y: m.y - 16, text: "-" + dmg, t: 0 });
+    }
+  }
+}
+
+// vị trí "chân player" khi vận chiêu: đá xuất phát dưới chân, nổi lên LIFT_RISE px
+const footOffset = 6;   // đá nằm hơi dưới tâm player
+
+function cast(tx, ty){
+  projectiles.push({ targetX: tx, targetY: ty, phase: "lift", t: 0, animAcc: 0, rockFrame: 0, rockHitFrame: 0, impactFxFrame: 0, done: false, hitApplied: false });
+  log.textContent = "VẬN CHIÊU → (" + Math.round(tx) + ", " + Math.round(ty) + ") lift=" + LIFT_MS + "ms +" + LIFT_RISE + "px, fly=" + FLY_MS + "ms, dmg=" + SPELL.dmg + "±" + SPELL.dmgVariance;
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0; y<canvas.height; y+=24)
+    for (let x=0; x<canvas.width; x+=24)
+      if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  // player (caster) — thân player đơn giản để thấy đá nổi TỪ CHÂN
+  ctx.fillStyle = "#fc0";
+  ctx.fillRect(caster.x-6, caster.y-14, 12, 20);   // thân
+  ctx.fillStyle = "#a70";
+  ctx.fillRect(caster.x-6, caster.y+6, 12, 4);     // chân
+}
+
+function drawSprite(im, x, y, scale, rot){
+  const s = scale2x ? 2 : 1;
+  const w = im.width * s * scale, h = im.height * s * scale;
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  if (rot) ctx.rotate(rot);
+  ctx.drawImage(im, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function update(dt){
+  for (const p of projectiles){
+    p.t += dt;
+    if (p.phase === "lift"){
+      // KHÔNG cộng animAcc 2 lần (dòng `p.animAcc += dt` chung cũ làm acc tăng kép,
+      // khiến lift loop về frame đầu đúng lúc chuyển phase → nháy 1 frame)
+      p.animAcc = (p.animAcc || 0) + dt;
+      if (p.animAcc >= 1000 / ROCK_FPS){ p.animAcc = 0; p.rockFrame = (p.rockFrame + 1) % ROCK.length; }
+      if (p.t >= LIFT_MS){
+        p.phase = "fly"; p.t = 0;
+        // gán vị trí NGAY LÚC CHUYỂN phase — trùng khít điểm lift kết thúc (không nhảy)
+        p.x = caster.x; p.y = caster.y + footOffset - LIFT_RISE; p.rot = 0;
+      }
+    } else if (p.phase === "fly"){
+      // frame CỨNG duy nhất khi bay: irregular_rock/frame_06.png (index 5) — không anim
+      p.rockFrame = 5;
+      // cảm giác "bị QUĂNG đi": ease-in (chậm đầu, nhanh cuối) + vòng cung nhỏ
+      const raw = Math.min(1, p.t / FLY_MS);
+      const prog = raw * raw;                      // ease-in: tăng tốc dần như bị ném
+      p.x = caster.x + (p.targetX - caster.x) * prog;
+      // điểm BẮT ĐẦU bay = đúng vị trí lift kết thúc (footOffset - LIFT_RISE) — không nhảy 6px gây nháy
+      const startY = caster.y + footOffset - LIFT_RISE;
+      p.y = startY + (p.targetY - startY) * prog;
+      // vòng cung: núp lên một chút giữa chặng rồi rơi xuống
+      const arc = Math.sin(raw * Math.PI) * SPELL.arcHeight;
+      p.y -= arc;
+      p.rot = raw * (SPELL.spinTurns * Math.PI * 2); // xoay tròn trong lúc bay
+      if (p.t >= FLY_MS){
+        p.phase = "impact"; p.t = 0; p.animAcc = 0; applyDamage(p);
+        // giữ vị trí đích ngay khi chuyển impact — không vẽ nháy
+        p.x = p.targetX; p.y = p.targetY;
+      }
+    } else if (p.phase === "impact"){
+      p.animAcc += dt;   // acc impact tự cộng riêng (dòng dùng chung đã bỏ)
+      if (p.animAcc >= 1000 / IMPACT_FPS){
+        p.animAcc = 0;
+        if (!p.rockHitDone){
+          p.rockHitFrame++;
+          if (p.rockHitFrame >= ROCK_HIT.length) p.rockHitDone = true;
+        }
+        if (!p.impactFxDone){
+          p.impactFxFrame++;
+          if (p.impactFxFrame >= IMPACT_FX.length) p.impactFxDone = true;
+        }
+        if (p.rockHitDone && p.impactFxDone) p.done = true;
+      }
+    }
+  }
+  for (const f of floaters){ f.t += dt; f.y -= dt * 0.03; }
+  floaters = floaters.filter(f => f.t < 700);
+  projectiles = projectiles.filter(p => !p.done);
+}
+
+function render(){
+  drawChecker();
+  ctx.save();
+  if (performance.now() < shakeUntil) ctx.translate((Math.random()*2-1)*shakeMag, (Math.random()*2-1)*shakeMag);
+  for (const m of mobs){
+    ctx.fillStyle = "#a33"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000"; ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2 * (m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText(m.hp + "/" + m.maxHp, m.x, m.y + MOB_R + 10);
+  }
+  ctx.font = "bold 11px monospace";
+  for (const f of floaters){
+    ctx.globalAlpha = 1 - f.t/700; ctx.fillStyle = "#fd4";
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+
+  for (const p of projectiles){
+    if (p.phase === "lift"){
+      // đá nổi từ chân player lên — fade-in nhẹ lúc đầu
+      const im = imgs.get(ROCK[p.rockFrame]);
+      if (im){
+        const rise = Math.min(1, p.t / LIFT_MS);
+        const y = (caster.y + footOffset) - LIFT_RISE * rise;
+        if (p.t < 150) ctx.globalAlpha = p.t / 150;
+        drawSprite(im, caster.x, y, 1);
+        ctx.globalAlpha = 1;
+      }
+    } else if (p.phase === "fly"){
+      const im = imgs.get(ROCK[p.rockFrame]);
+      if (im) drawSprite(im, p.x, p.y, 1, p.rot || 0);
+    } else if (p.phase === "impact"){
+      // overlay impact BÊN DƯỚI rock hit (vẽ trước, rock đè lên)
+      const fx = imgs.get(IMPACT_FX[p.impactFxFrame]);
+      if (fx) drawSprite(fx, p.targetX, p.targetY + SPELL.overlayYOffset, 1);
+      // frame 06 giữ làm nền 2 frame đầu impact — frame_07 rất mỏng (13% đục) nên không có nền sẽ thấy 1 frame "trong suốt"
+      if (p.rockHitFrame < 2){
+        const base = imgs.get(ROCK[5]);
+        if (base) drawSprite(base, p.targetX, p.targetY, 1);
+      }
+      const rock = imgs.get(ROCK_HIT[p.rockHitFrame]);
+      if (rock && p.rockHitFrame < ROCK_HIT.length) drawSprite(rock, p.targetX, p.targetY, 1);
+    }
+  }
+  ctx.restore();
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && projectiles.length === 0){
+    let tx, ty;
+    if (Math.random() < 0.7){
+      const m = mobs[Math.floor(Math.random()*mobs.length)];
+      tx = m.x + (Math.random()*2-1)*10; ty = m.y + (Math.random()*2-1)*10;
+    } else { tx = 200 + Math.random()*240; ty = 60 + Math.random()*150; }
+    cast(tx, ty);
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+(async () => {
+  try {
+    for (const src of [...ROCK, ...ROCK_HIT, ...IMPACT_FX]) imgs.set(src, await load(src));
+    requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+  } catch(e){
+    log.textContent = "⚠️ " + e.message;
+  }
+})();
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+</script>
+</body>
+</html>

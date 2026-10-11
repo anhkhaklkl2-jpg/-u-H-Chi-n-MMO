@@ -122,6 +122,12 @@ PLAYER_COLUMNS = [
     ("controls_message_id", "INTEGER"),
     ("hub_message_id", "INTEGER"),
     ("step_size", "INTEGER NOT NULL DEFAULT 1"),
+    # WORLD PERSISTENCE (user 06/10 continuity fix): which world the body
+    # lives in — NULL = the channel's main map, otherwise the side map id
+    # (cave/forest/trade lobby). ensure_player_world reads this on rejoin;
+    # the column was MISSING before, so its SELECT failed silently and every
+    # reload put the body back on the main map at side-world coordinates.
+    ("world_map", "TEXT"),
     # Continuous (web-client) position: float tile units. NULL = never moved
     # continuously (Discord-only player) — load keeps int coords then.
     ("x_f", "REAL"),

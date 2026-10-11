@@ -1,0 +1,5 @@
+actor: Spirit
+group: Monster
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Monster\Spirit
+preview: faceset
+spritesheet: SpriteSheet.png (64x64 px)

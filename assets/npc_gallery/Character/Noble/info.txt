@@ -1,0 +1,6 @@
+actor: Noble
+group: Character
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Character\Noble
+preview: faceset
+spritesheet: SpriteSheet.png (64x112 px)
+walk: SeparateAnim/Walk.png (4 facing rows x 4 frames, 16px cells)

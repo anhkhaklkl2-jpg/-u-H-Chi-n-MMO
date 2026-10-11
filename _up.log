@@ -1,0 +1,52 @@
+SFTP home (maps to container /home/container): /
+mirroring game -> //game
+  skip (already up to date) //game/__init__.py
+  skip (already up to date) //game/actions.py
+  skip (already up to date) //game/appearance.py
+  skip (already up to date) //game/blocks.py
+  skip (already up to date) //game/collision.py
+  skip (already up to date) //game/combat.py
+  skip (already up to date) //game/crafting.py
+  skip (already up to date) //game/drops.py
+  skip (already up to date) //game/inventory.py
+  skip (already up to date) //game/items.py
+  skip (already up to date) //game/manager.py
+  skip (already up to date) //game/map_loader.py
+  skip (already up to date) //game/npc.py
+  skip (already up to date) //game/portals.py
+  skip (already up to date) //game/purse.py
+  skip (already up to date) //game/resources.py
+  skip (already up to date) //game/rules.py
+  skip (already up to date) //game/session.py
+  skip (already up to date) //game/smelting.py
+  skip (already up to date) //game/state.py
+  skip (already up to date) //game/terrain.py
+  skip (already up to date) //game/terrain_rules.py
+  skip (already up to date) //game/tools.py
+  skip (already up to date) //game/travel.py
+  skip (already up to date) //game/weather.py
+  skip (already up to date) //game/weather_service.py
+  skip (already up to date) //game/zombies.py
+mirroring web_api -> //web_api
+  skip (already up to date) //web_api/__init__.py
+  skip (already up to date) //web_api/auth.py
+  skip (already up to date) //web_api/core.py
+  skip (already up to date) //web_api/protocol.py
+  skip (already up to date) //web_api/relay_client.py
+  skip (already up to date) //web_api/snapshots.py
+clearing stale __pycache__ on remote...
+verifying remote tree at /
+  OK  bot.py
+  OK  requirements.txt
+  OK  game/state.py
+  OK  game/resources.py
+  OK  game/session.py
+  OK  discord_ui/commands.py
+  OK  discord_ui/session_end.py
+  OK  rendering/renderer.py
+  OK  rendering/weather_fx.py
+  OK  rendering/hub_renderer.py
+  OK  assets/fx/rain/rain_00.png
+  OK  assets/maps/test-map.json
+  OK  .env
+DONE

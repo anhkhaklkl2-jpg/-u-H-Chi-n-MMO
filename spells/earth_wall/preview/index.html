@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Earth Wall — Spell Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🧱 Earth Wall — tường đất: mọc lên → giữ 2.5s (hitbox chặn đạn) → end thụt xuống; đạn quá mạnh = bỏ end, fade 0.5s</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+  <button id="btnShoot">🔥 Bắn đạn thử vào tường</button>
+</div>
+<div id="info">Click trên canvas = dựng tường tại đó. Nút "Bắn đạn thử" = bắn đạn vào tường hold gần nhất.</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — nhúng base64 (giữ số gốc pack frame_02..14)
+// ============================================================
+const FRAME_DATA = {
+"frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABLElEQVR4nO3Vr07DUBQG8A+Cm6hrMjIkQQDpQnmBGYIAhUDM8BZkvMDCg0wgULg+AyNb6MQ0pE3mrqgGdU9um8vEvQdB+H6m/5J7v9Oc0wJERERERERERERE/8/Oby18Pjj66t6bjIe4eXxS3XNPczHLhu8nPZweJACAPEsBANfHZ1LYy+otupigAtwQrto0ct4NP19ukGcpatOgn/RCtvXaVVvJ4QtflJU8r03TKjaGWgE2kC+8NZ0ttLYTwT3oG1IA0h53V4cS3n37k/FQzjUGOmgGnu9vveHnyw3eP4xc28G1x+lsIbOgRfUrlGdpq4Cui5N9AGi1VSz1Ia5NIzOwjdtWMYJ78OFy5G2joqzkTf90vygrvH6uVX5oUYt0i9gW3qUVnoiI6M/7Bl/6ZGArQc28AAAAAElFTkSuQmCC",
+"frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABgklEQVR4nO2Wv0rEQBDGP8XO4gohoCT1FXpELvcA2hwWZ2Vh4SvY++cBFEHfwcbCwsoUksYX8ILHxUIscyQQsEiR+ixklzXuBU1mOYX5VcsWM9+3M7uzAMMwDMMwDMMwDDMfFkwn6NntaXnv8niArcMrktxLFEF0COGrrWUAQMdpAQD6gy7e4wlZHiMGenZ7qhMOAIEfwnMtslzkBlTxAOC5FlYcG4EfUqcCYLCFBNf+GzpOZiz+orHIFexd3JI9HqQGdC+OuAOmmEsFKGEDv+Xs4ZF0eJIZKA8uwHz/A4ae0Srhu+tdedHvX8LG1ahlQBUhSPNCrsdxDkBvJM2LL1VqivFBpkM12xQSAzpB5dMfxzmpcEHtHtQNrVkXWBV/crAp9ykmcq0K3B3tfxMPAMNRJvtf/XGK9fnNM4aj7O/+Rj3XkgZ09DfWAHwapYJ8kKV58aP3P4gSkny1e/B0Z1vbRkGUyJOetR9ECZ4mryQTuVGQsokq8SpU4hmGYRjm3/MBOT5zKNxG1sIAAAAASUVORK5CYII=",
+"frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABhUlEQVR4nO2Wv0oDQRCHP8XO4gohoOTKYKFHJPEBtAkWZ2VhYZMHSC/6BhY+iIWVVvcMJhASC+uEEwIWV1hrIXtckvujudlTYb5quYXZ+c3Ob/ZAURRFURRFUX6LNZvBD+u7HwDbzmb8zXMdADp+i6Pebenz18sGyKIoeSmsCVgkmXzwOBCLa0VAWvVhPvm3yVTkrA2RKAV0/QZbbl208gYrJs7rf4B2s8bZzZ3I2ZV5wBbiArL63xZ6Az9Fsv+hIgFJA0sjKqDq/gf1QDqe62S2jWT/gyUBwTgE8oVIISbA9L8hGIexEJtY+RcyJk6r/uleKxb68Dwo3U4rCUgmYXiN3oH8CWRuRHJKVfI3CjCaRPHaiJVAxAOe69DZ38ncTyZveJq+iEyjUkGMcZPJJ5P1XIfRJJqr+NXFQbyWGKkrBbi/PF/yAEB/OAO+RHT9RuZ+u1kDZASIvgPtZu1bo7M/nMViymLFxEWPVzAO/4YHrk+Olx6vNDMv3opU8oqiKIry7/kEVWBzK00a98oAAAAASUVORK5CYII=",
+"frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABg0lEQVR4nO2XsUrDUBSG/4qbQwahYGlGcbChkPoAugSHdHJw9QHcCz5AoYMP4uBkh3CXvoANlMTBOSWFgkOGznW6lyYmqU3OjSDnGxNyzv1P/j/kAAzDMAzDMAzDVKSls/hV92ILAGfGibpmmQYAwHFtXD8+1+5/VLdAEfsO/xUtSfock1TJUHR4x7UBAGLqY9Bvk/TSIiDLg3uOU7MLMfXJa2vJQJl9AGDQb+Nu8kLSW1sGmoJcQN70dcJv4FAo/Q80JGA3wNSQCmja/wBnIB/LNAptQ+l/QJMAEcYAyoVQQSZA+l8iwlgJ0YmWfyEZYt3TB2oI2J34+/JT+brsCyTCuPC5qlQSMLy0U3YZGvZ2lWxKnwmiBEBGIMFKQJIByzTg9DqF9+XhdUCaAafX+XHYIEqwSjZq8m8fPulntHKxp9sbZSMRxqk3EETJrwI89mZ/k4HX0X0qA3I9nC/WSkzeyjhfrNPXvSrd05BaiGrPPYRGdmLJ2Ju1KKbOMAzDMP+Gb0xQZXsmCaAvAAAAAElFTkSuQmCC",
+"frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABkUlEQVR4nO2Xr07DUBTGfxAcooJkCcsqycS2jHR7AFTVphAIDA+AJ7wABMFjIBAoJkgNLwALZEOgt2wKUTFdBLld96dlrOcuITk/16b33O+79zvtLSiKoiiKoiiKsiZbNos3S+UIYN/Zje/VXAcAv+VxdH6be/7tvAXS+E3812AoMs+OSJU50sT7LQ+AoNOlUS+IzGXFwDxnrQP23BJBpyte20oPZMUHoFEvcHxzLzK3tR7YFOIGlq2+TXQH/opk/mFDBpINLI2ogU3nH7QHllNzndTYSOYfLBkI+iMg24gUYgZM/g1BfxQbsYmVs5BpYturDxYilPUGunp6Fj97rbUD7YoXx+Xxo7uSqN4gXBi/6tgsckeoXfEiE5W0zBvxzVI5kv5GiPaAXy3OrDT8iB+Hk/h6HE54GX6KRSlXoeSbx68W4/u9QUjNdRbEA6LiYc0deLg4iYVf370Bs/ExMUkTb8ZLfNRyR+jy9BCYGlmWcfPM63sxkvoXNqy1AskdSGJMwFR0EuljhKIoiqL8e74BjkR38YU8C2MAAAAASUVORK5CYII=",
+"frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABeUlEQVR4nO2WoU7EQBCGfwgOUUFyCZdWkhNcc6R3DwCmQRSFQGDuAfAEHgCC4DEQCNwJUsMLkAtJz6B7ORSiAl3UXkq7bcPuTAPJfHKz2dl/5v83CwiCIAiCIAiCYMgG5+ETd5ADwK6zvV7zPQcAEEYBDi/uretv2h5QR9vlP9MlSZ0tklNK1F0+jAIAQDybYzzqkdRiEVBmGu1hx3MRz+bkZ7NkoMk+ADAe9XB690hSmy0DXUEuQNd9TmQCv4XS/0BHAooBpoZUQNf+ByQDenzPqbUNpf8BJgHxYgWgWQgVZAKU/xXxYrUWwgnLX0iFmLv7AIOFml6gm+cX8r+XkYCT/SBv3/WTJM1MSrViPIGiiOvjozwc9mv3qstP3EFezootVhkoTyIc9iudTtIMH9mXTZlGjDyp62JxAkmawfecyuVfl+9/IwNX5weVNfVsFp9Ozs4rjDOgEwHUv0Ic3QcMLfR0eVax0O3Dm3ZvWSj1V0IQBEEQ/jXfTVRl/P7l3cYAAAAASUVORK5CYII=",
+"frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABTklEQVR4nO2XsUrDcBDGf4qbQwahoDSjuBgKrQ+gS3DI5gv4AD6BDyA4+CDOdpAsvoBkaR2cU9rJIUPnOiWEkkS0dxnk+40J3N33v+8u/4AQQgghhBDij+x5Br8Ynm0AjoPD6lkUBgDEyZjLu6ed8+/vGqCNn4r/yhcmeQ5MomzRVnycjAFIpxmT0cAkl4uAbW6TU47CIek0M4/tMgNd9gGYjAbcPD6b5Habgb4wF9B0+p6oA7/F0v/Qk4D6AFtjKqBv/4NmoJkoDFptY+l/cBKQzpdAtxArzASU/i9J58tKiCcud6FyiL1PHxws1LWBHl7fzO9evW2hWV64xDURcH99tYnPT1rfexUPxh1oEjHLC1bFmpePzOXqbiKgvm3KwY3CoCr+ffHp9u9ttoXqIspB9i4eDDqwvf/rW8i7eHD4DqyKNYCb54UQQoh/xTd6/FdUjrvPDQAAAABJRU5ErkJggg==",
+"frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABG0lEQVR4nO3WMYrCUBDG8b9iZ5FCEBRTis0GQfcA2oQt0nkBD+AJPMDCFh7E3kLSeAMrb6DY7Rm0iogkWcSZyML3KxN4b76XmUdARERERERE3qPmufhnb3AB6ATN27MoDACIkxGTxerl/euvLlDkr+J/jyeTfRomqzwoKj5ORgCkmz3jYdtkL5cAj+ZJn1bYI93szdd2mYGy9gEYD9vMftYme7vNQFXMA+Sdvid9gWdZ9j9UFOB+gK2ZBqi6/0EzkC8Kg8K2sex/cAqQHs5AeRArZgGy/s+kh/MtiCeXf6FsiL1PHxxaqOwG+t7uzP+9KruFPIoHowDLr+kl/ugWvvcqHoy/QF4Iz+LBKMD9bZMNbhQG7sWLiIj8e1dDGDjW6Y0dFAAAAABJRU5ErkJggg==",
+"frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA+ElEQVR4nO3WvQnCYBCH8Uexs0ghCIopxcYgJA5glSqdCziAcwgWDmJvITZu4BLaOoNWkRCNIt4FhP+vTOA+krs3ARERERERERH5Sw3P4NPB6AbQC9qPa1EYAJBmMbPl5uf8zV8DVPlU/PV8McnTMolSUlV8msUAHHYnkknXJJdLA2WLbEgnHHDYncxju+zAu/EBSCZd5uutSW63HaiLeQOvnr4nvYFvWc4/1NRAcYGtmTZQ9/yDduC1KAwqx8Zy/sH4Q5aPEEA67j/dX+2P5h9Os4DF4ovyRjyKB6d/oXyJ8zHyKh4cdqB8AnkWD86nkHfxIiIif+8OwUctDiqwVdEAAAAASUVORK5CYII=",
+"frame_11.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA6klEQVR4nO3WPQ4BYRDG8T/RKbaQSIgtRWMjwQFUW23nAg7gHBKFg+gVso0LiF5N6wxUZONbzGwinl/5FvPx7szugoiIiIiIiIiI/KOCZ/B+o3UEqAXly1kUBgDESZfBePZ1/uK3AR55VfxhtzfJUzKJcuVR8XHSBSBdbOh1qia5XBq4NkqaVMIG6WJjHttlB56ND0CvU2U4nZvkdtuBvJg3cO/2PekJfMpy/iGnBrILbM20gXfm3/L2IecRmixX5q9tlwaiMLgZG4/iwfhDdh4hgLhdv5x7FQ+GDWSLz1rvt65/vCIiIj/tBIWVKknJIW1aAAAAAElFTkSuQmCC",
+"frame_12.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAz0lEQVR4nO3UPQrCQBCG4TdiZ5FCCAhJKVYiJB7AKlU6L+ABPEfAwoPYpwhpvIGX0NYzaKVIMBHJbCDwPeUW87OzsyAiIiIiIiIiIiLyN89l8HW4eADM/Mn7bBn5AKRZzGZ/7Jx/1DVAk1/F3683kzxjkyg1TcWnWQxAVVxIVoFJLicN1O2yOdMopCou5rGd7EDb8wFIVgHbw8kkt7Md6It5A99u36XBT6CXJf6Ul2eP0i5eLxN4LXBens0/DdMG2t6/i+Khpwm4Kl5ERGTwnvxPIsXSBqKgAAAAAElFTkSuQmCC",
+"frame_13.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAvUlEQVR4nO3TMQrCQBCF4V+xs0ghBISkFCsJJB7AKtV2XsADeA7BwoPYp5A03iCX0NYzaCcSTCwyuyC8r9xi5s3OLoiIiIiIiIiIiIiIhDbyWXydLJ8A82j6PlulEQCly9nsT4P7j4cW6PIr/ON2N+kzManS0hW+dDkAddVQZLFJLy8DtO3cglmaUFeNeW0vf6Dv+QAUWcz2eDbp7e0P9LEKDx4G+Hb7nw6Xq+nWg27AOjwEHMBHeBERkb/3AtrcH4v1sa0IAAAAAElFTkSuQmCC",
+"frame_14.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAl0lEQVR4nO3UIQ7CQBRF0QvBVVSgmrSyQWEaFlBVNYtgAawDx24QBMMGCB7PPkCBaFJMZ5o0uUeOeP/N/GRAkiRJkiRJkiRpZhYpw3fl5g1Q5NnvbFvlAHShoT2cRs9fjg0YMkV5SLSBofJdaACilQdYxQr6Zx9q1lXJ9fzgeLlFfbRJNxC7PCS4wLd83/31TPphSJI0Sx9rLhliYLQMUwAAAABJRU5ErkJggg=="
+};
+
+// frame_08 là FINAL theo user; 02-07 mọc lên, 09-14 end thụt xuống
+const GROW_FRAMES = ["frame_02.png","frame_03.png","frame_04.png","frame_05.png","frame_06.png","frame_07.png"];
+const FINAL_FRAME = "frame_08.png";
+const END_FRAMES = ["frame_09.png","frame_10.png","frame_11.png","frame_12.png","frame_13.png","frame_14.png"];
+
+// ============================================================
+// 🧱 SPELL CONFIG — CHỈNH Ở ĐÂY
+// ============================================================
+const SPELL = {
+  fps: 12,               // fps animation mọc/end
+  finalHoldMs: 2500,     // tường giữ (sống) bao lâu sau khi mọc xong
+  wallBlockW: 15,        // bề ngang hitbox tường — ÔM SÁT phần đậm của sprite frame_08 (solid bbox 15×24)
+  wallBlockH: 24,        // bề cao hitbox tường
+  wallMaxHp: 40,         // HP tường — dmg tổng cộng; quá → tường mất NGAY KHÔNG frame end, thay bằng fade
+  destroyedFadeMs: 500,  // mờ dần khi bị phá
+};
+
+// ============================================================
+// ⚙️ ENGINE (đừng sửa khi vibe code)
+// ============================================================
+const imgs = new Map();
+async function init(){
+  for (const k of Object.keys(FRAME_DATA)){
+    await new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[k]; im.onload = () => { imgs.set(k, im); res(); }; im.onerror = () => rej(new Error("missing " + k)); });
+  }
+  requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+}
+
+let autoCast = true, scale2x = true, lastFrameTime = 0;
+const caster = { x: 60, y: 140 };
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+const mobs = [{ x: 320, y: 110, hp: 50, maxHp: 50 }, { x: 150, y: 200, hp: 50, maxHp: 50 }];
+const MOB_R = 13;
+
+let walls = [];   // {x, y, phase:'grow'|'hold'|'end'|'destroy', frame, t, hp, alpha}
+let bullets = []; // {x, y, vx, vy, dmg}
+
+function rectOf(w){ // hitbox ÔM SÁT tường: bbox phần đậm của frame_08 lui về gốc sprite (solid 16..30 x15..38 trong 48×48)
+  const s = scale2x ? 2 : 1;
+  const bw = SPELL.wallBlockW * s, bh = SPELL.wallBlockH * s;
+  const leftInSprite = 16 * s, topInSprite = 15 * s; // gốc bbox trong frame gốc 48×48
+  const imgW = 48 * s, imgH = 48 * s;
+  const dx = w.x - imgW/2;  // góc trái ảnh (giống drawImage)
+  const dy = w.y - imgH;    // góc trên ảnh
+  return {
+    x: dx + leftInSprite,
+    y: dy + topInSprite,
+    w: bw, h: bh,
+    bottom: dy + topInSprite + bh,
+  };
+}
+
+function cast(tx, ty){
+  walls.push({ x: tx, y: ty, phase: "grow", frame: 0, t: 0, hp: SPELL.wallMaxHp, alpha: 1 });
+  log.textContent = "🧱 DỰNG TƯỜNG tại (" + Math.round(tx) + "," + Math.round(ty) + ") — hold " + SPELL.finalHoldMs + "ms, HP " + SPELL.wallMaxHp;
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function shootAtNearestWall(){
+  let best = null, bestD = Infinity;
+  for (const w of walls) if (w.phase === "hold"){ const d = Math.abs(w.x-caster.x); if (d < bestD){ bestD = d; best = w; } }
+  if (!best){ log.textContent = "Không có tường hold nào để bắn."; return; }
+  const dmg = 25; // đạn thử dmg cố định lớn — 1 phát vỡ nếu wallMaxHp 40, 2 phát nếu chỉnh cao hơn
+  const r = rectOf(best);
+  const dirX = Math.sign(best.x - caster.x) || 1;
+  const yHit = r.y + Math.random() * r.h; // bay vào bất kỳ đâu trên mặt tường
+  bullets.push({ x: caster.x, y: yHit, vx: dirX * 0.4, vy: 0, dmg });
+  log.textContent = "🔥 Đạn dmg=" + dmg + " → tường (" + Math.round(best.x) + "," + Math.round(best.y) + ")";
+}
+
+document.getElementById("btnShoot").onclick = () => shootAtNearestWall();
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0;y<canvas.height;y+=24) for (let x=0;x<canvas.width;x+=24) if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  ctx.fillStyle = "#fc0"; ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000"; ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function drawFrameAt(im, w, alpha){
+  const s = scale2x ? 2 : 1;
+  const h = im.height * s;
+  ctx.save();
+  ctx.globalAlpha = (alpha === undefined ? 1 : alpha);
+  ctx.drawImage(im, w.x - im.width*s/2, w.y - h, im.width*s, h);
+  ctx.restore();
+}
+
+function update(dt){
+  for (const w of walls){
+    if (w.phase === "grow"){
+      w.t += dt;
+      if (w.t >= 1000/SPELL.fps){ w.t = 0; w.frame++; if (w.frame >= GROW_FRAMES.length){ w.phase = "hold"; w.t = 0; } }
+    } else if (w.phase === "hold"){
+      w.t += dt;
+      if (w.t >= SPELL.finalHoldMs){ w.phase = "end"; w.frame = 0; w.t = 0; log.textContent = "🧱 hết hạn — end thụt xuống"; }
+    } else if (w.phase === "end"){
+      w.t += dt;
+      if (w.t >= 1000/SPELL.fps){ w.t = 0; w.frame++; if (w.frame >= END_FRAMES.length){ w.done = true; } }
+    } else if (w.phase === "destroy"){
+      w.t += dt;
+      w.alpha = Math.max(0, 1 - w.t / SPELL.destroyedFadeMs);
+      if (w.t >= SPELL.destroyedFadeMs){ w.done = true; log.textContent = "💥 tường vỡ — fade xong"; }
+    }
+  }
+  walls = walls.filter(w => !w.done);
+
+  // đạn bay + chặn bởi tường
+  for (const b of bullets){
+    const nx = b.x + b.vx*dt, ny = b.y + b.vy*dt;
+    let blocked = false;
+    for (const w of walls){
+      if (w.phase === "hold" || w.phase === "grow"){
+        const r = rectOf(w);
+        if ((Math.min(b.x,nx) <= r.x+r.w) && (Math.max(b.x,nx) >= r.x) && ny >= r.y && ny <= r.bottom){
+          w.hp -= b.dmg;
+          blocked = true;
+          if (w.hp <= 0){
+            w.phase = "destroy"; w.t = 0;
+            log.textContent = "💥 Tường VỠ NGAY (dmg quá lớn) — KHÔNG frame end, fade " + SPELL.destroyedFadeMs + "ms";
+          } else {
+            log.textContent = "🛡️ Đạn bị CHẶN (tường còn " + w.hp + "/" + SPELL.wallMaxHp + ")";
+          }
+          break;
+        }
+      }
+    }
+    if (!blocked){ b.x = nx; b.y = ny; }
+    else b.dead = true;
+    if (b.x > canvas.width + 20 || b.x < -20) b.dead = true;
+  }
+  bullets = bullets.filter(b => !b.dead);
+}
+
+function render(){
+  drawChecker();
+  for (const m of mobs){
+    ctx.fillStyle = "#a33"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000"; ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2*(m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText(m.hp+"/"+m.maxHp, m.x, m.y+MOB_R+10);
+  }
+  for (const w of walls){
+    if (w.phase === "grow") drawFrameAt(imgs.get(GROW_FRAMES[w.frame]), w, 1);
+    else if (w.phase === "hold"){
+      drawFrameAt(imgs.get(FINAL_FRAME), w, 1);
+      const r = rectOf(w);
+      ctx.fillStyle="#000"; ctx.fillRect(r.x, r.y-6, r.w, 3);
+      ctx.fillStyle="#4d4"; ctx.fillRect(r.x, r.y-6, r.w*(w.hp/SPELL.wallMaxHp), 3);
+    }
+    else if (w.phase === "end") drawFrameAt(imgs.get(END_FRAMES[w.frame]), w, 1);
+    else if (w.phase === "destroy") drawFrameAt(imgs.get(FINAL_FRAME), w, w.alpha);
+  }
+  ctx.fillStyle = "#4cf";
+  for (const b of bullets){ ctx.fillRect(b.x-3, b.y-2, 6, 4); }
+  // debug hitbox đã bỏ (final) — wallBlockW/H vẫn hoạt động
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && walls.length === 0) cast(280 + Math.random()*120, 120 + Math.random()*80);
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+
+(init)();
+</script>
+</body>
+</html>

@@ -30,6 +30,12 @@ class NPCDef:
     # WANDERING NPC: {"radius": int, "speed": tiles/sec, "pause": secs}.
     # Absent/None -> a static NPC (signs/doors/statues never move).
     wander: Optional[Dict[str, float]] = None
+    # SESSION MERCHANT ("thương nhân lang thang" with a market schedule):
+    # {"windows": [[6,12],[14,19]], "deal_chance": 0.15, "deal_discount": 0.5,
+    #  "min_items": 4, "max_items": 6, "walk_out_seconds": 25,
+    #  "walk_out_tile": [x, y]}. Absent/None -> always present. While OUT of
+    # a window the server drops this NPC from the web payloads entirely.
+    sessions: Optional[Dict[str, object]] = None
     # Live float position (tile centers) for wandering NPCs. Kept in sync
     # with x/y by sync_int_from_float like web players.
     x_f: float = -1.0
@@ -39,6 +45,11 @@ class NPCDef:
     target: Optional[tuple] = None
     # Facing key ("down"|"left"|"right"|"up") for the client's walk anim.
     facing: str = "down"
+    # INTERACT REACH (Manhattan tiles on rounded player pos; the float
+    # fallback threshold is reach + 0.6). Default 1 = standing next to the
+    # NPC. Shopkeepers behind a counter use 2 so players can talk THROUGH
+    # one counter layer without ever stepping into the staff area.
+    reach: int = 1
 
     def init_float(self) -> None:
         if self.x_f < 0 or self.y_f < 0:
@@ -86,6 +97,25 @@ def load_npcs(map_id: str, assets_dir: Path) -> NpcMap:
         ]
         dialogues[k] = DialogueNode(v.get("text", ""), opts)
     return NpcMap(npcs, dialogues)
+
+
+def npc_in_reach(npc: NPCDef, px: float, py: float) -> bool:
+    """Talk-range check (web + preview parity, mirrors the client gate).
+
+    Rounded-tile Manhattan ``d <= reach`` OR true float distance
+    ``<= reach + 0.6`` — the float fallback keeps client-predicted mid-step
+    positions from flickering the prompt when the server would accept.
+    reach=1 (default): standing next to the NPC. reach=2: also straight
+    through one counter layer (shopkeeper design)."""
+    try:
+        reach = max(1, int(getattr(npc, "reach", 1) or 1))
+    except (TypeError, ValueError):
+        reach = 1
+    d_int = abs(npc.x - round(px)) + abs(npc.y - round(py))
+    if d_int <= reach:
+        return True
+    d_float = math.hypot(npc.x - px, npc.y - py)
+    return d_float <= reach + 0.6
 
 
 def load_npcs_with_floats(npc_map: NpcMap) -> None:

@@ -1,0 +1,5 @@
+actor: CatOrange
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\CatOrange
+preview: faceset
+spritesheet: SpriteSheet.png (44x17 px)

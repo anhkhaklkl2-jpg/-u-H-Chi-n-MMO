@@ -43,6 +43,7 @@ def apply_scoop(
     blocks,            # BlockGrid or None
     inventory,
     now: Optional[float] = None,
+    held_slot: Optional[int] = None,
 ) -> ActionResult:
     """One shovel swing. Progress accumulates across presses keyed by tile;
     the final press pops the tuft, reveals the dirt and grants 1 dirt."""
@@ -56,14 +57,26 @@ def apply_scoop(
     if terrain is None:
         return ActionResult(False, "no_terrain")
 
-    # Resolve the shovel being used: an explicit hotbar tool id when given
-    # (and still a shovel in stock), otherwise the best held shovel.
+    # Resolve the shovel being used: WHAT THE HAND HOLDS (same fix as chop,
+    # user bug 29/09) — an explicit tool id when given and in stock, else the
+    # tool sitting in the HELD hotbar slot; only legacy callers with no slot
+    # info fall back to best-in-bag.
     tool_id = action.tool_id
     if tool_id is not None:
         td = parse_tool_id(tool_id)
         if td is None or td.family != "shovel" or inventory.count(tool_id) <= 0:
             tool_id = None
-    if tool_id is None:
+    if tool_id is None and held_slot is not None:
+        held_id = None
+        try:
+            held_id = inventory.hotbar().get(int(held_slot))
+        except Exception:
+            held_id = None
+        if held_id:
+            td = parse_tool_id(held_id)
+            if td is not None and td.family == "shovel" and inventory.count(held_id) > 0:
+                tool_id = held_id
+    if tool_id is None and held_slot is None:
         tool_id = best_tool_of_family(inventory, "shovel")
     from game.tools import shovel_hits
 

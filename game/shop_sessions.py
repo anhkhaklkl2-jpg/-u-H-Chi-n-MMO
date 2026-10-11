@@ -69,6 +69,12 @@ def session_active(npc, state: ShopSessionState, now_mono: float,
     leaving : window ended -> present but WALKING OUT (visible exit); the
               shop is CLOSED for business (shop_open answers 'hết phiên').
     closed  : nowhere in the world.
+
+    CADENCE ("cứ 3 ngày 1 lần" — user 06/10): config ``"days_every": N``
+    limits the visit to days where ``ingame_day_index() % N == 0`` (+ optional
+    ``"days_offset"`` shift). Default 1 = every day (old behaviour). The
+    guard lives ONLY in the closed->open transition, so a session that is
+    already open never gets cut short by the day rolling over.
     """
     cfg = parse_sessions(npc)
     if cfg is None:
@@ -77,6 +83,12 @@ def session_active(npc, state: ShopSessionState, now_mono: float,
     idx = _in_window(sec_of_day if sec_of_day is not None else ingame_seconds(), windows)
 
     if state.phase == "closed":
+        # Cadence gate: only every-Nth in-game day may open a session.
+        every = int(cfg.get("days_every", 1) or 1)
+        offset = int(cfg.get("days_offset", 0) or 0)
+        from rendering.daynight import ingame_day_index
+        if every > 1 and (ingame_day_index() + offset) % every != 0:
+            idx = -1  # not a visit day: behave exactly like out-of-window
         if idx >= 0 and idx != state.last_window_index:
             # NEW SESSION: roll a fresh stock signature. The stock itself is
             # re-rolled in shops.py keyed by session_id; here we just open.

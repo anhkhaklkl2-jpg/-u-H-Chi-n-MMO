@@ -1,0 +1,5 @@
+actor: MouseBlack
+group: Monster
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Monster\MouseBlack
+preview: faceset
+spritesheet: SpriteSheet.png (64x64 px)

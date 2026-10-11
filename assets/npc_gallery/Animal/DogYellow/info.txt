@@ -1,0 +1,5 @@
+actor: DogYellow
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\DogYellow
+preview: faceset
+spritesheet: SpriteSheet.png (42x17 px)

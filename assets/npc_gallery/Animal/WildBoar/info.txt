@@ -1,0 +1,5 @@
+actor: WildBoar
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\WildBoar
+preview: faceset
+spritesheet: SpriteSheet.png (34x16 px)

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Dark VFX 02 — Debuff Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🌑 Dark VFX 02 — debuff: kích hoạt HIỂN THỊ NGAY tại vị trí địch (không bắn ra)</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click BA TRÊN một mob = kích hoạt debuff tại mob đó. G = caster (để tham khảo, không bắn). Ố đỏ = mob test.</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — nhúng base64
+// ============================================================
+const FRAME_DATA = {
+"frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAiElEQVR4nO3S3QnDIBQG0NvSKTJeFsgsWSDjZQ37UiFQTUl77dM5IJgf9H5eIwAAAAAAAAAAAADgO+U1/uKevF7pzIfJDNAqeHiI7A609IKlXLWsACUibh++t+at50syAtQCyjwt3Z/maRlynR7ZCx5DbPv69i7bWduvOD39atvXut+xGz/V8AQU6hvBTW4YZQAAAABJRU5ErkJggg==",
+"frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABj0lEQVR4nO2YMW7DMAxF2aKDpw4ec7xeoBewJ/sCvUCPp9GDp2zuEgaMKrmmKMoB+h8QIJZh6X9ToigTAQAAAAAAAAAAAAAAAAAANGLox23ox83az2sNMVqkcKuJ5gZY8LxMNC/TQ1sJTQ1I8YzVxClTqCZNDczL9EJENPTjvY3/8z0tRQ/dBubpoO4jni6l4okKI2DNIlKwRTxRQQTihWidAlZUEfDIIlYOG0iJZ8408X/SaCoFMmeuA1UEPPK4laJBa+ZxK64b2cfl8270O3y5mKwSASZ0a/aZUwzspcU9sTk8TLzlbtQW/xdyPM2aymahXCfe4lPXexxyGneoNXG5vhNR+qWkdnhNalbNSWnkqAmteHEv+5xEvZFxhywsJ5gJ3UqhW6t9hYgpqoXYSCyWr1PmOGK1TZiKOTbBv1sbEf02kZpKufrKbQ3k2FuIoVsfzOytBcnRVFqlnI7fpBR/RFTcrtkHqu6M8WY09OMmI+BR9FU90LBAKdRTPJHDiax1ae12pCytbZ6KFof8Hy4+87ip+7WTAAAAAElFTkSuQmCC",
+"frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABs0lEQVR4nO2Yv26DMBDGj6pDpwyMPF5eIC8AEzxrRw+dstGhvcg9bHPnM6BK309CSsAx3/n+2SECAAAAAAAAAAAAAAAAAMB/Yeyndeyn1TvPWwsxVmLhXiNON4AFL2GmJcx/7tVwqgGxeMZrxCUh1JJTDVjC3BERjf30usef+ZmVqh/9vpjDwTyHDJda8USVHvBWkViwRzxRhQdkInpDwIvJA0dUES9qA1LimT0j7sNjvQ+PQwx8P2LSHNKI4XnbjLGGomlwzgvaPCh5IWUMU5rXlAPeOl4S+fnx9bokpfyqqhzWOs7jU+Ik1rBq3shSq6URTrQVr/GqKon3SmT8XCuWqREdkx2sqetLmDuveG8DNJXR0staiI8XQ2uYugqlJtQm5/C8ba693NF2dlX1yK3G2E+rRry2SsX9RVueix6I6n5VAyL68U7pAJ9rjto91m4ILWHuZLLmyBnDXjpiw2fKAbmS7CGOa/58JuathIxJcTghIpsRqe1J/H0vB9yHkFICcujEBpUKgrynKaXuQ71cQbmSWkElz5ZodgxM5UZNY7LS7G8VFnjV2fgwrjorA6DkG6G+H9aIxcPfAAAAAElFTkSuQmCC",
+"frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAACEElEQVR4nO2YO5LCMAyGlR0KKoqUPl4ukAskFVyAC+R4KSmo6LLNKqPVyLZkG3Zh9FUhE9v6rYdlABzHcRzHcRzHcRzHcRzH+QCGMG6vXK9rMcnUz9t6vP96t6zXJnPn+KqdQDIe4HWeqBYAALCs1xbTFNFEAIAs4hVeOJQOnPp5AwC43M6146tyxTQYFwUAwLinOz+EURzHE5rOA1AnQh1CkvGUmPF8LPUceo8LsqAWQHcpPE77+yGMMIRRlchS2NWKMCXx5XbuUEh4nHYhb1eFuBAkJwTHTP28v8Pn0jwoLqOsiqgXpyJqjQcoFCAlJfyIWNar2hP8uQTzYJ6Iwi5uUkUKj1O1sRImDyirSEfzAlmP96pyGcN8Dkgnr6UUTv28tRRS3EqkuNzOndSlrsf7XrWmft5IQkcF5cKuqJXgXohVE0kEDS/p+9jaMSHmg4waTJ+1CSq1IXR+esZoKKoKUjMW2z3JYPRCzlBNx6rKgZxrc42eBTqXxhPRD0oqRc74WPxbjaaIH1smtOz+Mw6zZAhZFksZb415y9piFWq1S9hyayoLD1ltCEfLaKqyaEGv5ObhtzTLyZ48ByyekPofgLyI2OGoFVH9t0rsqinxp81cCouI1jQRwMMAk5eLkUJSak/o76bNnIQUw9wYjSFSeGlysFkOoNGl91z+/TNub0nwolJaz/8Fb2Ws43wI39f6Z+CmtU23AAAAAElFTkSuQmCC",
+"frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAACIklEQVR4nO2ZvXnCQAyGRZ4UVBQu3TIKGzACC7CAXdkLsAAjZIOMktalCyo6p0gE4iLfne50JsmjtwH8I+s7/XEAYBiGYRiGYRiGYRhJrEoYPdTHiX4+D6cizwFQFNBU7TSsL95rSgh50TDSVO3Uj13wOjcyGmQLoM6fh9Pt+Hk4PXxGtEWoRAA51EcAANbxUmQJiE2dkiQLwKLFVcfXpVFJoUN9fEgbnxjtTqQiAJ13c98V8ivb6FzBLpVSql3IR33dFLGbLYCutGTVm6qdmqrNngmLRYBCHc8VkSygH7sVpkVo5evrBvqxWwHcHe7HDnCG5IhQi0BM+lDnkVwRWQJoFJ7FIjUwrC/4tQPT6HYO3+M5KSqDJWYvwNUBkuo8QKIA6gB1yicCU40p5qxFFN/MFZvr1JwQV4QGIkNcF+FyeC4atOC1REQb4Zwn53445UspzUgU60JLtdjX4k8IEDPAfJEqUgPuPTSVJOnDdTsXtS40t5Ku8yl5T4egi8ocKNk+fc4DCGrA1/85clomHXKhe2dP+iYlJyY3VVInMxuBkDH3OBWUmuepzM6BFCdyipR7HwMrYMkVzN2hPWVPjGjs0FQF4MZF02YI1T84AL5ESGrBjYJ0h6YqoB+7h+2iVIT0PgDFLSX3/UjilNYOLZlvB1R+bXsaf9p54z+x2+7LTWKJ8RTQ/m67n2KeJRJAjae5F2dfQrSA0ivP8f7xFpwJn5IFZHtpN7BRAAAAAElFTkSuQmCC",
+"frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAChklEQVR4nO2ZvW3DMBCFn4IUqQJEpVqXniB1NsgIXsALSJW0gBfwCN7AdSZI6dalAqRKpzQ54Ezx50ieFATh1xg2JOo93vGOlIFCoVAoFAqFQqFQKPwO1VID75r9xL8fr4dFnqU6aFt30/Xh03uNtpE7rYEk4oF5ZHJRMxCDpol7rYEA4Hg9AAB2zf7mO/9NG5UItHU3DWOvMVQ02Qakub8Uq6wBM32ar0e1sdUMkEgudqm854gNvGxep5fNq7d67Jo9jtfDKouXUE0hLtxF8/WIYezVmtmv9AFNRAZ46oTSyIf27AOZEXCVUEnet3U3tXWX3ZGTDFAUhrGveEn0Ceezz4XnmlBfA6HZJ8HD2IO6d46JbANmFNZm1Sr0s2eiNEJbdwCQtbCTDJwvp5sHxkaBC86tSqKbzdL5/LG1Pjy0sSOTqzcyPuMkHpgvPoqEKxrSXWtMr4lKITbzzgoyjH0VSilJ1ZGaCBqgTRwXz8SKBZnY7pFsGE0Wq0Ia5VViJriYaJDz5VTxJgQgWAZti9pn6u3pffbb88fWu+hFBvgituW8735ugos373PNtqviEd63ErZBh7HnkXAaI8wIxJZQ/jwbSa9VbPUfcJfJ3Prvuy/JgC0CJr50CXG+nCppNXIaaOtuesN8UZEg335e6+BibllsWMso33S5oIZlXpcqnnd4QCYecBhInb1U8RRJMqG+lZAOmCOeeosZiRBeA9IwpmKK5ybU9kJLwg83/JM6ssRE1Ju5kJAUTBOxYwUNSNPo58FJh3MSnTIRmn9wTOzzpv1LhKVGUdPA7JycOlBMJ446Uua8VlyK//FyF1i+J6QSHYE10oifAkPX/vkUimbNCPwLvgES8XDTkgB0TgAAAABJRU5ErkJggg==",
+"frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAACT0lEQVR4nO2Zu5HCMBCGxc0FRAQKnVIKHVACDdCAFNkN0AAl0AGlkDp0QESmS25vFt/K2pUWg2f0zTADfoj99yVZNqZSqVQqlUqlUqlUEuy2+7Db7sO77Riz4lw0Nvx6u5D3HZojKfDcn1j/k8NX6gKu12PGp86VkhSgxatEqAhw1hdHKZdiAc760K/vf7/P/enfNfiYtgjVFAJDscHUMW7EOHxrDaQF1TRiXc+YGYuYQ6zjTXVCsYApbwCH5igdNhvVCFCGw7GUqNR8EzufFIA9zvU+1YmA5rEx3dBmzcyUCPUaoLrOK5mliF9ZEyIBsTxsHhsdazJgCcC5nyo2rred9QFPaJz6oshKISwCCnIcBUoIFLCzPnRDa7qhFc3KlEi2AImHFjcPxKIwdb2z3jjrn1pqThrNvpSAlOmGdpU7H2DYAnDeU57CUYBPKZxJVLQahUGwF/F5/NtZH5rHxuBnhX59zxJWvBrF3ud2EEgRyuDYfakoU4hqAIxHRibboFSEMbJinr2IcUpxSIlhb6tcb5cVtD9g3AZjxKKggfiREmZS+C69HwtJjcP5n0kBsXWP1HDYucDGcyMH98euZ0WAU1RTRYmNz4ladgSMkRtPFWmJ8Smyt1WosILx44KVGC5dD2ULwMUMaHh6t92H3GeDbLR22nLeQXzMxhZ2wie+SJnk1/jgrA/qb4I4g5WkEBgPH6mIt6cQXp6MlyYqkeAOUlrI4xpQTSXBQGq5yxWgnUJPT2QlUVGdCxbX1ijmFrGYLjTF4iO/eAGVygz8AG8Ua9cXLf+2AAAAAElFTkSuQmCC",
+"frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAACPklEQVR4nO2ZMXaDMAyGlb4OmXivjKwZe4LOuUGOkAvkAjDBBbgAR8gNMvcEHbMy0vcysdEl6vNzbCMZmbqtv4k4YPuXJVkGgEQikUgkEon/y4Zz8353mPD6cj2zng3FE/VGdfKm3z8FWUCskATEYm0Tz74P2mLgWJwexHZ9GyxeSB3rK8CZvEoIId4roFLm1dRvb4v6oBpJR0QAFVyhYsygGWrnBKkpe3EWCmF9zv/iabTrW+j69qEtFKICTBPFtqUibKsQbCMLaXUVtoAQNdCSPlkC5gY6FifjdUiCuJBJiIQgUxyICCjG7KHNlI3w3rk9gANJwBIf7fqWZH3fMcRdaC3fR1gC9rvDFFtpTRagLjFHhG1FyryayrzyKuBUvF0IRWBA6oFsmjgGcJlXUzPU0Aw16CK4sKrRy/W8cVm/GDNQCzub9VEEXnPG19u8In+/O0x6Z6olbdUpNYWikVSD2dwryEZm2hcQH5cJeh5AdMsWY+YUIgXbhdB97oFofd5laddz3JdnXkdKzCIuEXr70mxjg72RvX2+QjPUAACsNIiC+u1NVAw7Bt5fPqDMKwAAKPOKlQabod5gqp0TQd3UvN6N3vO4aFXpi/eJzHfy0qJFT2Q29LpH8kwg+mJrzq8xa61+oAGYtz4ls3AmvmrZLp3j8dxBERHlBw5OrEUpgIOIAImgDFVqrMJ98t+pVvTsTelIwnpqHxwB0cSA7oaxfIeOg7XfBXHGC+ZCvzqrREnMbhQtf0JEIpFw8wXRPTj+ZErKcgAAAABJRU5ErkJggg==",
+"frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAB1UlEQVR4nO2Zu3GEMBCGhcexA0JSSqEDSqABGoAIGrgGrgR34FKcXkjsTI40w+j02JV2BZrZL7kXaPfXPiR0SgmCIAiCICTTYC4e+lGb9z+/36h7ufiAXnh23vX5KsAC7gpIwF1m28Unx6BTN78Jfr4eLDVDmkJTN2uX8+Y3SluG5AjYXSjXQTtNoV2OJAJLuwadf74eSim/SFeNDf2oIbWXJACzBhjnzSuWmAi0AIjzqc76CIkgXwfsGZ+6OXpPzqpOImA/tqb7+6IYyosvCuQRcM34+btYwWNBCYCG+uwwNJVS04gsAnYaTd2c3YEggARgZienFmJ2XHXAshs1IiAdKJci2+kcIbGogAVgiyw1lVx2QrZREYjtT/ZjezPEnUZJbRQqgntxUypjLwR9SuMWkVzEJVqrbcNlk6ULuWohNxK+CWN7HnCJ4IB1HdiPreEuarQAU7yYXaUtBDI+lKQILO2q92Mj3xqfYXmoN7OzH1uztCs6z0vVhReqE7pQ5NhSaOhHTXkiTZV+1R/uXgJlChVjaVcNSRvoiZyBpSv4HMV0IeqaC8KxHrCejZbgLv/BZVF1BKoH2omiEbiiL992LYBSvQBySs9I9RGoXoAgCIJQjH/AoOHk41s11wAAAABJRU5ErkJggg==",
+"frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABnElEQVR4nO2YsZGDMBBFxY1jB4RKKYUOKIEGaAAiuwEaoAR34FKcEjp2pou40WnQsiuxQtztizwDmP37/0oalBIEQRAE4UTUVWPqqjFH17FQYG9cK/r5eqCf5+Ir5uEcnIgSkAMoATl02scl5mF3BlrdrQqd5nFzVuwmUWYrOELuS/pyMPpz9d0OOug6TFnpggRAHbJFTPNoXyLHECOCbYjt4lvdLT93nyWyAEw+fS5YQtBsucDmgF3sNI9g8TEbIkkA9KL7+/brmv5cf4pudefOAwnIhV0d8IlYiodEhLrAvhMDSysJnwsoAbGHtpDhxZL6LAQ2IqRRaAHYP3fnQKn9YrRGMgewMaK6EHWYw7LmCpbn61EkW0a5gFwhCcCeEmM6ToW8E29ZyoXPhawjdPhHg74cgpzK7dMNGUrxSSJEcYLa+WQz0JeDCY0UBFlASDbv71uRcmllZcsF1gidemXYE8gFNgf27r5PxOGbl5AzHPsAa97cgil7QV01Jtk8cHRWqT+wbJ9egHAkp47PqYsXckAiJAiCIPwbvgHVEbLqcFGO8gAAAABJRU5ErkJggg==",
+"frame_11.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABZUlEQVR4nO2XsZWDMAyGlbwrUl1BScsobMAIWSALQAULZIGMcBvcKGkpKa66jqvIM35wlmSbmMf/dQFHSPol2SYCAAAAjkRZVGNZVOO7/Zg4SxabjqcSxEmyeMnp7+fXy0adNbP3/eWHHv1d9A0pbAVcGbedJyJ69HeNTyJEJaQkaql9cBatZd8sHx9s+xK7agViOW8+4wwKVQBLzndDe+qGdva8zhoiIrrmN3EZlUU1cpIUvAfsIK75TW0rigKcrJhB5L+fUaeRKABN3XdDK/3LDJcK0cbopMLUB2v4DgNWAKEmztJmx+E/FbbYyJyN7JMgdgA+H+Gch1z211TYRIGYRA3A3hPs3zYalXevQNSzuhbXvcMkeQVCjXAVPnOfe2VNXgEXqgBSudATBbwPhOatte+LROHd98AmSKaRtL82VUA7VndF0goQHUSF5IEKAOyMOmvGQzZuSsd2AAAAAAAAAAjOHx+aiLuDsybjAAAAAElFTkSuQmCC",
+"frame_12.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABVUlEQVR4nO2YzQ3CMAyFW0ZghR6ZgHM36DxwgnnYgFG6AowQDsjIMm2w3ean4n0SUntI+15eYoc2DQBg07TegX03BLq+jzf3c5ay8wzi4uX9aX8Op/05fI9Kg9mAFM/hwnOZcCUwxZTgHCZMBmKzT1wfl/b6uHz2RGoTqyXQNG/xJDiXCZcBWXWOz8NHMBceo++GQD+PBkJtgF50H29t3w1BUzrnzMSqmBVTAlI03cdm3ZKIRQuhMsAfLq/XbGIeE+oEuFC6TtGBrSZWrUJa1jSuXp+5Z1v7vmKHMM6cEY2JIktIMidUsx+SJsA7sKacTgn+lULSBKToX0cKzz5LvoS0jYywmqhiE0vkUoqZqmITSywpJDfgPUprTVSZAKfkB4PFaPpA9QkUZclfSe2ptMoELEfqrJ34b6gmAVALlmq09DtRcTZvAAAAAAAAAAAAAAAAsAVeeACdRVDIXqIAAAAASUVORK5CYII=",
+"frame_13.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAABH0lEQVR4nO2XwQ2DMAxFTdUJWIEjE3BmA+aBUzsPGzAKK8AI6QkpSkWw40CC+O9Mkv/9bSBEAKSlrTqT8vyXZvEmPqWJYAOu6FQmipBFPrHNWhMR0Xf5BO0tRZwARzwRUV8OlyTyjrVRs9Z/Ve/LwZydRNAMTPPIFuUm0VadiTkvYgMS8Vv1NxO28FgmVK9R28xeq/haKEYabANu9WzxklSO9pbCNrAnUiLe92yoCZYBbcx2G2nTcmFt5rZMTNziSM9RDXEMpnksbNHStC/53HOxxXOTSJ6AlqwMaFrpNPpyMCE/dtkYsJEaydLE4zhKIashDuF0A5qb2e1ngGPg9i0EfDy2/2Nf/C/n1uIBUIL+BwAAAAAAAAAAAAAAgGN+Mwd/EY7BAOgAAAAASUVORK5CYII=",
+"frame_14.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAqElEQVR4nO3WYQ6AEBjG8XQVR3GDDuoGjuIs9UmzJirspf1/X9qa6nkRlgWQZfS2G73tUt9fax6Og0sV8bmAVGCJIj4V8DZoz2mmWr0oBHTeqtT92LVNjap/ILgLn2vfakSaFJBzLcp5q4YagSc9mQrsvFWSy+/p7XQYJnR8nc50wUcO3H0VAgCgRmkTZSPr6ckRhhHAX418hC+aOjwAAAAAAAAAAEDJAdFcQKn1+ljyAAAAAElFTkSuQmCC",
+"frame_15.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAiElEQVR4nO3V0Q3CIBAA0KtxE0ZhAwZ1A0dxFvxqQkxjDKVSzXt/QA7ujhAiYK6cSs2p1FnnX/YEt4nPKmLpDcyp1PvjtrTjiIituVW7Nkr3Dbwm80lyR9zSdfSGW47o/GrXG2jNfMhDvCvg54uL+JMiTkM3v03HAaCTT3Qm3QcAAAAAAADO5wkhWCkyqnOvNAAAAABJRU5ErkJggg=="
+};
+
+// ===== Renderer config (DO TEMPLATE — chỉ sửa config khi vibe code) =====
+const FPS = 6;                 // fps animation debuff
+const LOOPS = 1;               // số vòng play trước khi tắt (1 = play 1 lần)
+const STACK_GAP_MS = 200;      // chống spam: 2 lần kích hoạt cách nhau tối thiểu
+
+// ============================================================
+// ⚙️ ENGINE
+// ============================================================
+const imgs = [];
+let loaded = false;
+function loadAll(){
+  const keys = Object.keys(FRAME_DATA).sort();
+  return Promise.all(keys.map(k => new Promise((res, rej) => {
+    const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[k];
+    im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame " + k));
+    imgs.push(im);
+  })));
+}
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0;
+const caster = { x: 60, y: 140 };
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+// mob test
+const mobs = [
+  { x: 320, y: 110, hp: 50, maxHp: 50 },
+  { x: 150, y: 200, hp: 50, maxHp: 50 },
+];
+const MOB_R = 13;
+
+// debuff đang chạy trên từng mob
+const debuffs = new Map(); // mob -> { frame, t, lastTrigger }
+let lastFrameAt = 0;
+let activeDebuffs = [];
+
+function trigger(mx, my){
+  // tìm mob tại (mx, my)
+  const m = mobs.find(m => (m.x-mx)**2 + (m.y-my)**2 <= 16*16);
+  if (!m){ log.textContent = "Không trúng mob — click lên 1 mob màu đỏ."; return; }
+  const now = performance.now();
+  existing();
+  function existing(){
+    const d = debuffs.get(m);
+    if (d && now - d.lastTrigger < STACK_GAP_MS) { log.textContent = "⏳ spam guard (" + STACK_GAP_MS + "ms)"; return; }
+    debuffs.set(m, { frame: 0, t: 0, lastTrigger: now });
+    log.textContent = "✨ DEBUFF tại mob (" + m.x + ", " + m.y + ") — fps=" + FPS + ", loops=" + LOOPS;
+  }
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  trigger((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function update(dt){
+  const now = performance.now();
+  const key = performance.now();
+  for (const [m, d] of debuffs){
+    d.t += dt;
+    d.lastTrigger = d.lastTrigger; // giữ nguyên
+    if (d.t >= 1000 / FPS){
+      d.t = 0;
+      d.frame++;
+      if (d.frame >= imgs.length){
+        if (LOOPS > 1){ d.frame = 0; d.loopN = (d.loopN||1) + 1; if (d.loopN >= LOOPS) debuffs.delete(m); }
+        else debuffs.delete(m);
+      }
+    }
+  }
+}
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0; y<canvas.height; y+=24)
+    for (let x=0; x<canvas.width; x+=24)
+      if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  ctx.fillStyle = "#fc0";
+  ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function render(){
+  drawChecker();
+  for (const m of mobs){
+    ctx.fillStyle = "#a33";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000";
+    ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    // hp bar
+    ctx.fillStyle = "#300";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2 * (m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText(m.hp + "/" + m.maxHp, m.x, m.y + MOB_R + 10);
+  }
+  // debuff overlay TRÊN mob: căn giữa, chân align chân mob
+  const s = scale2x ? 2 : 1;
+  for (const [m, d] of debuffs){
+    const im = imgs[d.frame];
+    if (!im) continue;
+    const w = im.width * s, h = im.height * s;
+    ctx.drawImage(im, m.x - w/2, m.y + MOB_R - h, w, h);
+  }
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && debuffs.size === 0 && imgs.length){
+    // auto cast: mỗi 1.2s kích hoạt 1 mob random
+    if (ts - lastFrameAt > 1200){
+      lastFrameAt = ts;
+      const m = mobs.find(m => !debuffs.has(m)) || mobs[Math.floor(Math.random()*mobs.length)];
+      trigger(m.x, m.y);
+    }
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+(async () => {
+  try {
+    await loadAll();
+    requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+  } catch(e){
+    log.textContent = "⚠️ " + e.message + " — hãy nhúng FRAME_DATA.";
+  }
+})();
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+</script>
+</body>
+</html>

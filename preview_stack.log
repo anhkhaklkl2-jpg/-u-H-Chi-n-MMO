@@ -1,0 +1,561 @@
+[preview-stack] ready on http://127.0.0.1:8898/?preview=1  (dist=D:\d? ?n mini build bot discord mmo event\web_client\relay\dist)
+[stack] browser connected cid=1
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (93,133)
+[METEOR] crater ore spawned at (186,158)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=135 ty=102 block=None
+[stack] action chop tx=137 ty=98 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (68,51)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=137 ty=99 block=None
+[stack] browser disconnected cid=1
+[stack] browser connected cid=2
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=133 ty=101 block=None
+[METEOR] crater ore spawned at (58,26)
+[METEOR] crater ore spawned at (153,24)
+[stack] browser disconnected cid=2
+[stack] browser connected cid=3
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=3
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=4
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=4
+[stack] browser connected cid=5
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (148,196)
+[stack] browser disconnected cid=5
+[stack] browser connected cid=6
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[METEOR] crater ore spawned at (56,28)
+[stack] browser disconnected cid=6
+[stack] browser connected cid=7
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[METEOR] crater ore spawned at (230,124)
+[stack] browser disconnected cid=7
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=8
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=8
+[stack] browser connected cid=9
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=9
+[stack] browser connected cid=10
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (55,187)
+[METEOR] crater ore spawned at (49,58)
+[stack] browser disconnected cid=10
+[stack] browser connected cid=11
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (32,133)
+[METEOR] crater ore spawned at (21,62)
+[stack] browser disconnected cid=11
+[stack] browser connected cid=12
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (220,98)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=149 ty=101 block=None
+[stack] action chop tx=139 ty=102 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=138 ty=96 block=None
+[METEOR] crater ore spawned at (113,69)
+[METEOR] crater ore spawned at (70,179)
+[stack] browser disconnected cid=12
+[stack] browser connected cid=13
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] browser disconnected cid=13
+[stack] browser connected cid=14
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] browser disconnected cid=14
+[stack] browser connected cid=15
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (138,153)
+[stack] browser disconnected cid=15
+[stack] browser connected cid=16
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] browser disconnected cid=16
+[stack] browser connected cid=17
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[METEOR] crater ore spawned at (95,63)
+[stack] browser disconnected cid=17
+[stack] browser connected cid=18
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] browser disconnected cid=18
+[stack] browser connected cid=19
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=19
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=20
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (100,93)
+[METEOR] crater ore spawned at (209,152)
+[stack] browser disconnected cid=20
+[stack] browser connected cid=21
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (71,34)
+[METEOR] crater ore spawned at (204,100)
+[stack] browser disconnected cid=21
+[stack] browser connected cid=22
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (153,78)
+[stack] browser disconnected cid=22
+[stack] browser connected cid=23
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=139 ty=101 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=136 ty=101 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=23
+[stack] browser connected cid=24
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=24
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=25
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=25
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=26
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=26
+[stack] browser connected cid=27
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=27
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=28
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=28
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=29
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (56,184)
+[stack] browser disconnected cid=29
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=30
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=30
+[stack] browser connected cid=31
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (242,125)
+[stack] browser disconnected cid=31
+[stack] browser connected cid=32
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (178,15)
+[stack] browser disconnected cid=32
+[stack] browser connected cid=33
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=33
+[stack] browser connected cid=34
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (179,165)
+[METEOR] crater ore spawned at (188,110)
+[METEOR] crater ore spawned at (212,61)
+[METEOR] crater ore spawned at (35,26)
+[METEOR] crater ore spawned at (195,103)
+[METEOR] crater ore spawned at (222,166)
+[METEOR] crater ore spawned at (149,82)
+[METEOR] crater ore spawned at (153,10)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=128 ty=99 block=None
+[stack] action chop tx=129 ty=104 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=138 ty=90 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=133 ty=90 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=139 ty=102 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=134 ty=94 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=133 ty=88 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=127 ty=98 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=128 ty=98 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=138 ty=100 block=None
+[stack] browser disconnected cid=34
+[stack] browser connected cid=35
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=127 ty=100 block=None
+[stack] action chop tx=126 ty=99 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=138 ty=99 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=134 ty=102 block=None
+[METEOR] crater ore spawned at (148,99)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=136 ty=99 block=None
+[stack] browser disconnected cid=35
+[stack] browser connected cid=36
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=36
+[stack] browser connected cid=37
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (44,192)
+[stack] browser disconnected cid=37
+[stack] browser connected cid=38
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (90,109)
+[stack] browser disconnected cid=38
+[stack] browser connected cid=39
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (2,48)
+[METEOR] crater ore spawned at (184,146)
+[stack] browser disconnected cid=39
+[stack] browser connected cid=40
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (151,114)
+[stack] browser disconnected cid=40
+[stack] browser connected cid=41
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (164,21)
+[METEOR] crater ore spawned at (64,125)
+[stack] browser disconnected cid=41
+[stack] browser connected cid=42
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (102,174)
+[stack] browser disconnected cid=42
+[stack] browser connected cid=43
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] browser disconnected cid=43
+[stack] browser connected cid=44
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (237,144)
+[METEOR] crater ore spawned at (152,198)
+[stack] browser disconnected cid=44
+[stack] browser connected cid=45
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=45
+[stack] browser connected cid=46
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=136 ty=99 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=134 ty=99 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=46
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+[stack] browser connected cid=47
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=134 ty=107 block=None
+[stack] browser disconnected cid=47
+[stack] browser connected cid=48
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[METEOR] crater ore spawned at (59,133)
+[stack] browser disconnected cid=48
+[stack] browser connected cid=49
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[METEOR] crater ore spawned at (97,38)
+[stack] browser disconnected cid=49
+[stack] browser connected cid=50
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[METEOR] crater ore spawned at (111,114)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=133 ty=101 block=None
+[stack] action chop tx=133 ty=101 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=132 ty=96 block=None
+[METEOR] crater ore spawned at (14,39)
+[stack] browser disconnected cid=50
+[stack] browser connected cid=51
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] browser disconnected cid=51
+[stack] browser connected cid=52
+  [cave] carved 2984 invisible-blocker cells (no art)
+  [cave] carved 555 poly-ghost cells (no owner)
+  [cave] sealed 1320 void rim cells (no art)
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=139 ty=111 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=133 ty=112 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action chop tx=139 ty=112 block=None
+[stack] action chop tx=141 ty=112 block=None
+[stack] action chop tx=141 ty=112 block=None
+[stack] action chop tx=141 ty=112 block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None
+[stack] action turn tx=None ty=None block=None

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>NPC Gallery — Ninja Adventure actors</title>
+<style>
+  body { margin: 20px; background: #17151d; color: #d8d2c4; font: 13px Tahoma, sans-serif; }
+  h1 { font-size: 16px; color: #ffd76e; }
+  .hint { color: #8a8496; margin-bottom: 14px; }
+  .group-title { font-size: 14px; color: #9fd0ff; margin: 22px 0 8px; border-bottom: 1px solid #2c2a36; padding-bottom: 4px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { width: 96px; background: #211f2a; border: 1px solid #35323f; border-radius: 6px; padding: 8px; text-align: center; }
+  .card img { width: 64px; height: 64px; image-rendering: pixelated; object-fit: contain; }
+  .card .name { margin-top: 5px; font-size: 11px; color: #e8e2d2; word-break: break-all; }
+  .card .meta { font-size: 10px; color: #77718a; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h1>NPC Gallery — thư viện sprite NPC (Ninja Adventure pack)</h1>
+<div class="hint">Mỗi NPC 1 folder: <code>assets/npc_gallery/&lt;group&gt;/&lt;name&gt;/</code> — preview.png (mặt/idle), spritesheet.png, walk.png (nếu có). Muốn thêm NPC: chép spritesheet + walk vào <code>assets/npc/&lt;id&gt;*.png</code> rồi khai báo trong <code>assets/maps/.../overworld.npcs.json</code>.</div>
+<div id="gallery"></div>
+<script>
+const GROUPS = ["Character", "CharacterAnimated", "Monster", "Animal"];
+const EL = document.getElementById("gallery");
+for (const g of GROUPS) {
+  document.getElementById("gallery").insertAdjacentHTML("beforeend",
+    `<div class="group-title">${g}</div><div class="grid" id="g-${g}"></div>`);
+}
+fetch("manifest.json").then(r => r.json()).then(list => {
+  for (const it of list) {
+    const grid = document.getElementById("g-" + it.group);
+    if (!grid) continue;
+    grid.insertAdjacentHTML("beforeend", `
+      <div class="card" title="${it.dir}">
+        <img loading="lazy" src="${it.dir}/preview.png" alt="">
+        <div class="name">${it.name}</div>
+        <div class="meta">${it.walk ? "idle+walk" : "idle"}</div>
+      </div>`);
+  }
+});
+</script>
+</body>
+</html>

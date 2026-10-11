@@ -1,0 +1,5 @@
+actor: Child
+group: Character
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Character\Child
+preview: faceset
+spritesheet: SpriteSheet.png (64x32 px)

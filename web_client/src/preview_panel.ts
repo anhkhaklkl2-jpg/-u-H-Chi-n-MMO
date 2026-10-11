@@ -21,10 +21,12 @@ type Cmd =
   | "hurt"
   | "give"
   | "kit"
+  | "zombienear" // 👹 quái cạnh player (spell hit-test test)
   | "block"; // 🧱 block: đặt/gỡ bàn chế tạo cạnh player (test near_station)
 
 interface PanelHooks {
   send: (frame: Record<string, unknown>) => void;
+  castNearest?: (spellId: string) => void;
 }
 
 const MAPS: Array<[string, string]> = [
@@ -183,6 +185,7 @@ export class PreviewPanel {
     const mobs = details("👾 Quái & động vật", true);
     row(mobs);
     btn(mobs, "Spawn 10 quái", () => this.send("zombies", "pack"), "#1a3a1a");
+    btn(mobs, "👹 Quái cạnh", () => this.send("zombienear", ""), "#1a3a1a");
     btn(mobs, "Cắn -10", () => this.send("bite"), "#5a3a1a");
     btn(mobs, "Cắn -50", () => this.send("bite", 50), "#5a3a1a");
     btn(mobs, "Dọn quái", () => this.send("zombies", "none"), "#5a1a1a");
@@ -208,6 +211,10 @@ export class PreviewPanel {
     btn(me, "🎁 Bộ demo", () => this.send("give", "demo"), "#2a2a1a");
     // 🎒 Kit test (user 08/10): full giáp + vũ khí + potion + block, auto-mặc.
     btn(me, "🎒 Kit test", () => this.send("kit", ""), "#2a1a0f");
+    // ⚡ CAST NGAY (user 12/10): one-click cast rocklift at the nearest mob.
+    // Bypasses wand/radial/click entirely — hits whatever stands closest.
+    btn(me, "⚡ Cast ngay", () => this.hooks?.castNearest?.("rocklift"), "#3a1a2a");
+    btn(me, "⚡ Cast gỗ", () => this.hooks?.castNearest?.("wood01"), "#3a1a2a");
     // 🎁 give <item_id>: item bất kỳ theo id (đặt block như crafting_table
     // để test near_station/craft grid; server _cmd_give nhận ITEM/BLOCK id).
     const giveRow = row(me);

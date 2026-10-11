@@ -76,7 +76,7 @@ WEATHER_MARGIN = 3
 # Hotbar: 4 item slots drawn as the TOPMOST layer, overlaid on top of the
 # HP/mana widgets, coin counter, weather and clock. Subtle, background-matched
 # palette so it reads as a quiet frame rather than a loud UI element.
-HOTBAR_SLOTS = 6
+HOTBAR_SLOTS = 10
 HOTBAR_SLOT = 84            # square size (internal px); even so downscale stays uniform
 HOTBAR_GAP = 12             # even gap -> uniform parity across slots after 0.5 shrink
 HOTBAR_SHIFT_X = 60       # shift the whole bar 35px further right (was 25)
@@ -470,8 +470,15 @@ class HubRenderer:
         # Topmost layer: centred on the hub image, overlaid on everything below.
         # ``hotbar`` maps slot index -> (item_id, qty) for bound slots.
         slot = HOTBAR_SLOT
-        total_w = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * HOTBAR_GAP
-        x0 = int((internal_w - total_w) / 2) + HOTBAR_SHIFT_X
+        gap = HOTBAR_GAP
+        # Fit-to-width: 10 slots của 84px không vừa khung 840 — co đồng đều
+        # (giữ pixel-art: kích thước nguyên) cho tới khi cả bar nằm trong hub.
+        fit = (internal_w - (HOTBAR_SLOTS - 1) * gap) // HOTBAR_SLOTS
+        if fit < slot:
+            slot = max(8, fit)
+        total_w = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * gap
+        shift = min(HOTBAR_SHIFT_X, max(0, (internal_w - total_w) // 2))
+        x0 = int((internal_w - total_w) / 2) + shift
         y0 = (internal_h - slot) // 2
         # Paint a uniform BG behind the whole group (gaps included) so the slots
         # never reveal the HP/mana widget (or anything else) showing through the
@@ -479,7 +486,7 @@ class HubRenderer:
         draw = ImageDraw.Draw(img)
         draw.rectangle([x0, y0, x0 + total_w - 1, y0 + slot - 1], fill=BG)
         for s in range(HOTBAR_SLOTS):
-            x = x0 + s * (slot + HOTBAR_GAP)
+            x = x0 + s * (slot + gap)
             self._draw_slot(img, x, y0, slot)
         if not hotbar:
             return
@@ -487,7 +494,7 @@ class HubRenderer:
             if not (0 <= s < HOTBAR_SLOTS) or not content:
                 continue
             item_id, qty = content
-            x = x0 + s * (slot + HOTBAR_GAP)
+            x = x0 + s * (slot + gap)
             self._draw_slot_item(img, x, y0, slot, s, item_id, qty)
 
     def _draw_slot_item(self, img: Image.Image, x: int, y: int, slot: int,

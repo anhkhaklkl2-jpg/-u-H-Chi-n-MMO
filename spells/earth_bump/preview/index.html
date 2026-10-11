@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Earth Bump — Spell Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🪨 Earth Bump — kích hoạt cách player 10px, lật trái/phải theo mục tiêu, KHÔNG xoay, đẩy địch gần</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click trên canvas = kích hoạt bump về phía đó. G = caster. Ố đỏ = mob test.</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — nhúng base64
+// ============================================================
+const FRAME_DATA = {
+"frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAfUlEQVR4nO3RsQ2AIBCF4cPYO4ETGBs3oKNxIQdwIRs7N6AxTOAEToCVhpgYsUGK/6vIuyPhBREAAAAAAAAAALI0GO3/fsOTInZxMNrHFklZuPx6oW86LyLS1tWVrdsu9yyV6B/IVVSBcV7UeZ6cVZOzKpyfWbgHAAAAvDoAQZsabW+Y+ygAAAAASUVORK5CYII=",
+"frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAwUlEQVR4nO3TMQqDMBTG8dfS3a1bTiChYE/g5uLUwaMI3qBH6eDUc1gQ6Qnc3DxBOpSUphWJ0KZQ/r/Nh8L35RkRAAAAAAAAAMCsuixMXRbm1zmebXxfrLLUNO0g+93WmedxYrSKnPnheFp9LuK89dIPmnZwnrWKpOtHZx5yS14bqLL0Eajrx7eZLSEibxv6Nq8CXT+KVpGI3MNqlU6esC0RklcBG37Ka+jQJRZdtjxOnN/GsqHP10uwywsAAIA/cANhUTboNbqU7QAAAABJRU5ErkJggg==",
+"frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABQklEQVR4nO3TsU7CQBzH8a/GzYHNRBJGJiAafAIWwgCTA4MLb0HkBYxv0cXBgUkm3qFGAk4dSWjC1oH5HMiVw5akpU2Mye8zHv87fv+7f0FEREREREREROQfuijroOl4aAAeX98TZ056HQPwcHeT2JdWn8dlkc3WoNE2/mKbWJ+Oh8aGBzhVU+S/CzcwaLQNwHIdxQEnvY45detlN5Hr+dLGxDYA0KpVgH0z1qhfB5LByxqnzC9wakxgH7xVq7BcR3H4MNoRRju8WYA3CzK9xDmu8hS7NwuHj9MN/fx0f1Tz8vbFbeUa2N+6v9jG9e55H9+fZ33MmTa5YwKHUbEhwmgHQLdZTR0N28SoX8ebBYnfzw0POV8A0sN3m9V4zV9sU5sASg8PORr4HRyIb941X22YrzZHa3aEXEWDi4iIiIj8vR912Y5XBadgcQAAAABJRU5ErkJggg==",
+"frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABiklEQVR4nO2UsW7CMBCG/1bdOmRAQmqFRyYaUcETZKkywNSBoQtvgZoXqPoWLB06MJXXoCqKOjEaKRISg4fM7mSKE9uJ1QiG3iexJIfz/XeXAARBEARBEARBEATxP7k458OTOJIpF5iOusb7j6/vlX6XjVvVJIkjCQAhCzBfbkr3W6yDxWwiq845+QSUeBHTJFqsgz3fOidx0gm4OmqaxJ5vK//XWIDFbCJtD0riSI57AwkAw37beoZtnVw0EkDJAXq3kjiSppVpMsSf3wElH7LgILZa70p1KRcAoO25qa5Yr/j4/jS6NrZCKRdYrXdWqZAFAKB11zaJoryL2gHGvYF07bkSdGELcRzERx7wnICpuyELSvIpF9qvWA+gtOfDftsqb1sfALiqp/4rpnB9zzOR4/np/nBtvtxoIW0hTLjkAc8AStBH3lY3HXW11Xl5+8JNcO2r4xfAtedK/uHu1nmGa8czkWshqroP1PyM2jp+LJSJHACMAUzSqt6EClEnAEEQBEEQBEGcjx8ixrvLN/u5vQAAAABJRU5ErkJggg==",
+"frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABlElEQVR4nO2UsWrDMBCG/5ZuGTwEAoF4NB1CSEn6At48OFOHDl38FqV5gdC3yNKhQ6dmyjM0pcHpUDI6JBDooCGzO8k925JsU5NQuA8ERrJ0/6+7E8AwDMMwDMMwDMMwzL/k7JTBX+5vY9X8zeNzaV3n9cmpxthz4+lsnZtv2h2tMRVHz8DYcxNxw34L09kage+k/mnaHXxHm1KZqM0AvTVVYLm+WO5T8zoTprMotZXQ5Okj+aZmxp4bj7qD1K1TFss9At+BqpyyZ6moLQOj7iDeiQMe7q4SYZIwEqBr2XUgnwlq6PXzXauzFgP0hnu2pfynjIn5aou21cjtPYoBnXCKycR8tdXue9t8/d3AdecyloFpY9FXpYgwEgCQMqGr/Z04ADCLByo2sS4YFTjst5IhBUtkltpWA9PZOjkv8B0EvoOdOCSjLBdVDAC/JrI3H0ZC+RSGkcj1hRRISymL7IWRNYhNPVD5Ge3ZVumykUJlJmQPUIFFe4so1QMmwbSuTbSthlG8bn9RDzAMwzAMwzDM6fgB6e7LU2T2KwQAAAAASUVORK5CYII=",
+"frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABlklEQVR4nO2UsUrDUBSGf8WtQ4aCUGjG4FCKUn2BbhmSycHBJW8h9gWKb9HFwcHJTn0GK5bUQTqmNFBwuEPmOOgNJ8m9yS2GFuF8U7n35p7/v+c/BRiGYRiGYRiGYRiG+ZccHbL4891Nqlq/fngy1nXcnJzdGLnDdDJdldbbdldrTMXeOzByh5m4y/NTTKYrBJ6TO9O2u/iK1kadaMwAfTVVYbk/X2xz6zoTVXdRGovQ+PE9+03NjNxh6vcGuVenzBdbBJ4DVZyKd6lorAN+b5DGIsH97UUmTBJGAnSvuA+UO0ENvXy8aXU2YoC+cN+2lGdMTMyWG3SsVunbvRjQCadUmZgtN9rvXteffzdw1T1LZWE6WPRfpY4wEgCQM6HLfiwSANXigR2HWFcM+MlwcUCLyC51rBYm01XuvsBzEHgOYpFk4k04MT75iyxKXz6MRCZeDmNVpKhAGieKnAXfGqRVM7Czgb5toW/XxyaMRMmEnAEqUEcsktozgOEMVOWc5lpCC0sTJuJV0ambAYZhGIZhGIY5HN/JfcKwABHzBgAAAABJRU5ErkJggg==",
+"frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABgUlEQVR4nO2UvUrDUBiGX8WtQ4aCUGjG4FCKUr2Bbh3SycHBJXch9gbEu+ji4OBkp16DFUvqIB1TGig4nCFzHPSELz8nTTG0y/tM4fx97/v9BCCEEEIIIYQQQgg5BEeHDP5ydxMXrV8/PlfWdVyfnN0YDfrxeLLMrTftttFYEXuvwGjQT8Rdnp9iPFnCc53UmabdxnewqlSJ2gzIrBUF1vuz+Sa1bjJR9pakthZ6ePpIvqWZ0aAfDzu9VNYls/kGnuugqJ2ybxVRWwWGnV4cqgj3txeJMI0fKMi97D6Qr4Q09Pr5btRZiwGZ4a5tFZ6pYmK6WKNlNXJ392LAJFxSZmK6WBvvva2+/m/gqn0W68BysORfZRt+oAAgZcLU+6GKAJSLB3YcYlMw4LeHswOaRVepZTUwnixT73muA891EKooEV+Fk8on/9BBZeb9QCXi9TCWtZQUKNtJomdhaPXishnY2UDXttC1t7eNH6icCT0DUqCJUEVbzxBCCCGEEHJYfgDorK+vCNG5VgAAAABJRU5ErkJggg==",
+"frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABS0lEQVR4nO3Uv06DQBwH8K+uHRiamDSBkTg0RlN9ATYGOjk4uPAWRl7A9C1YHBw6lanPYI1N62AYaUrSxIGBGQcDOeAOaSTVxO9nIndw9/veHwAiIiIiIiIiIvqPjn5z8undTSZrv548ta7ruLty9uPZVuYHYa29b+jKYDIH3wHPtoriLs9P4AchXMcsvdM3dHxEm1Y70VkAcdVkE+f9i+Wu1K4K0TSWqLMj9PD4WjyLYTzbysbDUWnVRYvlDq5jQnacqmPJdLYD4+Eoi5MU97cXRWG5VZRA7Kv2A/WdEAPN3l6UdXYSQFzhM0OTvtMmxHy9xUDr1b49SABV4aKmEPP1Vvnd8+b95wGu9NMsn1i8WOJf5TurKAGAUgjV2Y+TFEBz8cCel1g1GfB1hqsXtCrfpYHWgx+EpfFcx4TrmIiTtCieiIiIiOhv+wSErY/lHgRekQAAAABJRU5ErkJggg==",
+"frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABCElEQVR4nO3UrwrCQBwH8J9Wg2EgCFs0DVH0CdYWtmQwWHwLcS8gvoXFYDBp2jM4cahBjBsKA8OCeSbHzd3JhGOW7yeN+/v73h0jAgAAAAAAAAAAgPJV/rn5ejJMeO2D+apwXVV55fzGMY1ksb3m2hVNFQbjKf0GHNNIi+t3GrTYXmlstTJjFE2lRxAWuglpAdhT42387vf8KNMuCvFtLZa0JzRbHtJvNoxjGomt9zKnzvL8iMZWi3jP6XMtHmk3YOu95B4/aTrqpoW9HYOY2L7PfqL8TbCBNue9sE4pAdgTbmt17pgiIdzTjZr1Wm5uKQFEhbO+hXBPN+G8XXj56+8eAAAAAIDvBVChbJ1C6doeAAAAAElFTkSuQmCC",
+"frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABCElEQVR4nO3UrwrCQBwH8J9Wg2EgCFs0DVH0CdYWtmQwWHwLcS8gvoXFYDBp2jM4cahBjBsKA8OCeSbHzd3JhGOW7yeN+/v73h0jAgAAAAAAAAAAgPJV/rn5ejJMeO2D+apwXVV55fzGMY1ksb3m2hVNFQbjKf0GHNNIi+t3GrTYXmlstTJjFE2lRxAWuglpAdhT42387vf8KNMuCvFtLZa0JzRbHtJvNoxjGomt9zKnzvL8iMZWi3jP6XMtHmk3YOu95B4/aTrqpoW9HYOY2L7PfqL8TbCBNue9sE4pAdgTbmt17pgiIdzTjZr1Wm5uKQFEhbO+hXBPN+G8XXj56+8eAAAAAIDvBVChbJ1C6doeAAAAAElFTkSuQmCC",
+"frame_11.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA4ElEQVR4nO3UsQ6CMBAG4NNXIHGCkYlBg0/AxgCTg4MLb2HkBYxvweLg4CSvgZEYJ0ZMTEgcGJzrBGmhGEwaGfy/idw17V2vgQgAAAAAAAAAAADg/4yGPPy4XjJZfLE79K5rrK6c74Suw6I4a8U1Q+9sTObnEwhdpy5uPp1QFGcUeKawRjN0eub3XpNQ1gB/a7KDq3ySFkK8q4lPe/GUPaHt/lJ/882ErsN8yxZunZekBQWeSbLn1NxLRtkEfMtmj/JFm9WsLqxyzUvic808UXsSfEOn23nQnw0AAAAAgNwb6aVMm7VOzL4AAAAASUVORK5CYII=",
+"frame_12.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAVUlEQVR4nO3PsQ1AUAAE0M8KWobR6RVGkdjAFlrF72xjmG8AJCQSEu+V19xdCAAAAAAAwN9kb5bHvktHeTvOl3flz825Z2jqNC3rLi+q8vQYAAB8ywaIAwr7injgDgAAAABJRU5ErkJggg==",
+"frame_13.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAVUlEQVR4nO3PsQ1AUAAE0M8KWobR6RVGkdjAFlrF72xjmG8AJCQSEu+V19xdCAAAAAAAwN9kb5bHvktHeTvOl3flz825Z2jqNC3rLi+q8vQYAAB8ywaIAwr7injgDgAAAABJRU5ErkJggg=="
+};
+
+// ============================================================
+// 🪨 SPELL CONFIG — CHỈNH Ở ĐÂY
+// ============================================================
+const SPELL = {
+  emergePx: 40,         // khoảng cách khỏi player (px)
+  fps: 12,              // fps animation bump
+  knockRadius: 40,      // bán kính đẩy địch quanh bump (px)
+  knockForce: 30,       // cường độ đẩy (px tổng)
+};
+const CAST_MS = 100;
+
+// ============================================================
+// ⚙️ ENGINE (đừng sửa)
+// ============================================================
+const imgs = new Map();
+function load(src){ return new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[src]; im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame " + src)); }); }
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0;
+const caster = { x: 60, y: 140 };
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+const mobs = [{ x: 320, y: 110, hp: 50, maxHp: 50, pushX:0, pushY:0 }, { x: 150, y: 200, hp: 50, maxHp: 50, pushX:0, pushY:0 }];
+const MOB_R = 13;
+let bumps = [];   // {x,y,dirFrame,frame,t,data}
+
+async function init(){
+  for (const k of Object.keys(FRAME_DATA)) imgs.set(k, await load(k));
+  requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+}
+
+function cast(tx, ty){
+  // bump tạo cách player 10px về phía mục tiêu; lật trái/phải (flip ngang)
+  const dx = tx - caster.x, dy = ty - caster.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const bx = caster.x + dx / dist * SPELL.emergePx;
+  const by = caster.y + dy / dist * SPELL.emergePx;
+  const facingRight = dx >= 0;   // lật: mục tiêu bên phải → sprite mặt phải, trái → mặt trái
+  bumps.push({ x: bx, y: by, facingRight, frame: 0, t: 0 });
+  log.textContent = "🪨 BUMP tại (" + Math.round(bx) + "," + Math.round(by) + ") " + (facingRight ? "n_Display mặt phải" : "mặt trái") + " — knock=" + SPELL.knockRadius + "px";
+  // đẩy địch
+  for (const m of mobs){
+    const ddx = m.x - bx, ddy = m.y - by;
+    const d = Math.hypot(ddx, ddy);
+    if (d < SPELL.knockRadius){
+      const f = (1 - d / SPELL.knockRadius) * SPELL.knockForce;
+      const nd = d || 1;
+      m.pushX += (ddx/nd) * f;
+      m.pushY += (ddy/nd) * f;
+      log.textContent += " | ĐẨY mob (" + Math.round(m.x) + "," + Math.round(m.y) + ")";
+    }
+  }
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0;y<canvas.height;y+=24) for (let x=0;x<canvas.width;x+=24) if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  // vòng bán kính đẩy debug đã bỏ — knockRadius vẫn hoạt động
+  ctx.fillStyle = "#fc0"; ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000"; ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function update(dt){
+  for (const b of bumps){
+    b.t += dt;
+    if (b.t >= 1000/SPELL.fps){ b.t = 0; b.frame++; }
+  }
+  // áp lực đẩy vào vị trí mob, dập tắt dần
+  for (const m of mobs){
+    m.x += m.pushX * dt * 0.01;
+    m.y += m.pushY * dt * 0.01;
+    m.pushX *= 0.9; m.pushY *= 0.9;
+  }
+  bumps = bumps.filter(b => b.frame < Object.keys(FRAME_DATA).length);
+}
+
+function render(){
+  drawChecker();
+  const s = scale2x ? 2 : 1;
+  for (const m of mobs){
+    ctx.fillStyle = "#a33"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000"; ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4"; ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2*(m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText(m.hp+"/"+m.maxHp, m.x, m.y+MOB_R+10);
+  }
+  for (const b of bumps){
+    const key = "frame_" + String(b.frame+1).padStart(2,"0") + ".png";
+    const im = imgs.get(key);
+    if (!im) continue;
+    const w = im.width*s, h = im.height*s;
+    ctx.save();
+    ctx.translate(b.x, b.y + h*0.35);  // chân bump align ~ chân mob
+    if (!b.facingRight) ctx.scale(-1, 1);  // LẬT NGANG TRÁI/PHẢI — không xoay
+    ctx.drawImage(im, -w/2, -h, w, h);
+    ctx.restore();
+  }
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && bumps.length === 0){
+    const m = mobs[Math.floor(Math.random()*mobs.length)];
+    cast(m.x + (Math.random()*2-1)*20, m.y + (Math.random()*2-1)*20);
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+
+(init)();
+</script>
+</body>
+</html>

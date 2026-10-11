@@ -77,6 +77,8 @@ WEAPON_SHEETS: Dict[str, str] = {
     "plank": "plank",
     "coal": "coal",
     "iron_ore": "ironore",
+    "copper_ore": "copperore",
+    "copper_ingot": "copperbar",
     "gold_ore": "goldore",
     "iron_ingot": "ironbar",
     "gold_ingot": "goldbar",

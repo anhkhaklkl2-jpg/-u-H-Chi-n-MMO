@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Skull: trader đứng yên - montertradebase</title>
+<style>
+body{font-family:system-ui;background:#141414;color:#eee;margin:16px}
+h2{color:#ffd75e} code{background:#222;padding:2px 6px;border-radius:4px;color:#9ef}
+.warn{background:#3a2a00;border:1px solid #a80;padding:8px 12px;border-radius:8px;margin:12px 0}
+.ok{background:#00331a;border:1px solid #0a4;padding:8px 12px;border-radius:8px;margin:12px 0}
+.map{image-rendering:pixelated;max-width:100%;border:2px solid #555}
+.cards{display:flex;gap:16px;flex-wrap:wrap}
+.card{background:#1e1e1e;border:1px solid #444;border-radius:10px;padding:12px;width:300px}
+.card img{image-rendering:pixelated;background:#000;border-radius:6px}
+.card .sheet{width:100%}
+.card .face{width:96px}
+</style>
+</head><body>
+<h2>📍 Vị trí trader — đã nhận!</h2>
+<div class="ok">Layer <code>vị trí trader đứng, xoay mặt xuống dưới</code> có đúng 1 ô: Tiled <code>(9,9)</code> → tọa độ game <code>(9,6)</code> (do map crop 3 hàng trống trên đỉnh). Ô đỏ dưới đây chính là chỗ NPC đứng.</div>
+<img class="map" src="map_trader.png" alt="map trader">
+<div class="warn">⚠️ <b>2 điểm bạn nên sửa trong Tiled (nhẹ thôi):</b><br>
+1. Ô Tiled <code>(9,9)</code> hiện <b>không có sàn</b> (layer <code>sàn đất</code> = 0) — trader sẽ đứng trên lỗ trống. Tô thêm 1 ô sàn ở đó.<br>
+2. Layer marker đang <code>visible=True</code> với gạch 289 (trông như sàn nên tạm ổn), nhưng lúc chốt mik sẽ <b>ẩn/xóa layer marker</b> để file map sạch — tọa độ đã ghi nhận rồi.</div>
+<div class="warn">⚠️ <b>Chỗ đứng nói chuyện:</b> ô ngay dưới trader (game <code>(9,7)</code>) là <b>tường, không đứng được</b>. Không sao cả — luật tương tác chỉ cần <b>đứng cạnh</b> (kề trái/phải <code>(8,6)</code>/<code>(10,6)</code> rồi bấm E là nói chuyện được). Nếu bạn muốn player đứng đối diện phía dưới cho "đúng facing", thì dời bức tường ở Tiled <code>(9,10)</code> đi chỗ khác.</div>
+
+<h2>💀 3 ứng viên sprite cho "Skull:"</h2>
+<div class="cards">
+<div class="card"><h3>A. Skull (đỏ mắt)</h3>
+<img class="face" src="skull_preview.png"><br><img class="sheet" src="skull_sheet.png">
+<p>Monster/Skull, sheet 64×64. Hộp sọ bay, mắt đỏ — hợp vai "thương nhân chợ đen". Không có walk riêng (đứng yên thì không cần).</p></div>
+<div class="card"><h3>B. SkullBlue (xanh)</h3>
+<img class="face" src="skullblue_preview.png"><br><img class="sheet" src="skullblue_sheet.png">
+<p>Monster/SkullBlue, sheet 64×64. Bản xanh "ma trơi" — nếu muốn Skull trông ma mị, phát sáng trong nhà.</p></div>
+<div class="card"><h3>C. SkeletonDemon (có mình)</h3>
+<img class="face" src="skeldemon_preview.png"><br><img class="sheet" src="skeldemon_sheet.png">
+<p>Character/SkeletonDemon, sheet 64×112 + walk riêng. Bộ xương có tay chân, đứng sau quầy "như người bán hàng" — tốn công crop idle/walk như thương nhân lang thang đã làm.</p></div>
+</div>
+
+<h2>💡 Ý tưởng NPC "Skull:" (đứng yên, mặt xuống dưới)</h2>
+<p>Vì nó <b>luôn đứng</b> trong nhà trade (khác với thương nhân lang thang đi rong + mất tích ngoài phiên), mik gợi ý vai <b>"chủ sàn chợ đen"</b>:</p>
+<ul>
+<li><b>Buôn đồ "nóng":</b> shop cố định, bán đồ mà shop thường không có (rương, vé dungeon, nguyên liệu hiếm) — giá cao nhưng luôn có hàng.</li>
+<li><b>Thu mua xác quái:</b> branch bán đồ cho NPC (sell) giá tốt hơn shop thường — lý do để player farm xong phải "về nhà gặp Skull:".</li>
+<li><b>Câu chào đặc trưng:</b> tên hiển thị <code>Skull:</code> đúng như bạn muốn (id trong code là <code>skull</code>, tên hiện ra là <code>Skull:</code>).</li>
+<li><b>Không phiên, không biến mất:</b> đứng yên 24/7 — vào nhà là gặp, khỏi canh giờ như thương nhân lang thang.</li>
+</ul>
+<p>Bạn chốt: <b>mẫu sprite (A/B/C)</b> + <b>nó bán gì / thu mua gì</b> + <b>câu chào đầu tiên</b> là mik code + deploy luôn. Chưa build gì cả theo ý bạn 👍</p>
+</body></html>

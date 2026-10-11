@@ -1,0 +1,890 @@
+[
+ {
+  "group": "Animal",
+  "name": "Cat",
+  "dir": "Animal/Cat",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "CatBlack",
+  "dir": "Animal/CatBlack",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "CatCyclop",
+  "dir": "Animal/CatCyclop",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "CatOrange",
+  "dir": "Animal/CatOrange",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "CatWhite",
+  "dir": "Animal/CatWhite",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Dog",
+  "dir": "Animal/Dog",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Dog2",
+  "dir": "Animal/Dog2",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "DogBlack",
+  "dir": "Animal/DogBlack",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "DogOrange",
+  "dir": "Animal/DogOrange",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "DogYellow",
+  "dir": "Animal/DogYellow",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Frog",
+  "dir": "Animal/Frog",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Hamster",
+  "dir": "Animal/Hamster",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Hyena",
+  "dir": "Animal/Hyena",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "LionCub",
+  "dir": "Animal/LionCub",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "Racoon",
+  "dir": "Animal/Racoon",
+  "walk": false
+ },
+ {
+  "group": "Animal",
+  "name": "WildBoar",
+  "dir": "Animal/WildBoar",
+  "walk": false
+ },
+ {
+  "group": "Character",
+  "name": "Boy",
+  "dir": "Character/Boy",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "CamouflageGreen",
+  "dir": "Character/CamouflageGreen",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "CamouflageRed",
+  "dir": "Character/CamouflageRed",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Cavegirl",
+  "dir": "Character/Cavegirl",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Cavegirl2",
+  "dir": "Character/Cavegirl2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "CaveLion",
+  "dir": "Character/CaveLion",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "CaveLion2",
+  "dir": "Character/CaveLion2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Caveman",
+  "dir": "Character/Caveman",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Caveman2",
+  "dir": "Character/Caveman2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Child",
+  "dir": "Character/Child",
+  "walk": false
+ },
+ {
+  "group": "Character",
+  "name": "DemonGreen",
+  "dir": "Character/DemonGreen",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "DemonRed",
+  "dir": "Character/DemonRed",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "EggBoy",
+  "dir": "Character/EggBoy",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "EggGirl",
+  "dir": "Character/EggGirl",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Eskimo",
+  "dir": "Character/Eskimo",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "FighterRed",
+  "dir": "Character/FighterRed",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "FighterWhite",
+  "dir": "Character/FighterWhite",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Flam",
+  "dir": "Character/Flam",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "GladiatorBlue",
+  "dir": "Character/GladiatorBlue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "GoldStatue",
+  "dir": "Character/GoldStatue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "GreenPig",
+  "dir": "Character/GreenPig",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Hunter",
+  "dir": "Character/Hunter",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Inspector",
+  "dir": "Character/Inspector",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Knight",
+  "dir": "Character/Knight",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "KnightGold",
+  "dir": "Character/KnightGold",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Lion",
+  "dir": "Character/Lion",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "LionBoy",
+  "dir": "Character/LionBoy",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "LionOrange",
+  "dir": "Character/LionOrange",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "LionYellow",
+  "dir": "Character/LionYellow",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "ManGreen",
+  "dir": "Character/ManGreen",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "MaskFrog",
+  "dir": "Character/MaskFrog",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "MaskGoldRacoon",
+  "dir": "Character/MaskGoldRacoon",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "MaskRacoon",
+  "dir": "Character/MaskRacoon",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Master",
+  "dir": "Character/Master",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Monk",
+  "dir": "Character/Monk",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Monk2",
+  "dir": "Character/Monk2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Monkey",
+  "dir": "Character/Monkey",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "MonkeyBoxerBlue",
+  "dir": "Character/MonkeyBoxerBlue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "MonkeyBoxerRed",
+  "dir": "Character/MonkeyBoxerRed",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaBlue",
+  "dir": "Character/NinjaBlue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaBlue2",
+  "dir": "Character/NinjaBlue2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaBomb",
+  "dir": "Character/NinjaBomb",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaDark",
+  "dir": "Character/NinjaDark",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaEskimo",
+  "dir": "Character/NinjaEskimo",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaFire",
+  "dir": "Character/NinjaFire",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaGray",
+  "dir": "Character/NinjaGray",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaGreen",
+  "dir": "Character/NinjaGreen",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaLeaf",
+  "dir": "Character/NinjaLeaf",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaMageBlack",
+  "dir": "Character/NinjaMageBlack",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaMageOrange",
+  "dir": "Character/NinjaMageOrange",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaMasked",
+  "dir": "Character/NinjaMasked",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaRed",
+  "dir": "Character/NinjaRed",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaRed2",
+  "dir": "Character/NinjaRed2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaThunder",
+  "dir": "Character/NinjaThunder",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaWater",
+  "dir": "Character/NinjaWater",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "NinjaYellow",
+  "dir": "Character/NinjaYellow",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Noble",
+  "dir": "Character/Noble",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "OldMan",
+  "dir": "Character/OldMan",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "OldMan2",
+  "dir": "Character/OldMan2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "OldMan3",
+  "dir": "Character/OldMan3",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "OldWoman",
+  "dir": "Character/OldWoman",
+  "walk": false
+ },
+ {
+  "group": "Character",
+  "name": "Pig",
+  "dir": "Character/Pig",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Princess",
+  "dir": "Character/Princess",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "RedGladiator",
+  "dir": "Character/RedGladiator",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "RedNinja3",
+  "dir": "Character/RedNinja3",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "RobotCamouflage",
+  "dir": "Character/RobotCamouflage",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "RobotGreen",
+  "dir": "Character/RobotGreen",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "RobotGrey",
+  "dir": "Character/RobotGrey",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Samurai",
+  "dir": "Character/Samurai",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "SamuraiBlue",
+  "dir": "Character/SamuraiBlue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Shaman",
+  "dir": "Character/Shaman",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "ShamanLion",
+  "dir": "Character/ShamanLion",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Skeleton",
+  "dir": "Character/Skeleton",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "SkeletonDemon",
+  "dir": "Character/SkeletonDemon",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "SorcererBlack",
+  "dir": "Character/SorcererBlack",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "SorcererOrange",
+  "dir": "Character/SorcererOrange",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Spirit",
+  "dir": "Character/Spirit",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Statue",
+  "dir": "Character/Statue",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Sultan",
+  "dir": "Character/Sultan",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Sultan2",
+  "dir": "Character/Sultan2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Tengu",
+  "dir": "Character/Tengu",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Tengu2",
+  "dir": "Character/Tengu2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Vampire",
+  "dir": "Character/Vampire",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Village6",
+  "dir": "Character/Village6",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager",
+  "dir": "Character/Villager",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager2",
+  "dir": "Character/Villager2",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager3",
+  "dir": "Character/Villager3",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager4",
+  "dir": "Character/Villager4",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager5",
+  "dir": "Character/Villager5",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Villager6",
+  "dir": "Character/Villager6",
+  "walk": true
+ },
+ {
+  "group": "Character",
+  "name": "Woman",
+  "dir": "Character/Woman",
+  "walk": true
+ },
+ {
+  "group": "CharacterAnimated",
+  "name": "NinjaGreen",
+  "dir": "CharacterAnimated/NinjaGreen",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Axolot",
+  "dir": "Monster/Axolot",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "AxolotBlue",
+  "dir": "Monster/AxolotBlue",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Bamboo",
+  "dir": "Monster/Bamboo",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "BambooYellow",
+  "dir": "Monster/BambooYellow",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Bear",
+  "dir": "Monster/Bear",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "BlueBat",
+  "dir": "Monster/BlueBat",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Butterfly",
+  "dir": "Monster/Butterfly",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "ButterflyBlue",
+  "dir": "Monster/ButterflyBlue",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Cyclope",
+  "dir": "Monster/Cyclope",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Cyclope2",
+  "dir": "Monster/Cyclope2",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Dragon",
+  "dir": "Monster/Dragon",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "DragonYellow",
+  "dir": "Monster/DragonYellow",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Fish",
+  "dir": "Monster/Fish",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "FishRed",
+  "dir": "Monster/FishRed",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Flam",
+  "dir": "Monster/Flam",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Flam2",
+  "dir": "Monster/Flam2",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "GoldRacoon",
+  "dir": "Monster/GoldRacoon",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "GreenOctopus",
+  "dir": "Monster/GreenOctopus",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Grey Trex",
+  "dir": "Monster/Grey Trex",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "HeartGreen",
+  "dir": "Monster/HeartGreen",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "HeartRed",
+  "dir": "Monster/HeartRed",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "KappaGreen",
+  "dir": "Monster/KappaGreen",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "KappaRed",
+  "dir": "Monster/KappaRed",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "LanternGreen",
+  "dir": "Monster/LanternGreen",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "LanternRed",
+  "dir": "Monster/LanternRed",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Mouse",
+  "dir": "Monster/Mouse",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "MouseBlack",
+  "dir": "Monster/MouseBlack",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Octopus",
+  "dir": "Monster/Octopus",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Octopus2",
+  "dir": "Monster/Octopus2",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Panda",
+  "dir": "Monster/Panda",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Racoon",
+  "dir": "Monster/Racoon",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "RedOctopus",
+  "dir": "Monster/RedOctopus",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Skull",
+  "dir": "Monster/Skull",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "SkullBlue",
+  "dir": "Monster/SkullBlue",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "SpiderRed",
+  "dir": "Monster/SpiderRed",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "SpiderYellow",
+  "dir": "Monster/SpiderYellow",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Spirit",
+  "dir": "Monster/Spirit",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "Spirit2",
+  "dir": "Monster/Spirit2",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "TRex",
+  "dir": "Monster/TRex",
+  "walk": false
+ },
+ {
+  "group": "Monster",
+  "name": "YellowsBat",
+  "dir": "Monster/YellowsBat",
+  "walk": false
+ }
+]

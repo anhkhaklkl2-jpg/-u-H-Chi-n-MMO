@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord Map — Web Client</title>
+    <script type="module" crossorigin src="./assets/index-BSEco1lY.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-idTJ0NBQ.css">
+  </head>
+  <body>
+    <div id="game-root">
+      <div id="overlay">
+        <!-- Top-left: clock + weather (flush corner) -->
+        <div id="hud-topleft" class="hud-box">
+          <span id="hud-clock">--:--</span>
+          <span id="hud-daynight" title="Buổi">🌅</span>
+          <span id="hud-weather">☀️</span>
+        </div>
+        <!-- Bottom-left: live connection ping (ms) -->
+        <div id="hud-bottomleft" class="hud-box">
+          <span id="hud-ping" title="Độ trễ kết nối">--</span>
+        </div>
+        <!-- Top-right: HP + mana bars (flush corner) -->
+        <div id="hud-topright" class="hud-box">
+          <div class="bar" id="bar-hp">
+            <div class="bar-fill" id="bar-hp-fill"></div>
+            <span class="bar-label" id="bar-hp-label">100/100</span>
+          </div>
+          <div class="bar" id="bar-mana">
+            <div class="bar-fill mana" id="bar-mana-fill"></div>
+            <span class="bar-label" id="bar-mana-label">50/50</span>
+          </div>
+          <div class="bar bar-stamina" id="bar-stamina">
+            <div class="bar-fill stamina" id="bar-stamina-fill"></div>
+            <span class="bar-label" id="bar-stamina-label">200/200</span>
+          </div>
+        </div>
+        <!-- Bottom-center: hotbar (always visible) -->
+        <div id="hud-hotbar"></div>
+        <!-- Bottom-right: chat box + commands -->
+        <div id="hud-chat">
+          <div id="chat-log"></div>
+          <form id="chat-form">
+            <input id="chat-input" type="text" placeholder="Nhập /lệnh..." autocomplete="off" />
+          </form>
+        </div>
+        <!-- Center: toast area -->
+        <div id="hud-toast"></div>
+        <!-- Player profile popup (click another player in the world) —
+             styled with the SAME V5 pixel kit as the inventory panel -->
+        <div id="profile-popup" class="hidden">
+          <div class="pp-card">
+            <img class="pp-frame" src="./ui/v5/layers/inv_frame.png" alt="" />
+            <button id="pp-close" class="pp-close-btn" type="button" title="Đóng"></button>
+            <div class="pp-title">Hồ sơ người chơi</div>
+            <div class="pp-body">
+              <div class="pp-avatar">
+                <img id="pp-avatar" src="" alt="" />
+              </div>
+              <div class="pp-id">
+                <div id="pp-name" class="pp-name">?</div>
+                <div id="pp-sub" class="pp-sub">Cấp 1</div>
+              </div>
+            </div>
+            <div class="pp-stats">
+              <div class="pp-stat"><span class="pp-label">HP</span><span id="pp-hp" class="pp-val red">?</span></div>
+              <div class="pp-stat"><span class="pp-label">Cấp</span><span id="pp-level" class="pp-val cyan">?</span></div>
+              <div class="pp-stat"><span class="pp-label">Nền</span><span id="pp-mode" class="pp-val">?</span></div>
+            </div>
+            <div class="pp-actions">
+              <button id="pp-msg" class="pp-btn" type="button">Nhắn tin</button>
+              <button id="pp-trade" class="pp-btn dim" type="button" disabled>Trao đổi (sắp có)</button>
+            </div>
+          </div>
+        </div>
+        <!-- Death overlay (hp 0): full-screen veil + respawn countdown -->
+        <div id="death-overlay" class="hidden">
+          <div class="death-panel">
+            <h2>Bạn đã gục</h2>
+            <p id="death-reason">Bị zombie tấn công</p>
+            <p id="death-timer">Hồi sinh sau 5s…</p>
+          </div>
+        </div>
+        <!-- Inventory + Craft panels (pixel asset panels, handoff geometry) -->
+        <div id="inv-panel" class="hidden">
+          <!-- Tab strip mirrors the pixel look but stays plain DOM (no panel art). -->
+          <div class="inv-tabs">
+            <button class="inv-tab active" data-tab="items" type="button">Túi đồ</button>
+            <button class="inv-tab" data-tab="craft" type="button">Chế tạo</button>
+            <button class="inv-close" id="inv-close" type="button">✕</button>
+          </div>
+          <!-- INVENTORY (V5 frame_01): 98×101 frame, 20 slots 5×4 at
+               (10,17) pitch 16, currency overlays at kit bboxes -->
+          <div id="inv-items-wrap" class="panel-wrap">
+            <img class="panel" src="ui/v5/layers/inv_frame.png" alt="" draggable="false">
+            <button class="panel-close" data-panel="inv" type="button" title="Đóng túi đồ"></button>
+          </div>
+          <!-- CRAFT (V5 frame3_03): 198×117 frame — quick-craft 3×5 @(10,33),
+               materials 3×3 @(74,17), result [108,90,16,16], create [76,69].
+               The INVENTORY panel below is the drag partner for materials. -->
+          <div id="inv-craft-wrap" class="panel-wrap hidden">
+            <img class="panel" src="ui/v5/layers/craft_frame.png" alt="" draggable="false">
+            <button class="panel-close" data-panel="craft" type="button" title="Đóng chế tạo"></button>
+          </div>
+          <!-- Inventory panel is ALSO visible on the craft tab (drag source) -->
+          <div id="inv-items-craft" class="panel-wrap hidden">
+            <img class="panel" src="ui/v5/layers/inv_frame.png" alt="" draggable="false">
+            <button class="panel-close" data-panel="inv" type="button" title="Đóng túi đồ"></button>
+          </div>
+          <!-- Selected recipe detail (inputs → output, needs-table hint) -->
+          <div id="craft-detail" class="hidden"></div>
+        </div>
+        <!-- Loading overlay: shown ONLY when the world genuinely needs to
+             fetch assets (fresh session). When everything is already cached
+             (re-join in the same session) it never appears. -->
+        <div id="loading-overlay" class="hidden">
+          <div class="loading-panel">
+            <h2>Đang tải map…</h2>
+            <div class="loading-bar"><div id="loading-fill"></div></div>
+            <p id="loading-status">0 / 0</p>
+          </div>
+        </div>
+        <!-- Login / join gate -->
+        <div id="login-gate">
+          <div class="panel gate-panel">
+            <h1>Map Game</h1>
+            <p class="gate-sub">Chơi ngay trên web — nhân vật dùng chung với Discord</p>
+            <p id="login-status">Đang tải…</p>
+            <div class="gate-actions">
+              <button id="btn-login" type="button" class="gate-btn primary">🔑 Đăng nhập Discord</button>
+              <button id="btn-quick" type="button" class="gate-btn">⚡ Vào nhanh (thử nghiệm)</button>
+            </div>
+          </div>
+          <!-- Main lobby (NEXT GAME style): logo + 3 columns — account |
+               play menu | server selection. Shown after login. -->
+          <div class="nx hidden" id="lobby">
+            <h1 class="nx-logo">ĐẬU HŨ<span>CHIÊN&nbsp;MMO</span></h1>
+            <div class="nx-cols">
+              <!-- LEFT: account -->
+              <section class="nx-panel">
+                <header class="nx-panel-h">Tài khoản</header>
+                <div class="nx-panel-b nx-account">
+                  <span class="nx-avatar" id="lobby-avatar"></span>
+                  <span class="nx-who">
+                    <span id="lobby-name">—</span>
+                    <span id="lobby-sub">—</span>
+                  </span>
+                  <button id="lobby-logout" type="button" class="nx-btn nx-btn-orange nx-logout">Đăng xuất</button>
+                  <!-- Chat frame (mock's input-field style): lobby/system feed. -->
+                  <div class="nx-chat">
+                    <div class="nx-chat-log" id="nx-chat-log"></div>
+                    <form id="nx-chat-form" autocomplete="off">
+                      <input id="nx-chat-input" type="text" maxlength="120" placeholder="Vào game để chat với mọi người…" />
+                    </form>
+                  </div>
+                </div>
+              </section>
+              <!-- CENTER: play menu -->
+              <section class="nx-panel">
+                <header class="nx-panel-h">Trò chơi</header>
+                <div class="nx-panel-b nx-menu">
+                  <button id="lobby-play" type="button" class="nx-btn nx-play">▶ CHƠI NGAY</button>
+                  <button id="lobby-servers-btn" type="button" class="nx-btn nx-btn-wide">SERVERS <span class="nx-gear">⟳</span></button>
+                  <div class="nx-grid">
+                    <button id="lobby-events" type="button" class="nx-btn">SỰ KIỆN</button>
+                    <button id="lobby-settings" type="button" class="nx-btn"><span class="nx-gear">⚙</span> CÀI ĐẶT</button>
+                    <button id="lobby-help" type="button" class="nx-btn">TRỢ GIÚP</button>
+                    <button id="lobby-players" type="button" class="nx-btn">PLAYER</button>
+                  </div>
+                </div>
+              </section>
+              <!-- RIGHT: server selection -->
+              <section class="nx-panel" id="nx-server-panel">
+                <header class="nx-panel-h">Server Selection</header>
+                <div class="nx-panel-b">
+                  <div id="nx-banner" class="nx-banner ok">Đã đăng nhập</div>
+                  <div id="scenario-list" class="nx-servers"></div>
+                </div>
+              </section>
+            </div>
+            <p id="lobby-status" class="nx-status" hidden></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

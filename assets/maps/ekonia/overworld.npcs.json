@@ -9,6 +9,26 @@
       "dialogue": "gac_dac_intro",
       "sprite": { "w": 16, "h": 16, "frames": 4 },
       "wander": { "radius": 3, "speed": 1.2, "pause": 1.5 }
+    },
+    {
+      "id": "thuong_nhan",
+      "name": "Thương nhân lang thang",
+      "emoji": "🧙",
+      "x": 140,
+      "y": 100,
+      "dialogue": "thuong_nhan_intro",
+      "sprite": { "w": 16, "h": 16, "frames": 4 },
+      "wander": { "radius": 3, "speed": 1.4, "pause": 1.2 },
+      "sessions": {
+        "shop": "thuong_nhan",
+        "windows": [[6, 12], [14, 19]],
+        "deal_chance": 0.35,
+        "deal_discount": 0.5,
+        "min_items": 4,
+        "max_items": 6,
+        "walk_out_seconds": 20,
+        "walk_out_tile": [140, 95]
+      }
     }
   ],
   "dialogues": {
@@ -17,6 +37,8 @@
       "options": [
         { "label": "Để ta đem thử!", "next": "gac_dac_how" },
         { "label": "Giá ra sao?", "next": "gac_dac_price" },
+        { "label": "🏪 Mở Shop 1 (Kiểu Kaetram)", "next": "shop:gac_dac:kaetram" },
+        { "label": "🛒 Mở Shop 2 (Kiểu Rainbow)", "next": "shop:gac_dac:rbcat" },
         { "label": "Đi luôn", "next": null }
       ]
     },
@@ -45,6 +67,27 @@
       "text": "Xu đã vào túi! Mai lại ghé, ta để hàng tốt cho ngươi. He he!",
       "options": [
         { "label": "Tạm biệt", "next": null }
+      ]
+    },
+    "thuong_nhan_intro": {
+      "text": "Psst.... Thuận mua vừa bán, đồ tốt hay không thì phải gặp được đúng người cần.",
+      "options": [
+        { "label": "..." },
+        { "label": "Tiếp tục", "next": "thuong_nhan_shop_ask" }
+      ]
+    },
+    "thuong_nhan_shop_ask": {
+      "text": "Muốn xem 1 số món hàng của ta chứ?",
+      "options": [
+        { "label": "Để ta xem thử", "next": "shop:thuong_nhan:rbcat" },
+        { "label": "Ngươi là...", "next": "thuong_nhan_who" }
+      ]
+    },
+    "thuong_nhan_who": {
+      "text": "Chỉ đơn giản là 1 người qua đường thôi... ý ta là sao ngươi phải quan tâm đến mấy thứ vặt vãnh như thế chứ, nếu muốn biết thì xì tiền ra, ta sẽ cho ngươi biết thứ ngươi muốn.",
+      "options": [
+        { "label": "Để ta xem thử", "next": "shop:thuong_nhan:rbcat" },
+        { "label": "Thôi...", "next": null }
       ]
     }
   }

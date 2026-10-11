@@ -1,0 +1,5 @@
+actor: Hamster
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\Hamster
+preview: faceset
+spritesheet: SpriteSheet.png (30x15 px)

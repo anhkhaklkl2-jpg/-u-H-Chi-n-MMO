@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Sheet Peek — xem cấu trúc frame</title>
+<style>
+:root{--bg:#12100e;--panel:#221b15;--line:#4a3c2c;--txt:#e8dcc8;--acc:#e8a33d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font:12px ui-monospace,Consolas,monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center}
+header b{color:var(--acc)}
+main{flex:1;display:flex;min-height:0}
+#drop{flex:1;position:relative;display:flex;align-items:center;justify-content:center;min-width:0;
+  background:repeating-conic-gradient(#171310 0% 25%, #12100e 0% 50%) 0 0/32px 32px;overflow:auto}
+#drop.hov{outline:3px dashed var(--acc);outline-offset:-6px}
+#img{image-rendering:pixelated;transform-origin:0 0}
+aside{width:300px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto}
+.fld{margin-bottom:10px}
+.fld label{display:block;opacity:.7;margin-bottom:3px;font-size:11px}
+.fld input,.fld select{width:100%;padding:4px 6px;background:#12100e;color:var(--txt);border:1px solid var(--line);border-radius:4px;font:inherit}
+.row{display:flex;gap:6px}.row>*{flex:1}
+.chk{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.btn{width:100%;padding:6px;margin-top:4px;background:#332519;border:1px solid var(--line);color:var(--txt);font:inherit;border-radius:4px;cursor:pointer}
+.sec{margin:12px 0 6px;border-top:1px solid var(--line);padding-top:8px;color:var(--acc);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+#rows .rowcfg{border:1px solid var(--line);border-radius:4px;padding:6px;margin-bottom:8px;background:#1a1512}
+#rows .rowcfg .head{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+#rows .rowcfg .head b{color:var(--acc)}
+#rows .rowcfg .del{cursor:pointer;color:var(--hit,#ff3355);background:none;border:none;font:inherit}
+#rows .mini{display:flex;gap:3px}
+#rows .mini input{width:100%;min-width:0;padding:3px 4px;background:#12100e;color:var(--txt);border:1px solid var(--line);border-radius:3px;font:inherit;font-size:11px}
+#rows .mini label{font-size:9px;opacity:.6;display:block}
+#frames{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+#frames canvas{width:100%;aspect-ratio:1;background:#0d0a0b;border:1px solid var(--line);cursor:pointer}
+#frames canvas.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+#info{opacity:.7;line-height:1.6;margin-top:8px;font-size:11px}
+#strip{position:fixed;bottom:10px;left:10px;right:320px;display:flex;gap:2px;align-items:center;
+  background:rgba(34,27,21,.95);border:1px solid var(--line);border-radius:6px;padding:8px}
+#strip canvas{background:#0d0a0b;image-rendering:pixelated}
+</style>
+</head>
+<body>
+<header>
+  <b>🔍 Sheet Peek</b>
+  <span>Thả PNG — grid từng hàng riêng: W/H/X/Y độc lập. Di cả grid: WASD/mũi tên (Shift=×5). Di 1 hàng: click hàng rồi WASD.</span>
+</header>
+<main>
+  <div id="drop">
+    <canvas id="img"></canvas>
+  </div>
+  <aside>
+    <div class="sec">Hàng frame (cấu hình riêng từng hàng)</div>
+    <div id="rows"></div>
+    <button class="btn" id="addrow">+ Thêm hàng</button>
+    <div class="chk" style="margin-top:8px"><input type="checkbox" id="skipempty" checked><span>Bỏ frame trống khi chơi</span></div>
+    <div class="sec">Playback</div>
+    <div class="fld"><label>FPS <span id="fpsv">12</span></label>
+      <input type="range" id="fps" min="1" max="30" value="12"></div>
+    <div class="fld"><label>Zoom <span id="zv">3</span>×</label>
+      <input type="range" id="zoom" min="1" max="8" value="3"></div>
+    <div class="sec">Frames tìm được</div>
+    <div id="frames"></div>
+    <div id="info">Chưa có ảnh.</div>
+  </aside>
+</main>
+<div id="strip">
+  <canvas id="play"></canvas>
+  <div style="margin-left:10px;opacity:.7" id="playinfo">—</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const imgCv=$('img'), ictx=imgCv.getContext('2d');
+let sheet=null, frames=[], cur=0, acc=0, lastMs=0, selRow=0;
+
+// rows: [{x,y,w,h}] — mỗi hàng cấu hình độc lập
+let rows=[];
+
+function defaultRows(){
+  if(!sheet) return;
+  rows=[{x:0,y:0,w:48,h:Math.min(32,sheet.height)},{x:0,y:sheet.height-Math.min(32,sheet.height),w:48,h:Math.min(32,sheet.height)}];
+  renderRows(); analyze();
+}
+function renderRows(){
+  const el=$('rows'); el.innerHTML='';
+  rows.forEach((r,i)=>{
+    const div=document.createElement('div'); div.className='rowcfg';
+    div.style.outline = i===selRow ? '2px solid var(--acc)' : 'none';
+    div.innerHTML=`<div class="head"><b>Hàng ${i} <span style="opacity:.5">y=${r.y}</span></b>
+      <button class="del" data-i="${i}">✕</button></div>
+      <div class="mini">
+        <div><label>X</label><input type="number" data-k="x" data-i="${i}" value="${r.x}"></div>
+        <div><label>Y</label><input type="number" data-k="y" data-i="${i}" value="${r.y}"></div>
+        <div><label>W</label><input type="number" data-k="w" data-i="${i}" value="${r.w}"></div>
+        <div><label>H</label><input type="number" data-k="h" data-i="${i}" value="${r.h}"></div>
+      </div>`;
+    el.appendChild(div);
+  });
+  el.onclick=e=>{
+    if(e.target.classList.contains('del')){
+      rows.splice(+e.target.dataset.i,1); selRow=0; renderRows(); analyze();
+    } else {
+      const cfg=e.target.closest('.rowcfg');
+      if(cfg) selRow=[...cfg.parentNode.children].indexOf(cfg);
+      renderRows();
+    }
+  };
+  el.oninput=e=>{
+    const inp=e.target; if(inp.tagName!=='INPUT') return;
+    const i=+inp.dataset.i, k=inp.dataset.k;
+    rows[i][k]=+inp.value||0;
+    // cập nhật không re-render (giữ focus)
+    analyze();
+  };
+}
+
+function analyze(){
+  if(!sheet) return;
+  const z=+$('zoom').value;
+  imgCv.width=sheet.width*z; imgCv.height=sheet.height*z;
+  ictx.imageSmoothingEnabled=false;
+  ictx.clearRect(0,0,imgCv.width,imgCv.height);
+  ictx.drawImage(sheet,0,0,imgCv.width,imgCv.height);
+  frames=[];
+  const colors=['rgba(232,163,61,.9)','rgba(56,189,248,.9)','rgba(34,197,94,.9)','rgba(217,70,239,.9)'];
+  rows.forEach((r,ri)=>{
+    if(r.w<4||r.h<4) return;
+    const cols=Math.max(1, Math.floor((sheet.width-r.x)/r.w));
+    ictx.strokeStyle=colors[ri%4]; ictx.lineWidth=1.5;
+    for(let c=0;c<cols;c++){
+      const t=ictx.getImageData((r.x+c*r.w)*z, r.y*z, r.w*z, r.h*z).data;
+      let n=0; for(let i=3;i<t.length;i+=4) if(t[i]>10) n++;
+      ictx.strokeRect((r.x+c*r.w)*z, r.y*z, r.w*z, r.h*z);
+      if(n>0) frames.push({ri, c, x:r.x+c*r.w, y:r.y, w:r.w, h:r.h, n});
+    }
+  });
+  // thumbnails
+  const fl=$('frames'); fl.innerHTML='';
+  frames.forEach((f,idx)=>{
+    const oc=document.createElement('canvas'); oc.width=f.w; oc.height=f.h;
+    const octx=oc.getContext('2d');
+    octx.drawImage(sheet, f.x, f.y, f.w, f.h, 0,0,f.w,f.h);
+    oc.title=`row ${f.ri} · col ${f.c} · ${f.n}px`;
+    oc.onclick=()=>{cur=idx; drawCur();};
+    fl.appendChild(oc);
+  });
+  $('info').innerHTML=`${frames.length} frame có art (${rows.map((r,i)=>`hàng ${i}: w${r.w}×h${r.h}`).join(' · ')})`;
+  cur=Math.min(cur, Math.max(0,frames.length-1));
+  drawCur();
+}
+
+function drawCur(){
+  const f=frames[cur];
+  const pc=$('play'); const pctx=pc.getContext('2d');
+  if(!f){ pctx.clearRect(0,0,pc.width,pc.height); $('playinfo').textContent='—'; return; }
+  const z=Math.min(4, Math.max(1, 260/f.w));
+  pc.width=f.w*z; pc.height=f.h*z;
+  pctx.imageSmoothingEnabled=false;
+  pctx.clearRect(0,0,pc.width,pc.height);
+  pctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0,0,f.w*z,f.h*z);
+  $('playinfo').textContent=`frame ${cur+1}/${frames.length} · hàng ${f.ri} cột ${f.c} · ${f.w}×${f.h} · ${f.n}px`;
+  [...$('frames').children].forEach((el,i)=>el.classList.toggle('on', i===cur));
+}
+function tick(ms){
+  const dt=ms-lastMs; lastMs=ms;
+  if(sheet && frames.length){
+    acc+=dt/1000;
+    const step=1/(+$('fps').value);
+    while(acc>=step){ acc-=step; cur=(cur+1)%frames.length; drawCur(); }
+  }
+  requestAnimationFrame(tick);
+}
+
+// input
+$('fps').oninput=()=>{$('fpsv').textContent=$('fps').value;};
+$('zoom').oninput=()=>{$('zv').textContent=$('zoom').value; analyze();};
+$('addrow').onclick=()=>{
+  const lastY = rows.length? Math.max(...rows.map(r=>r.y+r.h)) : 0;
+  const last = rows[rows.length-1] || {w:48,h:32};
+  rows.push({x:0, y:lastY, w:last.w, h:last.h});
+  selRow=rows.length-1; renderRows(); analyze();
+};
+$('skipempty').onchange=()=>{ $('frames').style.opacity=1; };
+
+// di grid: WASD/mũi tên — không chọn hàng = di TẤT CẢ; có hàng chọn = di riêng hàng đó
+addEventListener('keydown', e=>{
+  if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if(!sheet) return;
+  const keys={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],
+              a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]};
+  const k=keys[e.key]; if(!k) return;
+  e.preventDefault();
+  const step=(e.shiftKey?5:1)*(e.ctrlKey?10:1);
+  if(rows[selRow]){
+    rows[selRow].x+=k[0]*step; rows[selRow].y+=k[1]*step;
+    renderRows();
+  }
+  analyze();
+});
+
+const drop=$('drop');
+drop.addEventListener('dragover',e=>{e.preventDefault(); drop.classList.add('hov');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hov'));
+drop.addEventListener('drop',e=>{
+  e.preventDefault(); drop.classList.remove('hov');
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const im=new Image();
+  im.onload=()=>{ sheet=im; defaultRows(); };
+  im.src=URL.createObjectURL(f);
+});
+addEventListener('paste',e=>{
+  const item=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image'));
+  if(!item) return;
+  const im=new Image();
+  im.onload=()=>{ sheet=im; defaultRows(); };
+  im.src=URL.createObjectURL(item.getAsFile());
+});
+
+requestAnimationFrame(ms=>{lastMs=ms; requestAnimationFrame(tick);});
+</script>
+</body>
+</html>

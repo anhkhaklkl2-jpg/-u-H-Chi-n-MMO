@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Earth Projectile — Spell Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🪨 Earth Projectile — cast → fly (auto-rotate) → impact + damage</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click trên canvas để cast spell tới điểm đó. G = caster, ô đỏ = mob test. Vòng tròn đỏ = impactRadius (hitbox).</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — được nhúng base64 bởi script (spells/README.md §8)
+// ============================================================
+const FRAME_DATA = {
+"frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAA4ElEQVR4nO3UPwrCMBQG8Ffp3s2tJ5Ai6AncXJwcepSCN/AWrg5Oeg0FCU6O2dxygjjIKy9pokVKuny/Kf+g38sjJQIAAAD4WxbbODW13e6Pnf1TU1s5D51JKfrx3Xpll/NpZ/16fzlzeWaMYnJ/Qd6wHzbkcHlSVRYDx+ovI4qHVtoQEbUBlTZOWH+fu5GyEznR75vmoDyWRchxn44NbcKhJKWNs1aVRfDmQ2dTa1u9mS1s7FAsPO9xV5Q2dH7ckj5k52OyCA4i1+RbCEkdnujLb9THhfhFjBEaAAAAAD7e5jVhR5A0mn4AAAAASUVORK5CYII=",
+"frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAAoUlEQVR4nO3SsQ3CMBCF4d8RPRMwQUTDBuloWIgBWIgmHRvQICZggkxAqoPjcAhCxFKk91XnRLHvxQciIiIiMlspPthvm7vVl1sHwHq1fKytzr0/tKe3/aaW4LVpzxqMhgJB+RAJYFdvsgGMb9jWsfZBSoZY/PKRvxmrh25rahXA8Xr++MfirFsdx+ebvf5t9DA/XrmG4RmwdPMiIiIiMnM9o587YMZ9+gkAAAAASUVORK5CYII=",
+"frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAAjUlEQVR4nGNgGAWjYBSMglEwCkbBKBgFQxYwogtUeTj+h7EvP/6IoUFXlh+nYW079mOYR2vAyMDAwOCrbfQfnyKYo2Ee0pXlx2DD1NDbE2R5AJcYDGy+eo5unmAiRhFyaA82AA8p5LSPDtBDeTDlA4KWwTyGnM5xgYHIxKNgFIyCUTAKRsEoGAWjYAgDAI6uLwgpGCw0AAAAAElFTkSuQmCC",
+"frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAA9klEQVR4nO2TPQqDQBCFn2JvZ+cJggjxBOnSpErhUYQcQMhRUlilsfMECQTJCbZLtyfYFGHMKO5CQNYi81U7swv73vwAgiAIgiAI/0vAg8Nma+h8fd4DymVpDADolR7e8hy9XYOIDlz8XOzitN8ZAKjbzruREJgXSxUGvpXnOU6vNHqlfzK9FCHwETYnziaYmI5UlsZDN3wR8YDPNRdHOVvMjRZ5ArSL67QyzGxTleb2eI0ue6UxXWBXV4o8wfF88boHo8+aqjQAwI0UeYJpzsYaS2z9sKlKw6tJ5oCxmbrtArrzXX3AYcAFN7OGaEEQBEEQhIV4A9zoXkE2DXbFAAAAAElFTkSuQmCC",
+"frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAA2ElEQVR4nO3UPw6CMBQG8K8JO5sbI5MhJnoCNwecXbmFiQfwHFzASQY2T4AJMU6MbmyeoA7mNaVajYMQ4/eb6OsLfS/9AxARERH9L2UPluOplu/9+agklkQhAOB0uZpcOya5QzALbxZz7Rb4bgx0mxqiEQXci5eAFPSswFckf1seem1CAcBuvdJV3XYm3EY+0WcTAQDkRYMsjU2wqltkaQxpajYZeX9Q1e3jfPmFSj0CwJxdc4ySKIS7I1KoG7flRdP7PfAuZr8+gP8u2Jd7yNeIiIiIiH7QDexlWWQwVqYsAAAAAElFTkSuQmCC",
+"frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAAyElEQVR4nO3TMQ6CMBQG4L+JOxsboxMhJHACNweZHFy9hYkHMPEWrg5OOrh5AkgIcXJkY+MEOBiapkVk0BqS/9vKA8rP6wOIiIiIaLSEfiHxoybwHBRl3flA4DkAIOvqved7Zrzv1wQAbOezRi/EoYs0rwC8Pna9mMp1n931ZjWEAIDTZmUEUKV5hTh0B9eW+6O1EBMAOFwencX2uAAwutEqyloGGNKhb5N/KvGjt11Qz7k+H/ra9hx83KwvmO4fQ0xEREREI/YE6ChDOa3dEcgAAAAASUVORK5CYII=",
+"frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAABFElEQVR4nO2WvRGEIBCF4eZyK7ACxoQOzExoyAJsyMTMDkwcK7gKrgIu2hmOW+RH0PFmvxAQ3u6+RRgjCIIgiBPpu1ZfrSGZEuIfuTd0oYS8b+YBJaTOXYVn6EL74GGaecq69fWO0edlVwQcboqyx0xBTV197eMKMifOAzDRSkg9bgvHbGBndtyWIPGhlXWBLoaGM0WYTQjjsX62xSkhNVQttVpRFcCyhQUG4hjz2+poEN5GHKYZtczevGk57BvbXhBESgA/t5ASUvtuCpgHIabgpq5Y37V6mGYe2gdHiD7Azqorm4yFWeJI9otR4od1On/xdLg9fdcWt1LR1yjcViWDKBrAuC089+PtEpSQmpqaIAiUD55mpAoE/VfbAAAAAElFTkSuQmCC",
+"frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAABEElEQVR4nO2WsRGDMAxF5Vz6TJAJuDRsQEfDQgyQhWjosgGNjwk8gSdwipzvHEe2MciQ5PRKzvelb0lGAAzDMAyzM33bGCqtE5XQUiiTP4yuqk1X1SRGBIVIDP/G7+NDALxMDPO0OX6WQCgZn66qze16+fgeOl8MrF+Xlt62CWW7rKJvG4MZKTGMNlaOdrSkfdsYrOxY/8baC0vI17Vtl9tmycM2uC+MfY8NpttGdj4oTET/A6HksTMphnkS1pxUGqTSb6ZCg58ieVs2OJasVBoonkI3bm4FVgd3TVKYWDsDRch9SbZQZBeSSgPAPntPEQPDPIm9TBTbRl0TP82hawTjUOplOlMLhviLeWCYL+QJzUSdbvpSbGAAAAAASUVORK5CYII=",
+"frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAAvElEQVR4nGNgGAWjYBSMglEwCgYAVHk4/h9oN1AMRj3BwMDASC2HEALoDm3bsZ9udmMFVR6O/0kNPV9to/++2kZDN9kMqOOxhTYtMyGxZrMQayB6mq3ycPxPTjoekLyAK71jEyc25Hy1jf7jM5dYt1Hse5hl5IQkLE/oyvKj6KfETKyOwxciQ7pUYWCgTdE4LGroUUAtQOvkwERLw2F5g5aeoKkHNl89x3j58UdaWjEKRsGQA6OV1CgYZAAAZ/FYezj63CYAAAAASUVORK5CYII=",
+"frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAAd0lEQVR4nO3TwQ2AIAxA0eo63tyAGxcXYgBn8uZoeCLBaIxWSiD570RIaRugIgAAAGpDzWLBu5jW67ZXrX0RvIt5Q28t0/z5DETOz/+0142/zWu/oLqYRawm3kSJ1yjVy23iJm7JStW/DHTKckZGq8QJAw4ATTsA4XYp0dzD/UoAAAAASUVORK5CYII="
+};
+// ⚠️ SỬA 2 DÒNG SAU cho khớp tên file frame trong FRAME_DATA:
+const REPEATABLE = ["frame_01.png","frame_02.png","frame_03.png","frame_04.png","frame_05.png","frame_06.png"]; // frame BAY (loop)
+const HIT        = ["frame_07.png","frame_08.png","frame_09.png","frame_10.png"]; // frame IMPACT (play 1 lần)
+
+// ============================================================
+// ⏱️ TIMING
+// ============================================================
+const CAST_MS = 100;          // thời gian nạp (fade-in tại caster)
+const FLY_MS = 500;           // thời gian bay tới đích
+const FLY_FPS = 6;            // fps animation bay
+const IMPACT_FPS = 6;         // fps animation impact
+
+// ============================================================
+// 🪄 SPELL CONFIG — CHỈNH Ở ĐÂY KHI VIBE CODE
+// ============================================================
+const SPELL = {
+  name: "Template",
+  dmg: 12,                  // damage mỗi phát
+  dmgVariance: 4,           // dmg thực = dmg ± random(dmgVariance)
+  impactRadius: 26,         // bán kính hitbox quanh điểm chạm (px)
+  impactShake: 2,           // rung màn hình (px, 0 = tắt)
+  impactShakeMs: 120,       // thời gian rung
+  impactScale: 1.0,         // phóng to impact (1 = size gốc)
+  hitStopMs: 0,             // đóng băng X ms lúc chạm (0 = tắt)
+};
+
+// ============================================================
+// ⚙️ ENGINE (đừng sửa phần này khi vibe code — chỉ sửa config trên)
+// ============================================================
+const imgs = new Map();
+function load(src){ return new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[src]; im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame: " + src)); }); }
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0, fps = 60;
+const caster = { x: 60, y: 140 };
+const frameDur = 1000 / fps;
+let animAcc = 0;
+let projectiles = [];
+let shakeUntil = 0, shakeMag = 0;
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+// Mob giả để test damage
+const mobs = [{ x: 320, y: 120, hp: 50, maxHp: 50 }, { x: 150, y: 200, hp: 50, maxHp: 50 }];
+const MOB_R = 12;
+
+let floaters = [];
+
+function applyDamage(p){
+  if (p.hitApplied) return;
+  p.hitApplied = true;
+  if (SPELL.hitStopMs > 0) p.frozenUntil = performance.now() + SPELL.hitStopMs;
+  for (const m of mobs){
+    const dx = m.x - p.targetX, dy = m.y - p.targetY;
+    if (dx*dx + dy*dy <= SPELL.impactRadius * SPELL.impactRadius){
+      const dmg = Math.max(1, SPELL.dmg + Math.round((Math.random()*2-1) * SPELL.dmgVariance));
+      m.hp = Math.max(0, m.hp - dmg);
+      p.hitMob = m;
+      p.dmgDealt = dmg;
+      if (SPELL.impactShake > 0){ shakeUntil = performance.now() + SPELL.impactShakeMs; shakeMag = SPELL.impactShake; }
+      floaters.push({ x: m.x, y: m.y - 16, text: "-" + dmg, t: 0 });
+    }
+  }
+}
+
+function cast(tx, ty){
+  const angle = Math.atan2(ty - caster.y, tx - caster.x);
+  projectiles.push({ targetX: tx, targetY: ty, angle, phase: "fly", t: 0, flyFrame: 0, impactFrame: 0, impactDone: false, hitApplied: false });
+  log.textContent = "CAST → (" + Math.round(tx) + ", " + Math.round(ty) + ") angle=" + Math.round(angle*180/Math.PI) + "°, cast=" + CAST_MS + "ms, fly=" + FLY_MS + "ms, dmg=" + SPELL.dmg + "±" + SPELL.dmgVariance;
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0; y<canvas.height; y+=24)
+    for (let x=0; x<canvas.width; x+=24)
+      if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  ctx.fillStyle = "#fc0";
+  ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function drawSprite(im, x, y, angle, scale){
+  const s = scale2x ? 2 : 1;
+  const w = im.width * s * scale, h = im.height * s * scale;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.drawImage(im, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function update(dt){
+  for (const p of projectiles){
+    if (p.phase === "fly"){
+      p.t += dt;
+      p.animAcc = (p.animAcc || 0) + dt;        // accumulator RIÊNG từng projectile
+      if (p.animAcc >= 1000 / FLY_FPS){ p.animAcc = 0; p.flyFrame = (p.flyFrame + 1) % REPEATABLE.length; }
+      const progress = Math.min(1, p.t / FLY_MS);
+      p.x = caster.x + (p.targetX - caster.x) * progress;
+      p.y = caster.y + (p.targetY - caster.y) * progress;
+      if (p.t >= FLY_MS + CAST_MS) { p.phase = "impact"; applyDamage(p); }
+    } else if (p.phase === "impact"){
+      p.animAcc = (p.animAcc || 0) + dt;
+      if (p.animAcc >= 1000 / IMPACT_FPS && !p.impactDone){
+        p.animAcc = 0;
+        p.impactFrame++;
+        if (p.impactFrame >= HIT.length) { p.impactDone = true; }
+      }
+    }
+  }
+  for (const f of floaters){ f.t += dt; f.y -= dt * 0.03; }
+  floaters = floaters.filter(f => f.t < 700);
+  projectiles = projectiles.filter(p => !(p.phase === "impact" && p.impactDone));
+}
+
+function render(){
+  drawChecker();
+  ctx.save();
+  const now = performance.now();
+  if (now < shakeUntil){
+    ctx.translate((Math.random()*2-1)*shakeMag, (Math.random()*2-1)*shakeMag);
+  }
+  for (const m of mobs){
+    ctx.fillStyle = "#a33";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000";
+    ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2 * (m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(m.hp + "/" + m.maxHp, m.x, m.y + MOB_R + 10);
+  }
+  ctx.font = "bold 11px monospace";
+  for (const f of floaters){
+    ctx.globalAlpha = 1 - f.t/700;
+    ctx.fillStyle = "#fd4";
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  // vòng tròn đỏ impactRadius đã bỏ (final) — hitbox vẫn chạy theo SPELL.impactRadius
+  for (const p of projectiles){
+    if (p.phase === "fly"){
+      const im = imgs.get(REPEATABLE[p.flyFrame]);
+      if (im) {
+        if (p.t < CAST_MS) { ctx.globalAlpha = p.t / CAST_MS; }
+        drawSprite(im, p.x, p.y, p.angle, 1);
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      const im = imgs.get(HIT[p.impactFrame]);
+      if (im) drawSprite(im, p.targetX, p.targetY, p.angle, SPELL.impactScale);
+    }
+  }
+  ctx.strokeStyle = "#fff";
+  for (const p of projectiles){
+    ctx.strokeRect(p.targetX-3, p.targetY-3, 6, 6);
+  }
+  ctx.restore();
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && projectiles.length === 0){
+    let tx, ty;
+    if (Math.random() < 0.7){
+      const m = mobs[Math.floor(Math.random()*mobs.length)];
+      tx = m.x + (Math.random()*2-1)*10; ty = m.y + (Math.random()*2-1)*10;
+    } else { tx = 200 + Math.random()*240; ty = 60 + Math.random()*150; }
+    cast(tx, ty);
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+(async () => {
+  try {
+    for (const src of [...REPEATABLE, ...HIT]) imgs.set(src, await load(src));
+    requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+  } catch(e){
+    log.textContent = "⚠️ " + e.message + " — hãy nhúng FRAME_DATA (spells/README.md §8) và sửa REPEATABLE/HIT cho khớp tên file.";
+  }
+})();
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+</script>
+</body>
+</html>

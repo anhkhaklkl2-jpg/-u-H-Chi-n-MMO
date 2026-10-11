@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Inspect — Ninja Adventure pack</title>
+<body style="background:#202438;margin:0;padding:16px;font-family:monospace;color:#cfd2e8">
+<h3>Actors (sprite 64x112 / faceset 38x38)</h3>
+<div id="actors"></div>
+<h3>Emotes (30)</h3>
+<div id="emotes"></div>
+<h3>Dialog UI + Arrow</h3>
+<div id="dialog"></div>
+<h3>Items</h3>
+<div id="items"></div>
+<h3>Tilesets</h3>
+<div id="tiles"></div>
+<script>
+const P = "../Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/";
+const actors = ["MaskGoldRacoon","MaskRacoon","Sultan","Sultan2","Noble","OldMan","OldMan2","OldMan3","OldWoman","Villager","Villager2","Villager3","Villager4","Villager5","Villager6","Village6","GreenPig","Pig","Shaman","ShamanLion","Monk","Monk2","Woman","Child","Hunter","Inspector","EggBoy","EggGirl","Tengu","Tengu2","Samurai","SamuraiBlue","SamuraiRed","NinjaRed","NinjaBlue","NinjaGreen","NinjaDark","Princess","FighterRed","FighterWhite","GladiatorBlue","RedGladiator","Knight","KnightGold","SorcererBlack","SorcererOrange","Vampire","Skeleton","RobotGreen","RobotGrey","DemonRed","DemonGreen","Statue","GoldStatue","LionBoy","CaveLion","Caveman","Cavegirl","Eskimo","NinjaEskimo"];
+document.getElementById("actors").innerHTML = actors.map(n =>
+  `<div style="display:inline-block;margin:6px;text-align:center;background:#2a2f4a;padding:4px;border-radius:4px">
+     <div><img src="${P}Actor/Character/${n}/Faceset.png" style="image-rendering:pixelated"><img src="${P}Actor/Character/${n}/SpriteSheet.png" style="image-rendering:pixelated;vertical-align:top"></div>
+     <div style="font-size:10px">${n}</div></div>`).join("");
+const emotes = Array.from({length:30},(_,i)=>i+1);
+document.getElementById("emotes").innerHTML = emotes.map(i =>
+  `<div style="display:inline-block;margin:4px;text-align:center;background:#2a2f4a;padding:4px">
+     <img src="${P}Ui/Emote/emote${i}.png" style="image-rendering:pixelated"><div style="font-size:10px">${i}</div></div>`).join("");
+const dlg = ["Dialog/DialogBox.png","Dialog/DialogBoxFaceset.png","Dialog/DialogueBoxSimple.png","Dialog/DialogInfo.png","Dialog/ChoiceBox.png","Dialog/FacesetBox.png","Dialog/YesButton.png","Dialog/NoButton.png","Arrow.png","Font/font8x8.png","Font/font24x30.png"];
+document.getElementById("dialog").innerHTML = dlg.map(n =>
+  `<div style="display:inline-block;margin:4px;text-align:center;background:#2a2f4a;padding:4px;vertical-align:top">
+     <img src="${P}Ui/${n}" style="image-rendering:pixelated"><div style="font-size:10px">${n}</div></div>`).join("");
+const items = ["Food/Onigiri.png","Food/Sushi.png","Food/Sushi2.png","Food/Noodle.png","Food/Yakitori.png","Food/FortuneCookie.png","Food/Meat.png","Food/Beaf.png","Food/Fish.png","Food/Calamari.png","Food/Octopus.png","Food/Shrimp.png","Food/Honey.png","Food/Nut.png","Food/TeaLeaf.png","Treasure/GoldCoin.png","Treasure/SilverCoin.png","Treasure/Coin2.png","Treasure/LittleTreasureChest.png","Treasure/BigTreasureChest.png","Treasure/GoldCup.png","Object/MoneyBag.png","Object/Bag.png","Object/CrateEmpty.png","Object/Book.png","Potion/LifePot.png","Potion/Medipack.png","Potion/Heart.png","Resource/GemRed.png","Resource/GemGreen.png","Resource/GemPurple.png","Resource/BarGold.png","Resource/BarIron.png","Resource/Rock.png","Tool/Pickaxe.png","Tool/Axe.png"];
+document.getElementById("items").innerHTML = items.map(n =>
+  `<div style="display:inline-block;margin:4px;text-align:center;background:#2a2f4a;padding:4px">
+     <img src="${P}Items/${n}" style="image-rendering:pixelated"><div style="font-size:9px">${n.split("/")[1]}</div></div>`).join("");
+const tiles = ["TilesetField.png","TilesetVillage.png","TilesetHouse.png","TilesetFloor.png","TilesetNature.png"];
+document.getElementById("tiles").innerHTML = tiles.map(n =>
+  `<div style="display:inline-block;margin:4px;text-align:center;background:#2a2f4a;padding:4px;vertical-align:top">
+     <img src="${P}Backgrounds/Tilesets/${n}" style="image-rendering:pixelated;max-width:340px"><div style="font-size:10px">${n}</div></div>`).join("");
+</script>

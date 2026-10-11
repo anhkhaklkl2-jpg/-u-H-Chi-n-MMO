@@ -16,6 +16,16 @@
 
 import Phaser from "phaser";
 
+/** Minimal shape of the world scene the spell FX manager needs (avoid a
+ *  circular import with game.ts): the zombie render map + tile size. */
+interface WorldSceneLike {
+  tilePx: number;
+  zombies: Map<string, {
+    container: Phaser.GameObjects.Container;
+    dieT0: number;
+  }>;
+}
+
 export interface SpellDef {
   id: string;
   name: string;
@@ -303,6 +313,31 @@ export class SpellFx {
 
   private channelAct: ActiveSpell | null = null;
 
+  /** IMPACT SHAKE = mob-only: từng mob sống trong bán kính `radiusPx` quanh
+   *  điểm impact rung ~250ms (3-4px lặp) — camera KHÔNG rung (user 11/10).
+   *  Shake bằng cách đẩy container của mob sang trái/phải mỗi frame ticker. */
+  private shakeMobsNear(
+    scene: Phaser.Scene,
+    x: number, y: number, radiusPx: number,
+  ): void {
+    const sc = scene as unknown as WorldSceneLike;
+    if (!sc?.zombies) return;
+    for (const z of sc.zombies.values()) {
+      if (z.dieT0 !== 0) continue;
+      const c = z.container;
+      if (!c) continue;
+      if (Math.hypot(c.x - x, c.y - y) > radiusPx) continue;
+      const ox = c.x;
+      const t0 = performance.now();
+      const ev = () => {
+        const t = performance.now() - t0;
+        if (t >= 250) { c.setX(ox); scene.events.off(Phaser.Scenes.Events.UPDATE, ev); return; }
+        c.setX(ox + Math.sin(t / 30) * 3);
+      };
+      scene.events.on(Phaser.Scenes.Events.UPDATE, ev);
+    }
+  }
+
   private frameIndex(act: ActiveSpell, now: number, count: number): number {
     const elapsed = now - act.phaseT0;
     return Math.min(count - 1, Math.floor((elapsed / 1000) * act.spell.fps));
@@ -450,8 +485,10 @@ export class SpellFx {
             act.overlay = scene.add.image(act.toX, act.toY + 14, `sp_rocklift_hit0`)
               .setDepth(SPELL_DEPTH - 2).setScale(s.scale);
           }
-          // light shake on impact (matching the pack feel)
-          scene.cameras.main.shake(120, 0.004);
+          // IMPACT SHAKE = MOB-ONLY (user 11/10: bớt shake, KHÔNG run camera.
+          // Rung 250ms hạng ~3px chỉ container của mob đứng trong bán kính
+          // impact quanh điểm đá rơi.
+          this.shakeMobsNear(scene, act.toX, act.toY, 40);
         }
         continue;
       }

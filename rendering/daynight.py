@@ -85,6 +85,19 @@ def ingame_seconds() -> int:
     return int((_GAME_BASE_SEC + elapsed * mult + _GAME_OFFSET_SEC) % SECONDS_PER_DAY)
 
 
+def ingame_day_index() -> int:
+    """How many FULL in-game days have elapsed since the epoch (0-based).
+
+    Used by cadence schedules like the wandering merchant's "every N days"
+    visit rule (game/shop_sessions.py): day_index % N == 0 marks a visit
+    day. Advances across midnight and respects /time set offsets.
+    """
+    elapsed = time.time() - _GAME_EPOCH
+    mult = SECONDS_PER_DAY / GAME_DAY_LENGTH_REAL_SECONDS
+    total = _GAME_BASE_SEC + elapsed * mult + _GAME_OFFSET_SEC
+    return int(total // SECONDS_PER_DAY)
+
+
 def set_ingame_time(second_of_day: int | None) -> int:
     """Pin the in-game clock to ``second_of_day`` (0..86399) by adjusting the
     manual offset; the clock keeps advancing normally from there. ``None``

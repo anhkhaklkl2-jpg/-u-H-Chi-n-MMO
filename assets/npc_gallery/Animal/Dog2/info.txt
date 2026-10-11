@@ -1,0 +1,5 @@
+actor: Dog2
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\Dog2
+preview: faceset
+spritesheet: SpriteSheet.png (32x16 px)

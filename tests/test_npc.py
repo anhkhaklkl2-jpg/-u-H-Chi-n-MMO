@@ -12,10 +12,13 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets" / "maps"
 
 def test_load_npcs_bigmap():
     nm = load_npcs("bigmap", ASSETS)
-    assert len(nm.npcs) == 1
+    # elder + the every-3-days wandering merchant (bigmap = thảo nguyên chính)
+    assert len(nm.npcs) == 2
     elder = nm.npcs[0]
     assert elder.id == "elder" and elder.x == 1 and elder.y == 0
     assert "elder_intro" in nm.dialogues
+    merchant = [n for n in nm.npcs if n.id == "thuong_nhan"]
+    assert merchant and merchant[0].sessions["days_every"] == 3
 
 
 def test_npc_adjacent():

@@ -1,0 +1,5 @@
+actor: DogOrange
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\DogOrange
+preview: faceset
+spritesheet: SpriteSheet.png (36x16 px)

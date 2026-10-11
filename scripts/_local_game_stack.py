@@ -229,7 +229,11 @@ class LocalStack:
                 # WEB SPELLS (user 08/10): parity with web_api/core.py —
                 # resolve via rules.apply_spell and echo action_result so
                 # the preview client sees damage/drops like production.
+                # MIRROR LINK (fix 11/10): apply_spell reads state mirrors —
+                # link BEFORE calling apply_spell (same as web_api/core.py).
                 rt_s = self.gm.get_runtime(ch)
+                rt_s.state.inventories = rt_s.inventories
+                rt_s.state.held_slots = rt_s.held_slots
                 from game import rules as _rules
                 from game.rules import ActionResult
                 spell_result = (
@@ -239,6 +243,9 @@ class LocalStack:
                     ) if rt_s is not None and rt_s.state.get_player(uid) is not None
                     else ActionResult(False, "no_scenario")
                 )
+                # DIAG (user 11/10: "vẫn không gây được sát thương") — log
+                # kết quả apply_spell để thấy ngay lý do cast thất bại.
+                print(f"[stack] SPELL result ok={spell_result.state_changed} reason={spell_result.reason} dmg={getattr(spell_result, 'damage', 0)} target={getattr(spell_result, 'target_id', None)} mana_need={getattr(rt_s.state.get_player(uid), 'mana', '?')}", flush=True)
                 await self._send(cid, {
                     "type": "action_result",
                     "name": "spell",

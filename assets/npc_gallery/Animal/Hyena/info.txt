@@ -1,0 +1,5 @@
+actor: Hyena
+group: Animal
+source: Nơilấyassetsngoài\Ninja Adventure - Asset Pack\Ninja Adventure - Asset Pack\Actor\Animal\Hyena
+preview: faceset
+spritesheet: SpriteSheet.png (28x13 px)

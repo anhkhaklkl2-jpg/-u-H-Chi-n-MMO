@@ -1,0 +1,24 @@
+APP ID: 965153822861307914 | username: Đậu Hũ Chiên
+
+GLOBAL COMMANDS (15):
+  - startmap (type 1 )
+  - joinmap (type 1 )
+  - leave-map (type 1 )
+  - map (type 1 )
+  - mapreset (type 1 )
+  - mapinfo (type 1 )
+  - bigmap (type 1 )
+  - hub (type 1 )
+  - inventory (type 1 )
+  - settings (type 1 )
+  - setweather (type 1 )
+  - weatherinfo (type 1 )
+  - weatherfetch (type 1 )
+  - khutraodoi (type 1 )
+  - previewmap (type 1 )
+
+GUILD Conits wor(l)d (788617289490366464) COMMANDS (0):
+
+GUILD ☠Băng Hải Tặc Rainbow Cat ☠ (893755087720177704) COMMANDS (0):
+
+GUILD Máy chủ của Conis (1218867078505824416) COMMANDS (0):

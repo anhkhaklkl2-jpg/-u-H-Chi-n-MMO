@@ -177,6 +177,7 @@ def test_format_grid_empty_bag_keeps_full_box():
 
 def test_format_detail_known_and_unknown():
     detail = _format_detail("potion_hp", 3)
-    assert "Potion HP" in detail
+    # Viet hoá ten item (user 29/09): potion_hp hien la "Binh mau".
+    assert "Bình máu" in detail
     assert "Qty: 3" in detail
     assert _format_detail("no_such_item", 1) == "❓ **Unknown item**"

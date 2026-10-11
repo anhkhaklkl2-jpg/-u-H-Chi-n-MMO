@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "D:\d\u1ef1 án mini build bot discord mmo event\scripts\_preview_stack.py", line 537, in <module>
+    asyncio.run(main())
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\d\u1ef1 án [METEOR] crater ore spawned at (268,51)
+[METEOR] crater ore spawned at (49,150)
+[METEOR] crater ore spawned at (104,134)
+[stack] browser disconnected cid=1
+venv\Lib\site-packages\aiohttp\web_runner.py", line 138, in start
+    self._server = await loop.create_server(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\phant\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1584, in create_server
+    raise OSError(err.errno, msg) from None
+OSError: [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8899): [winerror 10048] only one usage of each socket address (protocol/network address/port) is normally permitted

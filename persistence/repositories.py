@@ -52,11 +52,13 @@ async def save_player(db, channel_id: int, player: Player) -> None:
         """
         INSERT INTO players (channel_id, user_id, x, y, x_f, y_f, direction, sprite_id, visible,
                             name_color, hp, max_hp, mana, max_mana, level, xp, coins, class_id,
-                            screen_message_id, controls_message_id, hub_message_id, step_size)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            screen_message_id, controls_message_id, hub_message_id, step_size,
+                            world_map)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(channel_id, user_id) DO UPDATE SET
             x=excluded.x, y=excluded.y, x_f=excluded.x_f, y_f=excluded.y_f,
             direction=excluded.direction,
+            world_map=excluded.world_map,
             sprite_id=excluded.sprite_id, visible=excluded.visible,
             hp=excluded.hp, max_hp=excluded.max_hp, mana=excluded.mana,
             max_mana=excluded.max_mana, level=excluded.level, xp=excluded.xp,
@@ -89,6 +91,10 @@ async def save_player(db, channel_id: int, player: Player) -> None:
             player.controls_message_id,
             player.hub_message_id,
             player.step_size,
+            # Which world the body stands in (None = the main map). Without
+            # this a side-world save wrote cave coords into the main row and
+            # every reload dropped the player mid-grassland (user 06/10).
+            getattr(player, "world_map", None),
         ),
     )
 
@@ -97,7 +103,8 @@ async def load_players(db, channel_id: int) -> list:
     rows = await db.fetchall(
         "SELECT user_id, x, y, x_f, y_f, direction, sprite_id, visible, "
         "name_color, hp, max_hp, mana, max_mana, level, xp, coins, class_id, "
-        "screen_message_id, controls_message_id, hub_message_id, step_size "
+        "screen_message_id, controls_message_id, hub_message_id, step_size, "
+        "world_map "
         "FROM players WHERE channel_id=?",
         (channel_id,),
     )
@@ -124,6 +131,7 @@ async def load_players(db, channel_id: int) -> list:
             "controls_message_id": r[18],
             "hub_message_id": r[19],
             "step_size": r[20] if len(r) > 20 else 1,
+            "world_map": r[21] if len(r) > 21 else None,
         }
         for r in rows
     ]

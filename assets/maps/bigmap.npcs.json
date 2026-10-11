@@ -7,20 +7,109 @@
       "x": 1,
       "y": 0,
       "dialogue": "elder_intro"
+    },
+    {
+      "id": "thuong_nhan",
+      "name": "Thương nhân lang thang",
+      "emoji": "🧙",
+      "x": 68,
+      "y": 68,
+      "dialogue": "thuong_nhan_intro",
+      "sprite": {
+        "w": 16,
+        "h": 16,
+        "frames": 4
+      },
+      "wander": {
+        "radius": 6,
+        "speed": 1.2,
+        "pause": 2.0
+      },
+      "sessions": {
+        "shop": "thuong_nhan",
+        "windows": [
+          [
+            8,
+            14
+          ]
+        ],
+        "days_every": 3,
+        "deal_chance": 0.35,
+        "deal_discount": 0.5,
+        "min_items": 4,
+        "max_items": 6,
+        "walk_out_seconds": 20,
+        "walk_out_tile": [
+          68,
+          60
+        ]
+      }
     }
   ],
   "dialogues": {
     "elder_intro": {
       "text": "Chào người lạ! Ta có một món thuốc cho người.",
       "options": [
-        {"label": "Xin cảm ơn", "next": "elder_gift", "effect": {}},
-        {"label": "Đi luôn", "next": null, "effect": {}}
+        {
+          "label": "Xin cảm ơn",
+          "next": "elder_gift",
+          "effect": {}
+        },
+        {
+          "label": "Đi luôn",
+          "next": null,
+          "effect": {}
+        }
       ]
     },
     "elder_gift": {
       "text": "Cầm lấy Potion HP này, lúc nguy hiểm hãy dùng!",
       "options": [
-        {"label": "Nhận Potion", "next": null, "effect": {"give_item": "potion_hp"}}
+        {
+          "label": "Nhận Potion",
+          "next": null,
+          "effect": {
+            "give_item": "potion_hp"
+          }
+        }
+      ]
+    },
+    "thuong_nhan_intro": {
+      "text": "Psst.... Thuận mua vừa bán, đồ tốt hay không thì phải gặp được đúng người cần.",
+      "options": [
+        {
+          "label": "..."
+        },
+        {
+          "label": "Tiếp tục",
+          "next": "thuong_nhan_shop_ask"
+        }
+      ]
+    },
+    "thuong_nhan_shop_ask": {
+      "text": "Muốn xem 1 số món hàng của ta chứ?",
+      "options": [
+        {
+          "label": "Để ta xem thử",
+          "next": "shop:thuong_nhan:rbcat"
+        },
+        {
+          "label": "Ngươi là...",
+          "next": "thuong_nhan_who"
+        }
+      ]
+    },
+    "thuong_nhan_who": {
+      "text": "Chỉ đơn giản là 1 người qua đường thôi... ý ta là sao ngươi phải quan tâm đến mấy thứ vặt vãnh như thế chứ, nếu muốn biết thì xì tiền ra, ta sẽ cho ngươi biết thứ ngươi muốn.",
+      "options": [
+        {
+          "label": "Để ta xem thử",
+          "next": "shop:thuong_nhan:rbcat"
+        },
+        {
+          "label": "Thôi...",
+          "next": null
+        }
       ]
     }
   }

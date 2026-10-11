@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Dark VFX 01 — Spell Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>🌑 Dark VFX 01 — trượt khỏi player → bay tới điểm bắn (nổ nếu trúng địch giữa đường) → nếu trống thì tìm địch gần đích → impact</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click trên canvas để cast spell tới điểm đó. G = caster, ô đỏ = mob test. Vòng tròn đỏ = impactRadius (hitbox).</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — được nhúng base64 bởi script (spells/README.md §8)
+// ============================================================
+const FRAME_DATA = {
+"frame_01.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA8klEQVR4nO2UPQqDQBBGv8QoVlYBr2DpcVLkKqm8ioXHscwVAlZWkhBMpajZn5l1wxaZB4K4O/KY/WYBQRCEMNR5NdZ5NYb2ONo2hJa0CgJhJQ+mRZPY9XFT1qpqdHspOAvqaKIO5ZCtvhVxAsBN1FpAlWyibn7fCk4UccKWtGaQ+0OdHADcX0/2qZCGxCa57J6KNu0ZSmtIgoB70PfIAQxBYN80uoqeuAVbyW2m2rRX5tCUTROsDuq4vM/atXLInOUAD4JTR5eSuuP8yTVDgSPJxYsgsJacHh+S3gSB7wEyZZOK87VBZTnle64pQRCEf+UDBqVaNU5D0cIAAAAASUVORK5CYII=",
+"frame_02.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA60lEQVR4nO2VOw7CMAxAH59WTJ2QuELHHoeBqzBxFQaOw9grIDExVa0QTKDQOv04QULCb3ST5sVxHDAMwzB+mlk7cNwcHgC7y77zbYjXXBfNf1y8gmMXcMefFtd3vKgyAPIkDZIUJ0qZGEKSe5EnKaDL5nzqBIk+OYCyqSmbWrVxUVB7JJJcKN4Mhha3hCaLvUc8VfK8uokxKT6W5dAAV1JTQ6EEHeNQi4HPrBZVNrntRKkzSdR3YaYKRmkz7oLb+xqQ61FDFEGQJdtoXpVogtCVjJHFqILgb03aNzl6M3ZxL883Gr9hGMY/8AQGwWFt09s15wAAAABJRU5ErkJggg==",
+"frame_03.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA6ElEQVR4nO2VOw6DMAxAXfoRExNSrtCR4zD0KkxchaHHYewVKnViQq1QOhk5pCnETaRU8pMYcCA8bGMABEEQhKTZhdysU612rV3uDetZxk2darXvRlTqun/M8WosjOvOxxNL0hIEsN/2W2a2yP0i6S3ClUN8JTN6wu2TmGTLQGqSh09BKrml7PVUGmWm9PkAAOul9xKk+Mq66POBJbkqSHGVv1OtxixyRVxYPcgBxeuptNaqsZgPDkEEAUxJ7LslnDkYTDAWwUcKfki319OIc391wTOIErTMXDmACBlE6EhKbfgLgiD8E29EbV3iiKz31gAAAABJRU5ErkJggg==",
+"frame_04.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA50lEQVR4nO2VPQ6CQBCFn6KGisrEK1hyHAuvYuVVLDgOpVcwoaIiGqOF2bCwP/CWJZo4X0eWzHx5uzsLCIIgCD/NInbBy+78cq0dbye6X1RBJVcklbF2eG4B8JKTBfuJ6XJ5k3X+3a83ADjJ5VBDnxgjBwDXx53qYRUcKmATGyMXKrnyiYwpMDfWBGNSpjXKtO58MxiCIaNAx7W9rJjCmmCIpBojsQlKy3c+i6Typpg3GTVunJfEh16YvUzsLJztJXGl+FVBoJVU864vBnBnPLog8JHUBUOeOMUsgoB5NqeOL0EQhH/lDXjuZ7cLBGCtAAAAAElFTkSuQmCC",
+"frame_05.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA9ElEQVR4nO2VvQ3CMBBGP34SpUqFxAopMw4Fq1CxCgXjpGQFJKpUEQhBdY457NiXOIjiXuXYlu/lsy0DiqIoyl+zmGPR0/b4cvXvrwdxveSCJHde3T76d8+NaUtEkwn6xOquNO2maI1orOTyV3L0TXN8x4AzKUFexBbkcpwqywGEk1ynEOOE5CSIBGO3xaYpWgC9NH1X1qUZIvoMjpFLQTBBqZhve5uiNWN1VwJZ3HqDB3RMapfH3TtGkrEXBBhIkMuFFqP5dlIpcBalYtKnyf4pX5KS9LyCUyFRl6RUMMlLwnEVr7JcLAfMlCAhPceKoijKN2+e2mj6zGHAIQAAAABJRU5ErkJggg==",
+"frame_06.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA80lEQVR4nO2WPQ6DMAxGP/onpk6VuAJjj8PAVZi4CkOPw9grIHViqlpVdKklEwjEqdn8NsAhjy/BABiGYRjGPyTaN2yyelirKbsqeF4VQS512z9ma67PMwAgP54AhEuKBNfSceVIitOmPYrPBUCY5GJByHJJ5DihSe405FzW5CQc5k5qyrVpPzpPx/lvmaMECV/8vgfQTI6YLDFNvrQ3yq5K3OtFYCJSJhJNVg+SPkVjAOD+fnlr2rSPajWTBKVyfAxNrInqlyQkSWmj9raZGHiSWmmqCgLjZFxJaXrABj8LnLl2JN3j6glyXJmYF9AwDGNjviscXX4PjqXhAAAAAElFTkSuQmCC",
+"frame_07.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA9UlEQVR4nO2WPQ7CMAyFHxRQp05IXIGxx2HgKp24CkOP05ErIHXqVIEQDMhqlTrBbkInf1tiW3mxnR/AMAzDMGJYSZyuh8vbnTvfKzaW85XE+Qg6/1qMo85adr7sCxy3OwA6kV7HGHFlX7D2Ju9weu0ByEWuJeI0O/aJIxttQpqAycIUqO2xOmuD4lyk5d5wk6GgsS2UhSbvAAwZdcdSJiXWlFN7IufA9qAGEknNn5pogcAgksoIfEs5Lu94vLhAQppFzX2YtIfo0NyeD6+P9rJOmkFalES4zHlJkgrkxLjjpG9xDJoPRoi/ZdAVs8SdaRiGMYMPIWxi+eWmz1cAAAAASUVORK5CYII=",
+"frame_08.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA2klEQVR4nO2VsQ6CMBCGfyQaJyYTX8GRx3HgVZh4FQcex9FXIGFyIhqj08VSObiztXG4b2t6lK/l/gIYhmEYf00mKTrtmyc3V3W1aI1vmV18TsyHRJee0W5oslgj5tPmPTt3fOwA6CQ/Cn25qqszqTDJlUPB1hzWG5Wkun84WYkcoZEManBXts37kdx5ewXwFvbHUslViOCvEwwECqYgWJA7xXIoRp/XHWuIdoJ0hcQmWg9RYC7322JtshT7uKmeEiUxQB6wqCGRvjToTxIL7kJPcTUZhmEYCXkBh2hTK5pskAEAAAAASUVORK5CYII=",
+"frame_09.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA5ElEQVR4nO2UOw7CMAxADahVpk6VuELHHqcDV2HiKgwcJ2OvgMSUqWpVwYCC0pCPnYQJv821mzzVrgEYhmEYJoddKHk9Xp6xA07389cZvvdctTHQh1O4HR7O58PakiXRxRhxl1g/NZu4q2qSJPmT+0RNOVvKhiK5p8gBxOfIlJNCgRTKG2MgCwK8JVMGXjMuM3rWkwQ1tmSstSlkCQKEW95PzUdaCrWJsWQLmmDn66c/iY9hbYP51PYnD7oLPfjjMntrqHuwaIv1xV1VO/NUOYDCgrZMCYq22MbedTm7k2EY5l95AfB1UKRJVtUyAAAAAElFTkSuQmCC",
+"frame_10.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA6ElEQVR4nO2WMQ6DMAxFP6UgJqZKvQIjx+nAVZh6lQ4ch2sgMTGxVO1QpXKqhNhp2qqS30ic+MmxIwBFURTlv7kcz7df5s+2FqlcN/Wbsb59FMkZhr10wxZGbMjn57d2ra11qWQw2FUNVxIaZwSpHAA0RSmuIiuY24e+ylGkkjtOUOjAIZ8tOcpYLRirxYqVDB5LkCNJ8VUvBrYgEDeF7xKd8PWaOP03VgvatRb1oaiClG7qs29UNEmC0PtHkU5x0gpQUZdgzDsYfcUuTPLT9YCmKJOcmVQQsCc9heTHmzz2h0NRFEV5cAduhltPjriY4wAAAABJRU5ErkJggg==",
+"frame_11.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAAvElEQVR4nO2W2xKDMAhEl07//5fpS3G8oM2SoNbhPGluLIgQoCiK/0Yim1RVAUBENvttbmHEWddKl8C1AE/cxiApNuxZi5hdo4TIV9RID4xzlwhkCAvsSXyGlAh62qP+dAn0omhD8ylvrJXn5qARzUX98mvdO3L4SPaK/vSeZASqOuWcPbO1XUQkJYKeEEbcPIqXf2LgOI+HFVumfd26F7N//akCIyVpiMCMe6Dx/E6y5qxbDkVr2yqKIoEPmflHQg0a4I0AAAAASUVORK5CYII=",
+"frame_12.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAABEUlEQVR4nO2XwQ3DIAxFoeoEuWQ5RgknOkqW49IV6MmSRcGxwRZVlX9CkYEXGxvj3K05eYtFzz0VGIccp/ZQBcRgWDOQoolXnukBYklhHxJjCoYDJ7EDDQGGHH3I0Us3A0nmiQDr8MxAciX2YA1lDTkcYoCy9uDTYlFOhp97KpyMHs7i1uKQPFx7joYBKYBji19hP7ZYqB/oSQ0Qg7zeyWPI1jeu1AG19fOAJlk8ojrL4ayqA8JZw2cOf+vNqws+jE082AKh4Hrec25hiDEEVXpUGlZJBw223Hqo1lFLmllJsTa5SahmdulNcrX5yH1s/qoDLWkWWnVLW1MepM6W1tvYrA7OPthBakli3frf+lt9AHGmqxUT9wLmAAAAAElFTkSuQmCC",
+"frame_13.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA/ElEQVR4nO2XTRKDMAiFteMJuvFyHqVZpUfxcm56Bd00U6RISEhIO5O3URkNn8DzZxh+XGONRdfZ72F/2Zwqx6TH+QiClVKxClJVuwJOqWpSBWOtkyZeZ79Lz81q8bK5ESaB4LhqGKTGGFwuHo7hFsck63BKnkGqPbj1FAAV1zqcheSOY9fASsd0S8c737kUNubsaqLmT3KNGWhuMlNAHHvcnShmAomTBBAIRMWkgFkmgar2qHhLDYj1fPkvYComVXFArUwcDmeOm7/Y69DERJR7OQAca9pizSdbVZm+SXLU4f5eJatk5uImreX+P4JTmzrWInmRFndndil0AHgMy6v3sMcjAAAAAElFTkSuQmCC",
+"frame_14.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAA2ElEQVR4nO2XwQ3DIAwA3aoT9MNyHaV5kVFYrp+uQF5IFjHILjZxJe6HI9kHJoEAOOemnTCFmPH49dmGaqgJYjEsVQtjRuVFUCItuRRi7olj7lIJiUgLyco9JIlx8hRixoVwvIxrEelE1CiFewL1MzNZaYu1toU5boTciFC4lftFbNpkqELv58aKXbLiRQQLUTEAnqDoJOGwf+PplKBiXNQFCyNSU6D2XE3vMqFv1IAj2iKFmM1arMHU+2KN2486gHO5xeIq3L4Ykl9Mk+LWNYZPEretW/wLB//ogWlAOsoMAAAAAElFTkSuQmCC",
+"frame_15.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAAiklEQVR4nGNgGGlgiXjz/yXizf8H2h0YAJujYGLIjoax6e4JfA4kVj3FoEaoFquh5FhG1xBEtoxQqA3K9MnAQOcQIxXgShqjABsYDS1yADmhNqAh7SOVj2E5NrEBBUPCkYQAMdHMRA+HUAIGvQNpDoZcuhsF1ACj1eEoGAVYwGjGGJJgNNpGARUAAHFvRgpweO32AAAAAElFTkSuQmCC",
+"frame_16.png": "iVBORw0KGgoAAAANSUhEUgAAACgAAAAgCAYAAABgrToAAAAAP0lEQVR4nO3QMRIAERAEQL/wYF/xT1KFQOQ43dHURjMbwotyTOXrDoNZqfbW5yNHtLYWPP4bq34zBAAAALhEBT4VFCaJV1/rAAAAAElFTkSuQmCC"
+};
+// ⚠️ SỬA 2 DÒNG SAU cho khớp tên file frame trong FRAME_DATA:
+const REPEATABLE = ["frame_01.png", "frame_02.png", "frame_03.png", "frame_04.png", "frame_05.png", "frame_06.png", "frame_07.png", "frame_08.png", "frame_09.png", "frame_10.png"]; // frame BAY (loop) — frame_01..10
+const HIT        = ["frame_11.png", "frame_12.png", "frame_13.png", "frame_14.png", "frame_15.png", "frame_16.png"]; // frame IMPACT (play 1 lần) — frame_11..16
+
+// ============================================================
+// ⏱️ TIMING
+// ============================================================
+const CAST_MS = 100;          // thời gian nạp (fade-in tại caster)
+const EMERGE_MS = 150;        // thời gian trượt ra khỏi player
+const EMERGE_PX = 18;         // khoảng cách trượt ra khỏi player (px)
+const FLY_MS = 500;           // thời gian bay tới đích (mỗi chặng)
+const FLY_FPS = 6;            // fps animation bay
+const IMPACT_FPS = 6;         // fps animation impact
+
+// ============================================================
+// 🪄 SPELL CONFIG — CHỈNH Ở ĐÂY KHI VIBE CODE
+// ============================================================
+const SPELL = {
+  name: "Dark VFX 01",
+  dmg: 12,                  // damage mỗi phát
+  dmgVariance: 4,           // dmg thực = dmg ± random(dmgVariance)
+  impactRadius: 26,         // bán kính hitbox quanh điểm chạm (px)
+  impactShake: 2,           // rung màn hình (px, 0 = tắt)
+  impactShakeMs: 120,       // thời gian rung
+  impactScale: 1.0,         // phóng to impact (1 = size gốc)
+  hitStopMs: 0,             // đóng băng X ms lúc chạm (0 = tắt)
+  collideRadius: 16,        // đạn nổ luôn khi chạm địch trong bán kính này trên ĐƯỜNG BAY (px)
+};
+
+// ============================================================
+// ⚙️ ENGINE (đừng sửa phần này khi vibe code — chỉ sửa config trên)
+// ============================================================
+const imgs = new Map();
+function load(src){ return new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[src]; im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame: " + src)); }); }
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0, fps = 60;
+const caster = { x: 60, y: 140 };
+const frameDur = 1000 / fps;
+let animAcc = 0;
+let projectiles = [];
+let shakeUntil = 0, shakeMag = 0;
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+// Mob giả để test damage
+const mobs = [{ x: 320, y: 120, hp: 50, maxHp: 50 }, { x: 150, y: 200, hp: 50, maxHp: 50 }];
+const MOB_R = 12;
+
+let floaters = [];
+
+function applyDamage(p){
+  if (p.hitApplied) return;
+  p.hitApplied = true;
+  if (SPELL.hitStopMs > 0) p.frozenUntil = performance.now() + SPELL.hitStopMs;
+  for (const m of mobs){
+    const dx = m.x - p.targetX, dy = m.y - p.targetY;
+    if (dx*dx + dy*dy <= SPELL.impactRadius * SPELL.impactRadius){
+      const dmg = Math.max(1, SPELL.dmg + Math.round((Math.random()*2-1) * SPELL.dmgVariance));
+      m.hp = Math.max(0, m.hp - dmg);
+      p.hitMob = m;
+      p.dmgDealt = dmg;
+      if (SPELL.impactShake > 0){ shakeUntil = performance.now() + SPELL.impactShakeMs; shakeMag = SPELL.impactShake; }
+      floaters.push({ x: m.x, y: m.y - 16, text: "-" + dmg, t: 0 });
+    }
+  }
+}
+
+function nearestMob(x, y){
+  let best = null, bestD = Infinity;
+  for (const m of mobs){
+    if (m.hp <= 0) continue;
+    const d = (m.x-x)*(m.x-x) + (m.y-y)*(m.y-y);
+    if (d < bestD){ bestD = d; best = m; }
+  }
+  return best;
+}
+
+function explode(p){
+  p.phase = "impact";
+  applyDamage(p);
+}
+
+function cast(tx, ty){
+  // Cơ chế: đạn trượt ra khỏi player → bay tới ĐIỂM BẮN;
+  // trúng địch giữa đường (collideRadius) thì nổ luôn;
+  // tới đích trống thì tìm địch GẦN ĐÍCH nhất, bay lại rồi nổ.
+  const dir = Math.atan2(ty - caster.y, tx - caster.x);
+  projectiles.push({ dirAngle: dir, angle: dir, phase: "emerge", t: 0, leg: 0, targetX: tx, targetY: ty, flyFrame: 0, impactFrame: 0, impactDone: false, hitApplied: false, x: caster.x, y: caster.y });
+  log.textContent = "CAST → điểm bắn (" + Math.round(tx) + ", " + Math.round(ty) + "), dmg=" + SPELL.dmg + "±" + SPELL.dmgVariance;
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0; y<canvas.height; y+=24)
+    for (let x=0; x<canvas.width; x+=24)
+      if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  ctx.fillStyle = "#fc0";
+  ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function drawSprite(im, x, y, angle, scale){
+  const s = scale2x ? 2 : 1;
+  const w = im.width * s * scale, h = im.height * s * scale;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  if (Math.abs(angle) > Math.PI/2) ctx.scale(1, -1); // flip quanh trục bay — giữ sprite không lộn ngược khi bắn sang trái
+  ctx.drawImage(im, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function update(dt){
+  for (const p of projectiles){
+    if (p.phase === "emerge"){
+      p.t += dt;
+      p.animAcc = (p.animAcc || 0) + dt;
+      if (p.animAcc >= 1000 / FLY_FPS){ p.animAcc = 0; p.flyFrame = (p.flyFrame + 1) % REPEATABLE.length; }
+      const k = Math.min(1, p.t / EMERGE_MS);
+      p.x = caster.x + Math.cos(p.dirAngle) * EMERGE_PX * k;
+      p.y = caster.y + Math.sin(p.dirAngle) * EMERGE_PX * k;
+      if (p.t >= EMERGE_MS){ p.phase = "fly"; p.leg = 1; p.t = 0; p.fromX = p.x; p.fromY = p.y; }
+    } else if (p.phase === "fly"){
+      p.t += dt;
+      p.animAcc = (p.animAcc || 0) + dt;        // accumulator RIÊNG từng projectile
+      if (p.animAcc >= 1000 / FLY_FPS){ p.animAcc = 0; p.flyFrame = (p.flyFrame + 1) % REPEATABLE.length; }
+      const progress = Math.min(1, p.t / FLY_MS);
+      p.x = p.fromX + (p.targetX - p.fromX) * progress;
+      p.y = p.fromY + (p.targetY - p.fromY) * progress;
+      // đâm trúng địch trên đường bay → nổ luôn tại chỗ
+      if (p.leg === 1){
+        for (const m of mobs){
+          if (m.hp <= 0) continue;
+          const dx = m.x - p.x, dy = m.y - p.y;
+          if (dx*dx + dy*dy <= SPELL.collideRadius * SPELL.collideRadius){
+            p.targetX = p.x; p.targetY = p.y;
+            log.textContent = "💥 TRÚNG ĐỊCH giữa đường tại (" + Math.round(p.x) + ", " + Math.round(p.y) + ")";
+            explode(p);
+            break;
+          }
+        }
+      }
+      if (p.phase === "fly" && progress >= 1){
+        if (p.leg === 1){
+          const m = nearestMob(p.targetX, p.targetY);
+          if (m){
+            p.leg = 2; p.t = 0;
+            p.fromX = p.x; p.fromY = p.y;
+            p.targetX = m.x; p.targetY = m.y;
+            p.angle = Math.atan2(m.y - p.y, m.x - p.x);
+            log.textContent = "SEEK → địch gần đích (" + Math.round(m.x) + ", " + Math.round(m.y) + ") angle=" + Math.round(p.angle*180/Math.PI) + "°";
+          } else {
+            log.textContent = "💥 Không có địch gần đích — nổ tại điểm bắn";
+            explode(p);
+          }
+        } else {
+          explode(p);
+        }
+      }
+    } else if (p.phase === "impact"){
+      p.animAcc = (p.animAcc || 0) + dt;
+      if (p.animAcc >= 1000 / IMPACT_FPS && !p.impactDone){
+        p.animAcc = 0;
+        p.impactFrame++;
+        if (p.impactFrame >= HIT.length) { p.impactDone = true; }
+      }
+    }
+  }
+  for (const f of floaters){ f.t += dt; f.y -= dt * 0.03; }
+  floaters = floaters.filter(f => f.t < 700);
+  projectiles = projectiles.filter(p => !(p.phase === "impact" && p.impactDone));
+}
+
+function render(){
+  drawChecker();
+  ctx.save();
+  const now = performance.now();
+  if (now < shakeUntil){
+    ctx.translate((Math.random()*2-1)*shakeMag, (Math.random()*2-1)*shakeMag);
+  }
+  for (const m of mobs){
+    ctx.fillStyle = "#a33";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000";
+    ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2 * (m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(m.hp + "/" + m.maxHp, m.x, m.y + MOB_R + 10);
+  }
+  ctx.font = "bold 11px monospace";
+  for (const f of floaters){
+    ctx.globalAlpha = 1 - f.t/700;
+    ctx.fillStyle = "#fd4";
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  // vòng tròn đỏ impactRadius đã bỏ (final) — hitbox vẫn chạy theo SPELL.impactRadius
+  for (const p of projectiles){
+    if (p.phase === "impact"){
+      // frame nổ LUÔN 1 chiều mặt định — KHÔNG xoay theo hướng bay
+      const im = imgs.get(HIT[p.impactFrame]);
+      if (im) drawSprite(im, p.targetX, p.targetY, 0, SPELL.impactScale);
+    } else {
+      const im = imgs.get(REPEATABLE[p.flyFrame]);
+      if (im) {
+        if (p.phase === "emerge" && p.t < CAST_MS) { ctx.globalAlpha = p.t / CAST_MS; }
+        drawSprite(im, p.x, p.y, p.angle, 1);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+  ctx.strokeStyle = "#fff";
+  for (const p of projectiles){
+    if (p.phase !== "emerge") ctx.strokeRect(p.targetX-3, p.targetY-3, 6, 6);
+  }
+  ctx.restore();
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && projectiles.length === 0){
+    // hồi sinh mob đã chết để demo liên tục
+    for (const m of mobs) if (m.hp <= 0) m.hp = m.maxHp;
+    let tx, ty;
+    if (Math.random() < 0.7){
+      const m = mobs[Math.floor(Math.random()*mobs.length)];
+      tx = m.x + (Math.random()*2-1)*10; ty = m.y + (Math.random()*2-1)*10;
+    } else { tx = 200 + Math.random()*240; ty = 60 + Math.random()*150; }
+    cast(tx, ty);
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+(async () => {
+  try {
+    for (const src of [...REPEATABLE, ...HIT]) imgs.set(src, await load(src));
+    requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+  } catch(e){
+    log.textContent = "⚠️ " + e.message + " — hãy nhúng FRAME_DATA (spells/README.md §8) và sửa REPEATABLE/HIT cho khớp tên file.";
+  }
+})();
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+</script>
+</body>
+</html>

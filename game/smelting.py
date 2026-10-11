@@ -66,6 +66,9 @@ SMELT_REGISTRY: Dict[str, SmeltDef] = {
     "smelt_iron": SmeltDef(
         "smelt_iron", "Nung thỏi sắt", "iron_ore", "iron_ingot", 1, 10.0
     ),
+    "smelt_copper": SmeltDef(
+        "smelt_copper", "Nung thỏi đồng", "copper_ore", "copper_ingot", 1, 10.0
+    ),
     "smelt_gold": SmeltDef(
         "smelt_gold", "Nung thỏi vàng", "gold_ore", "gold_ingot", 1, 14.0
     ),

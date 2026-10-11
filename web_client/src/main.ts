@@ -2364,7 +2364,15 @@ void boot();
 const previewMode = new URLSearchParams(location.search).has("preview");
 
 if (previewMode) {
-  previewPanel.attach({ send: (f) => net.sendRaw(f) });
+  previewPanel.attach({
+    send: (f) => net.sendRaw(f),
+    // ⚡ Cast ngay: reuse the SAME cast closure as the wand/card paths —
+    // target = nearest hostile ≤14 tiles (server auto-acquires anyway).
+    castNearest: (spellId) => {
+      const cast = getSpellCastHook();
+      if (cast) cast(spellId); // spellAimTile=null → nearest/look fallback
+    },
+  });
   net.onPreviewState = (s) => previewPanel.onState(s);
   // The socket is still dialing at module scope — retry the guest join until
   // the wire is live (200ms beats; harmless if the gate's own flow races us,

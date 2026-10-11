@@ -181,10 +181,32 @@ async def setup_hook():
         channel = bot.get_channel(sc["channel_id"])
         has_screens = False
         for p in await load_players(db, sc["channel_id"]):
+            # CONTINUITY (user 06/10): a body saved in a SIDE world (cave/
+            # forest) must NOT be placed on the main map — its (x, y) are
+            # side-map coordinates and dropped the player mid-grassland on
+            # boot. Skip it here; ensure_player_world re-creates it in the
+            # correct side runtime the moment the player rejoins.
+            if p.get("world_map"):
+                continue
             player = rt.state.add_player(p["user_id"], p.get("display_name", ""), p["x"], p["y"])
+            player.world_map = None
+            # Continuous (web) position wins when it was persisted — reload
+            # must not snap the player back to the int-tile corner.
+            if p.get("x_f") is not None and p.get("y_f") is not None:
+                player.x_f = float(p["x_f"])
+                player.y_f = float(p["y_f"])
+                player.float_moved = True
+                player.sync_int_from_float()
             player.direction = p["direction"]
             player.sprite_id = p["sprite_id"]
-            player.visible = p["visible"]
+            # NAMELESS-GHOST FIX (user 07/10: body with NO name after every
+            # restart): the DB does not persist display_name, so a boot restore
+            # used to mint a VISIBLE nameless body that no session owned and
+            # the ghost sweep (is_web-only) never hid. Nobody is online at
+            # boot — restore stats but keep the body HIDDEN; the owner's next
+            # join re-hides-in reverse (register_web_session sets the real
+            # name, mints the permanent name_color and un-hides).
+            player.visible = False
             player.hp = p["hp"]
             player.max_hp = p["max_hp"]
             # Death state is EPHEMERAL: ``dead_until`` is deliberately never

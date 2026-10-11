@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Spell Template — Preview</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+</style>
+</head>
+<body>
+<h1>⚡ Spell Template — cast → fly (auto-rotate) → impact + damage</h1>
+<div>
+  <button id="btnAuto" class="on">Tự cast (loop)</button>
+  <button id="btnScale">Scale x2: ON</button>
+</div>
+<div id="info">Click trên canvas để cast spell tới điểm đó. G = caster, ô đỏ = mob test. Vòng tròn đỏ = impactRadius (hitbox).</div>
+<div id="log">—</div>
+<canvas id="stage" width="480" height="270"></canvas>
+
+<script>
+// ============================================================
+// 🪄 FRAME DATA — được nhúng base64 bởi script (spells/README.md §8)
+// ============================================================
+const FRAME_DATA = {
+  // "fly1.png": "iVBORw0KGgo...",
+  // "fly2.png": "iVBORw0KGgo...",
+  // "hit1.png": "iVBORw0KGgo...",
+};
+// ⚠️ SỬA 2 DÒNG SAU cho khớp tên file frame trong FRAME_DATA:
+const REPEATABLE = ["fly1.png", "fly2.png", "fly3.png", "fly4.png"];   // frame BAY (loop)
+const HIT        = ["hit1.png", "hit2.png", "hit3.png"];               // frame IMPACT (play 1 lần)
+
+// ============================================================
+// ⏱️ TIMING
+// ============================================================
+const CAST_MS = 100;          // thời gian nạp (fade-in tại caster)
+const FLY_MS = 500;           // thời gian bay tới đích
+const FLY_FPS = 6;            // fps animation bay
+const IMPACT_FPS = 6;         // fps animation impact
+
+// ============================================================
+// 🪄 SPELL CONFIG — CHỈNH Ở ĐÂY KHI VIBE CODE
+// ============================================================
+const SPELL = {
+  name: "Template",
+  dmg: 12,                  // damage mỗi phát
+  dmgVariance: 4,           // dmg thực = dmg ± random(dmgVariance)
+  impactRadius: 26,         // bán kính hitbox quanh điểm chạm (px)
+  impactShake: 2,           // rung màn hình (px, 0 = tắt)
+  impactShakeMs: 120,       // thời gian rung
+  impactScale: 1.0,         // phóng to impact (1 = size gốc)
+  hitStopMs: 0,             // đóng băng X ms lúc chạm (0 = tắt)
+};
+
+// ============================================================
+// ⚙️ ENGINE (đừng sửa phần này khi vibe code — chỉ sửa config trên)
+// ============================================================
+const imgs = new Map();
+function load(src){ return new Promise((res, rej) => { const im = new Image(); im.src = "data:image/png;base64," + FRAME_DATA[src]; im.onload = () => res(im); im.onerror = () => rej(new Error("missing frame: " + src)); }); }
+
+let autoCast = true, scale2x = true;
+let lastFrameTime = 0, fps = 60;
+const caster = { x: 60, y: 140 };
+let animAcc = 0;
+let projectiles = [];
+let shakeUntil = 0, shakeMag = 0;
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+const log = document.getElementById("log");
+
+// Mob giả để test damage
+const mobs = [{ x: 320, y: 120, hp: 50, maxHp: 50 }, { x: 150, y: 200, hp: 50, maxHp: 50 }];
+const MOB_R = 12;
+
+let floaters = [];
+
+function applyDamage(p){
+  if (p.hitApplied) return;
+  p.hitApplied = true;
+  if (SPELL.hitStopMs > 0) p.frozenUntil = performance.now() + SPELL.hitStopMs;
+  for (const m of mobs){
+    const dx = m.x - p.targetX, dy = m.y - p.targetY;
+    if (dx*dx + dy*dy <= SPELL.impactRadius * SPELL.impactRadius){
+      const dmg = Math.max(1, SPELL.dmg + Math.round((Math.random()*2-1) * SPELL.dmgVariance));
+      m.hp = Math.max(0, m.hp - dmg);
+      p.hitMob = m;
+      p.dmgDealt = dmg;
+      if (SPELL.impactShake > 0){ shakeUntil = performance.now() + SPELL.impactShakeMs; shakeMag = SPELL.impactShake; }
+      floaters.push({ x: m.x, y: m.y - 16, text: "-" + dmg, t: 0 });
+    }
+  }
+}
+
+function cast(tx, ty){
+  const angle = Math.atan2(ty - caster.y, tx - caster.x);
+  projectiles.push({ targetX: tx, targetY: ty, angle, phase: "fly", t: 0, flyFrame: 0, impactFrame: 0, impactDone: false, hitApplied: false });
+  log.textContent = "CAST → (" + Math.round(tx) + ", " + Math.round(ty) + ") angle=" + Math.round(angle*180/Math.PI) + "°, cast=" + CAST_MS + "ms, fly=" + FLY_MS + "ms, dmg=" + SPELL.dmg + "±" + SPELL.dmgVariance;
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  cast((e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height);
+});
+
+function drawChecker(){
+  ctx.fillStyle = "#1c2430";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#232c3a";
+  for (let y=0; y<canvas.height; y+=24)
+    for (let x=0; x<canvas.width; x+=24)
+      if (((x+y)/24)%2===0) ctx.fillRect(x,y,24,24);
+  ctx.fillStyle = "#fc0";
+  ctx.fillRect(caster.x-4, caster.y-4, 8, 8);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(caster.x-4, caster.y-4, 8, 8);
+}
+
+function drawSprite(im, x, y, angle, scale){
+  const s = scale2x ? 2 : 1;
+  const w = im.width * s * scale, h = im.height * s * scale;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.drawImage(im, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function update(dt){
+  animAcc += dt;
+  const newFrame = animAcc >= 1000 / FLY_FPS;   // fps BAY
+  if (newFrame) animAcc = 0;
+  const newImpactFrame = animAcc >= 1000 / IMPACT_FPS; // fps IMPACT (tính cùng tick, không reset riêng)
+
+  for (const p of projectiles){
+    if (p.phase === "fly"){
+      p.t += dt;
+      p.animAcc = (p.animAcc || 0) + dt;        // mỗi projectile có accumulator RIÊNG
+      if (p.animAcc >= 1000 / FLY_FPS){ p.animAcc = 0; p.flyFrame = (p.flyFrame + 1) % REPEATABLE.length; }
+      const progress = Math.min(1, p.t / FLY_MS);
+      p.x = caster.x + (p.targetX - caster.x) * progress;
+      p.y = caster.y + (p.targetY - caster.y) * progress;
+      if (p.t >= FLY_MS + CAST_MS) { p.phase = "impact"; applyDamage(p); }
+    } else if (p.phase === "impact"){
+      p.animAcc = (p.animAcc || 0) + dt;
+      if (p.animAcc >= 1000 / IMPACT_FPS && !p.impactDone){
+        p.animAcc = 0;
+        p.impactFrame++;
+        if (p.impactFrame >= HIT.length) { p.impactDone = true; }
+      }
+    }
+  }
+  for (const f of floaters){ f.t += dt; f.y -= dt * 0.03; }
+  floaters = floaters.filter(f => f.t < 700);
+  projectiles = projectiles.filter(p => !(p.phase === "impact" && p.impactDone));
+}
+
+function render(){
+  drawChecker();
+  ctx.save();
+  const now = performance.now();
+  if (now < shakeUntil){
+    ctx.translate((Math.random()*2-1)*shakeMag, (Math.random()*2-1)*shakeMag);
+  }
+  for (const m of mobs){
+    ctx.fillStyle = "#a33";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.strokeStyle = "#000";
+    ctx.strokeRect(m.x-MOB_R, m.y-MOB_R, MOB_R*2, MOB_R*2);
+    ctx.fillStyle = "#300";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2, 4);
+    ctx.fillStyle = "#4d4";
+    ctx.fillRect(m.x-MOB_R, m.y-MOB_R-7, MOB_R*2 * (m.hp/m.maxHp), 4);
+    ctx.fillStyle = "#fff";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(m.hp + "/" + m.maxHp, m.x, m.y + MOB_R + 10);
+  }
+  ctx.font = "bold 11px monospace";
+  for (const f of floaters){
+    ctx.globalAlpha = 1 - f.t/700;
+    ctx.fillStyle = "#fd4";
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  for (const p of projectiles){
+    if (p.phase === "impact"){
+      ctx.strokeStyle = "rgba(255,80,80,0.7)";
+      ctx.beginPath();
+      ctx.arc(p.targetX, p.targetY, SPELL.impactRadius, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+  for (const p of projectiles){
+    if (p.phase === "fly"){
+      const im = imgs.get(REPEATABLE[p.flyFrame]);
+      if (im) {
+        if (p.t < CAST_MS) { ctx.globalAlpha = p.t / CAST_MS; }
+        drawSprite(im, p.x, p.y, p.angle, 1);
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      const im = imgs.get(HIT[p.impactFrame]);
+      if (im) drawSprite(im, p.targetX, p.targetY, p.angle, SPELL.impactScale);
+    }
+  }
+  ctx.strokeStyle = "#fff";
+  for (const p of projectiles){
+    ctx.strokeRect(p.targetX-3, p.targetY-3, 6, 6);
+  }
+  ctx.restore();
+}
+
+function loop(ts){
+  const dt = Math.min(50, ts - lastFrameTime);
+  lastFrameTime = ts;
+  if (autoCast && projectiles.length === 0){
+    let tx, ty;
+    if (Math.random() < 0.7){
+      const m = mobs[Math.floor(Math.random()*mobs.length)];
+      tx = m.x + (Math.random()*2-1)*10; ty = m.y + (Math.random()*2-1)*10;
+    } else { tx = 200 + Math.random()*240; ty = 60 + Math.random()*150; }
+    cast(tx, ty);
+  }
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+(async () => {
+  try {
+    for (const src of [...REPEATABLE, ...HIT]) imgs.set(src, await load(src));
+    requestAnimationFrame(ts => { lastFrameTime = ts; loop(ts); });
+  } catch(e){
+    log.textContent = "⚠️ " + e.message + " — hãy nhúng FRAME_DATA (spells/README.md §8) và sửa REPEATABLE/HIT cho khớp tên file.";
+  }
+})();
+
+document.getElementById("btnAuto").onclick = e => { autoCast = !autoCast; e.target.classList.toggle("on", autoCast); };
+document.getElementById("btnScale").onclick = e => { scale2x = !scale2x; e.target.textContent = "Scale x2: " + (scale2x?"ON":"OFF"); };
+</script>
+</body>
+</html>

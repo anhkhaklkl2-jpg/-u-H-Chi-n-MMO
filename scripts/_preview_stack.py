@@ -52,6 +52,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import math
 import random
 import sys
 import time
@@ -147,6 +148,7 @@ class PreviewStack(LocalStack):
             "meteor": self._cmd_meteor,
             "weather": self._cmd_weather,
             "zombies": self._cmd_zombies,
+            "zombienear": self._cmd_zombie_near,  # spawn quái CỰC GẦN (2.5 ô)
             "bite": self._cmd_bite,
             "animals": self._cmd_animals,
             "map": self._cmd_map,
@@ -296,6 +298,46 @@ class PreviewStack(LocalStack):
             if z is not None:
                 made += 1
         await self._send(cid, {"type": "push", "message": f"[preview] Spawn {made} quái xung quanh ({rt.map_data.map_id})."})
+
+    async def _cmd_zombie_near(self, cid: int, uid: int, rt, value) -> None:
+        """[preview] zombienear — spawn 1 quái ở 2.5 ô bên cạnh player (spell
+        hit-test test: spawn mặc định cách 8+ ô ngoài tầm cast 4).
+        value = 'hunter' (đi tới cắn) hoặc '' (đứng yên)."""
+        import math as _m
+        player = rt.state.get_player(uid)
+        if player is None:
+            await self._send(cid, {"type": "push", "message": "[preview] Chưa có player."})
+            return
+        # walkable tile gần player theo vành tròn 2.5 ô
+        ang = random.uniform(0, 2 * math.pi)
+        from game.zombies import Zombie, _add_web_zombie, _next_web_id, mob_stats
+        placed = None
+        for attempt in range(24):
+            a = ang + attempt * (2 * math.pi / 24)
+            tx = player.x_f + 2.5 * math.cos(a)
+            ty = player.y_f + 2.5 * math.sin(a)
+            itx, ity = int(tx), int(ty)
+            if 0 <= itx < rt.map_data.width and 0 <= ity < rt.map_data.height \
+                    and rt.collision.is_walkable(itx, ity):
+                placed = (itx + 0.5, ity + 0.5)
+                break
+        if placed is None:
+            await self._send(cid, {"type": "push", "message": "[preview] Không tìm được ô trống gần player — đi chỗ mở hơn."})
+            return
+        hp = placed
+        from game.mob_profiles import roll_kind_for
+        z = Zombie(_next_web_id(rt.state), int(hp[0]), int(hp[1]))
+        z.x_f, z.y_f = hp  # centre float pos (client render)
+        z.kind = roll_kind_for(getattr(getattr(rt.collision, "map_data", None), "map_id", "bigmap"), random.Random())
+        stats = mob_stats(z.kind)
+        z.hp = z.max_hp = stats["hp"]
+        z.damage = stats["dmg"]
+        z.web_speed = stats["speed"]
+        z.web_cooldown = stats["cooldown"]
+        if value == "hunter":
+            z.hunter = True
+        _add_web_zombie(rt.state, z)
+        await self._send(cid, {"type": "push", "message": f"[preview] 👹 Spawn 1 quái CẠNH ({hp[0]:.1f},{hp[1]:.1f}) — kind {z.kind}."})
 
     async def _cmd_animals(self, cid: int, uid: int, rt, value) -> None:
         from game.zombies import iter_web_zombies, remove_web_zombie, spawn_animal_one
@@ -476,6 +518,9 @@ class PreviewStack(LocalStack):
         for iid, qty in [
             ("leatherhelmet", 1), ("leatherchest", 1), ("leatherleggings", 1),
             ("iron_sword", 1), ("iron_pickaxe", 1), ("wood_axe", 1),
+            # magic_wand (user 11/10): kit test phải có ĐŨA PHÉP — không thì
+            # cast spell bị chặn no_wand và "gậy phép mất" trong preview.
+            ("magic_wand", 1),
             ("potion_hp", 5), ("potion_mp", 5), ("cooked_meat", 5),
             ("crafting_table", 1), ("torch", 10),
             # Icon-verify set (user 09/10): hide + dirt + ores/ingots/key —
