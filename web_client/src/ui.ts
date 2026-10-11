@@ -1775,12 +1775,17 @@ export class Hud {
           e.stopPropagation();
           e.preventDefault();
           this.selectedQuick = rIdx;
-          // QUICK CRAFT — REAL takeover: take the recipe's materials out of
-          // the BAG VIEW (local, instant) onto the grid. First return any
-          // previously placed stacks, then pull from the bag stacks.
-          this.fillMatGridFromBag(rec);
-          this.renderInventory(); // bag cells that lost stacks repaint now
-          this.renderCraftPanel();
+          // AUTO-FILL ONLY WHEN THE BAG CAN REALLY AFFORD IT (user 12/10:
+          // "chưa đủ đồ thì đừng tự add lên ô craft, chỉ fill khi ĐỦ vật
+          // liệu"). Short-bag recipes just select + highlight the slot.
+          if (this.canCraftNow(rec)) {
+            // QUICK CRAFT — REAL takeover: take the recipe's materials out of
+            // the BAG VIEW (local, instant) onto the grid. First return any
+            // previously placed stacks, then pull from the bag stacks.
+            this.fillMatGridFromBag(rec);
+            this.renderInventory(); // bag cells that lost stacks repaint now
+            this.renderCraftPanel();
+          }
         });
         // TOUCH parity: mousedown never fires for a finger tap — mirror the
         // quick-craft body on pointerdown (non-mouse pointers only).
@@ -1789,9 +1794,11 @@ export class Hud {
           e.stopPropagation();
           e.preventDefault();
           this.selectedQuick = rIdx;
-          this.fillMatGridFromBag(rec);
-          this.renderInventory();
-          this.renderCraftPanel();
+          if (this.canCraftNow(rec)) {
+            this.fillMatGridFromBag(rec);
+            this.renderInventory();
+            this.renderCraftPanel();
+          }
         });
       }
       this.invCraftWrap.appendChild(slot);
