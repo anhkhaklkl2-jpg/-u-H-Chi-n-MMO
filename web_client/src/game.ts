@@ -3936,6 +3936,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Swing the SELF hand at once (optimistic — no server wait). */
   swingSelfHand(): void {
+    // Stamina gate: exhausted = no swing anim at all, regardless of caller.
+    if (this.selfStamina <= 0) return;
     this.selfDoll?.swing(performance.now());
   }
 
@@ -4924,13 +4926,18 @@ export class WorldScene extends Phaser.Scene {
         z.frameT0 = now;
       }
       const ratio = Math.max(0, Math.min(1, maxHp > 0 ? hp / maxHp : 0));
-      z.hpRatio = ratio;
-      // Kaetram behaviour: the bar only shows after a hp CHANGE (hit) and
-      // auto-hides a few seconds later — full-hp mobs stay clean.
-      if (hp !== z.hpLast) {
+      // SPELL HP-HOLD (user 12/10: "cục đá chưa chạm mà quái đã mất máu"):
+      // khi một spell impact PENDING (rock đang bay về mob này), GIỮ HP cũ
+      // trong 1.2s — snapshot hp mới chỉ hiển thị sau khi rock chạm.
+      const pendingSpellPx = this.spellImpactHoldMs(z);
+      const holdUntil = pendingSpellPx; // epoch ms when the hold lifts
+      const nowMs = performance.now();
+      const showHp = (hp !== z.hpLast) && !(nowMs < holdUntil);
+      if (showHp) {
         z.hpLast = hp;
-        z.hpShownAt = performance.now();
+        z.hpShownAt = nowMs;
       }
+      z.hpRatio = showHp || hp === z.hpLast ? ratio : z.hpRatio;
     }
     for (const [id, z] of this.zombies) {
       if (!seen.has(id) && z.dieT0 === 0) {
@@ -5108,6 +5115,28 @@ export class WorldScene extends Phaser.Scene {
   /** Set the active Build-Mode cursor offset (from the server snapshot). */
   setAimCursor(aim: { dx: number; dy: number } | null): void {
     this.aimCursor = aim;
+  }
+
+  /** SPELL HP-HOLD (user 12/10): the rock must VISUALLY reach the mob
+   *  before its hp bar drops. Each spell impact registers a hold window
+   *  around the impact tile (by proximity): mobs inside the radius keep
+   *  their old hp until the window expires. */
+  private spellHolds: { x: number; y: number; until: number }[] = [];
+
+  registerSpellImpactHold(tx: number, ty: number, holdMs: number): void {
+    const t = this.tilePx;
+    this.spellHolds.push({ x: (tx + 0.5) * t, y: (ty + 0.5) * t, until: performance.now() + holdMs });
+  }
+
+  private spellImpactHoldMs(z: { lastX: number; lastY: number }): number {
+    const nowMs = performance.now();
+    this.spellHolds = this.spellHolds.filter(h => h.until > nowMs);
+    for (const h of this.spellHolds) {
+      if (Math.hypot(z.lastX - h.x, z.lastY - h.y) <= this.tilePx * 2.5) {
+        return h.until;
+      }
+    }
+    return 0;
   }
 
   getSelfDir(): string {
