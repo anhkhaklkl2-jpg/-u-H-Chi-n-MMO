@@ -12,9 +12,8 @@ import { dialogBox, DialogPage } from "./dialog_box";
 import { openShop, closeShop, isShopOpen } from "./shop_ui";
 import type { InventoryPayload, WelcomePayload } from "./protocol";
 import { Hud } from "./ui";
-import { castSpellAtNearest, getSpellCastHook } from "./spells_bridge";
+import { castSpellAtNearest, getSpellCastHook, bindWandSpell } from "./spells_bridge";
 import { SPELLS as SPELL_DEFS, spellFx, spellById, fireChannelStart, fireChannelEnd } from "./spells";
-void SPELL_DEFS; // spell wedges removed; kept so the import stays tree-shakeable
 import { spellEngine } from "./spell_engine";
 import { SPELL_ENGINE_DEFS } from "./spell_defs";
 import { getBoundSpell } from "./spells_bridge";
@@ -1082,16 +1081,14 @@ function radialActions(): import("./radial_menu").RadialAction[] {
 // Release on a spell wedge casts it at the nearest mob (same cast path as the
 // Skills tab card + R key).
 function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
-  // KING 11/10: spell wedges removed entirely — hotbar-only radial.
-  return radialActions();
-  /* const iconFor = (s: import("./spells").SpellDef): string =>
+  const iconFor = (s: import("./spells").SpellDef): string =>
     s.kind === "rocklift" ? "rock_00"
     : s.kind === "debuff" ? "fx_00"
     : s.kind === "bump" ? "fx_00"
     : s.kind === "wall" ? "final"
     : s.kind === "cone" ? "row01_00"
     : "fly_00";
-  const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.filter((s) => s.kind === "rocklift").map((s) => ({
+  const spellActs: import("./radial_menu").RadialAction[] = SPELL_DEFS.map((s) => ({
     id: `spell_${s.id}`,
     label: s.name,
     iconUrl: `ui/fx/spells/${s.dir}/${iconFor(s)}.png`,
@@ -1102,7 +1099,7 @@ function radialActionsSpellsFirst(): import("./radial_menu").RadialAction[] {
       hud.toast(`${s.name} đã gắn vào Đũa phép — click chuột để phóng`);
     },
   }));
-  return [...spellActs, ...radialActions()]; */
+  return [...spellActs, ...radialActions()];
 }
 window.addEventListener("keydown", (e) => {
   // TAB-HOLD RADIAL MENU. Two browser-hostility gotchas handled here:
@@ -1626,6 +1623,10 @@ const mobile = new MobileControls({
   },
   onAttack: () => {
     if (!swingGateOpen()) return;
+    // EXHAUSTED GATE (user 11/10): mobile mc-atk button lacked this —
+    // stamina 0 still sent attack + swung (the F key / click / tap paths
+    // were gated, the button bypassed all of them).
+    if (!attackAllowed()) { hud.toast("Hết thể lực — không thể tấn công!"); return; }
     markSwingSent();
     net.action("attack");
     scene.combatSwing();
