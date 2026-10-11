@@ -202,9 +202,10 @@ def _register_tool_recipes() -> None:
             return [(mat_item, 0, 0), (mat_item, 1, 0), (mat_item, 2, 0),
                     (S, 1, 1), (S, 1, 2)]
         if fam == "axe":
-            # 2 nguyên liệu hàng trên (2 ô trái) + 1 ô dưới trái + 2 gậy cột phải.
+            # Wiki Mine: hàng trên 2 nguyên liệu, hàng giữa nguyên liệu trái
+            # + gậy ngay cạnh, rồi 2 gậy CỘT GIỮA đi xuống (PP_/PS_/..S).
             return [(mat_item, 0, 0), (mat_item, 1, 0), (mat_item, 0, 1),
-                    (S, 2, 1), (S, 2, 2)]
+                    (S, 1, 1), (S, 1, 2)]
         if fam == "shovel":
             # 1 nguyên liệu trên + 2 gậy cột giữa.
             return [(mat_item, 1, 0), (S, 1, 1), (S, 1, 2)]
