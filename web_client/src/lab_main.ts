@@ -10,7 +10,12 @@
 //   - Zombie: mobs/zombie.png 32px cell — rows idle/walk/atk theo
 //     MOB_SHEETS zombie trong game.ts.
 //   - Spell engine thật: import src/spell_engine.ts (game dùng CÙNG file).
+// dùng PaperdollBody THẬT của game (không tự vẽ lại — user 13/10 "làm kỹ
+// lại"): feet-anchor origin (0.5,1), shared-centre weapon, Kaetram frame
+// pacing — đầy đủ như production.
 import Phaser from "phaser";
+import { PaperdollBody, registerPaperdollTextures, registerWeaponSheet } from "./paperdoll";
+import type { PlayersManifest } from "./protocol";
 import { spellEngine } from "./spell_engine";
 import { SPELL_ENGINE_DEFS, type SpellDef } from "./spell_defs";
 
@@ -26,20 +31,11 @@ const def: SpellDef = { ...defIn };
 const logEl = document.getElementById("log") as HTMLElement;
 const tlEl = document.getElementById("timeline") as HTMLElement;
 
+// DES TRÁNH TS "assigned never used" noise: các biến startSpawn dùng ở killCaster.
 function log(s: string): void { logEl.textContent = s; }
 
-/* ===== PAPERDOLL MANIFEST CONSTANTS (giữ đồng bộ players_manifest.json) === */
-const PD_FRAMES_PER_ROW = 4;
-const PD_SPEEDS = { idle: 250, walk: 120, atk: 50 };
-const PD_BODY_OFFSET = { x: -8, y: -32 };
-const STICK_OFFSET = { x: -8, y: -24 };
-// manifest rows: idle_down 0 idle_right 1 idle_up 2 walk_down 3 walk_right 4
-// walk_up 5 atk_down 6 atk_right 7 atk_up 8
-function pdRow(anim: "idle" | "walk" | "atk", dir: "down" | "up" | "side"): number {
-  const map = { idle: [0, 1, 2], walk: [3, 4, 5], atk: [6, 7, 8] } as const;
-  const order: ("down" | "side" | "up")[] = ["down", "side", "up"];
-  return map[anim][order.indexOf(dir)];
-}
+/* (paperdoll constants + row helper đã bỏ — PaperdollBody tự quản frame
+ * pacing nội bộ; lab không còn tự đẩy frame tay.) */
 
 /* ===== MOB_SHEETS zombie rows (GIỮ ĐỒNG BỘ với game.ts MOB_SHEETS) ======= */
 const Z_ROWS = {
@@ -58,29 +54,24 @@ let resolvePayload: (() => void) | null = null;
 
 /* ===== CASTER STATE ===================================================== */
 let sceneRef: Phaser.Scene | null = null;
-let casterBody: Phaser.GameObjects.Sprite | null = null;
-let casterStick: Phaser.GameObjects.Sprite | null = null;
+let casterDoll: PaperdollBody | null = null;
 let casterX = CASTER_SPAWN.x; // tile float (server space)
 let casterY = CASTER_SPAWN.y;
-let casterAnim: "idle" | "walk" | "atk" = "idle";
-let casterDir: "down" | "up" | "left" | "right" = "down";
-let casterFrameT0 = performance.now();
-let casterAtkEndsAt = 0;
+let casterFrameDir = "S"; // game direction string (paperdoll DIR_SUFFIX)
 let spellSelected = 0;
 
-function pushCasterFrame(now: number): void {
-  if (!casterBody || !casterStick) return;
-  const dirKey: "down" | "up" | "side" =
-    casterDir === "up" ? "up" : casterDir === "down" ? "down" : "side";
-  const row = pdRow(casterAnim, dirKey);
-  const speed = PD_SPEEDS[casterAnim] ?? 250;
-  const frame = Math.floor((now - casterFrameT0) / speed) % PD_FRAMES_PER_ROW;
-  casterBody.setFrame(row * PD_FRAMES_PER_ROW + frame);
-  casterBody.setFlipX(casterDir === "left");
-  // weapon layer: cùng frame index → rocklift swing khớp tay (Kaetram parity)
-  casterStick.setFrame(row * PD_FRAMES_PER_ROW + frame);
-  casterStick.setFlipX(casterDir === "left");
-}
+// MANIFEST THẬT (cùng shape với assets/players/players_manifest.json):
+const PlayersManifestLike = {
+  base: { file: "base.png", frame_w: 32, frame_h: 32, cols: 4, rows: 12, offset_x: -8, offset_y: -32 },
+  weapons: { stick: { file: "weapon/stick.png", frame_w: 48, frame_h: 48, cols: 4, rows: 9, offset_x: -8, offset_y: -24 } },
+  rows: { idle_down: 0, idle_right: 1, idle_up: 2, walk_down: 3, walk_right: 4, walk_up: 5, atk_down: 6, atk_right: 7, atk_up: 8 },
+  frames_per_row: 4,
+  speeds: { idle: 250, walk: 120, atk: 50 },
+  scale: 2,
+} as unknown as PlayersManifest;
+
+// đăng ký pd-base + weapon sheet BÊN TRONG create qua registerPaperdollTextures
+// của game — 1 path duy nhất cho caster + weapon.
 
 /* ===== ZOMBIE =========================================================== */
 interface LabZombie {
@@ -100,6 +91,61 @@ interface LabZombie {
 }
 
 let zombie: LabZombie | null = null;
+
+/* ===== TOMB / BIA MỘ (user 13/10: chết → hoá mộ, đồ rơi vào rương mộ,
+ * quay lại chỗ chết mở rương lấy lại đồ). Sprite tách từ
+ * assets/maps/mộ.json — tile gid=68 của [Base]BaseChip_pipo.png
+ * (col=(68-1)%8=3, row=(68-1)//8=8) — đã extract sẵn thành
+ * fx/tombstone.png (public dir).
+ */
+interface LabTomb {
+  x: number; y: number;            // tile (nguyên)
+  items: string[];                 // đồ rơi vào rương mộ
+  sprite: Phaser.GameObjects.Image;
+  hint: Phaser.GameObjects.Text;
+}
+let tomb: LabTomb | null = null;
+
+const DEMO_BAG = ["wood", "stone", "berry", "sword"];
+
+function killCaster(): void {
+  const sc = sceneRef; if (!sc) return;
+  // ĐỒ RƠI: toàn bộ bag demo → rương mộ.
+  const items = tomb ? DEMO_BAG.slice() : DEMO_BAG.slice();
+  const tx = Math.floor(casterX), ty = Math.floor(casterY);
+  // Mộ KHÔNG chặn player (đi qua được — không thêm collision, đơn giản nhất).
+  if (tomb) { tomb.sprite.destroy(); tomb.hint.destroy(); }
+  const sprite = sc.add.image((tx + 0.5) * TILE, (ty + 0.9) * TILE, "tombstone")
+    // PNG extract ở 64px (upscale 2x cho nét) → scale 0.5 để vẽ đúng xấp xỉ
+    // chiều cao player (32px * ~1.5 = bia mộ hơi cao hơn đầu ngực là hợp lý).
+    .setDepth(4).setScale(TILE / 64);
+  const hint = sc.add.text((tx + 0.5) * TILE, (ty + 0.9) * TILE - 40,
+    tomb ? "Bia mộ cũ " : "Mộ (F: lấy đồ)", {
+      fontFamily: "monospace", fontSize: "9px", color: "#e8e8e8",
+      stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(6);
+  tomb = { x: tx, y: ty, items, sprite, hint };
+  log(`☠️ Chết tại (${tx},${ty}) — ${items.length} món rơi vào rương mộ.`);
+  // Respawn về điểm xuất phát (game parity: _schedule_respawn).
+  casterX = CASTER_SPAWN.x; casterY = CASTER_SPAWN.y;
+}
+
+function openTomb(): void {
+  if (!tomb || tomb.items.length === 0) return;
+  const got = tomb.items.slice();
+  tomb.items = [];
+  tomb.hint.setText("Mộ (trống)");
+  log(`📦 Lấy lại từ mộ: ${got.join(", ")}`);
+  const sc = sceneRef;
+  if (sc) {
+    const t = sc.add.text((tomb.x + 0.5) * TILE, tomb.y * TILE - 8,
+      `+${got.length} món`, {
+        fontFamily: "monospace", fontSize: "13px", color: "#7dffa0",
+        stroke: "#000", strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(30);
+    sc.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 1200, onComplete: () => t.destroy() });
+  }
+}
 
 /* PORT NGUYÊN game.ts zombieRowFacing + zombieFlipX (user 13/10 "làm kỹ
  * lại"): Kaetram KHÔNG ship hàng left — W/NW/SW = hàng right + flipX. Đoạn
@@ -186,8 +232,22 @@ const keys = new Set<string>();
 window.addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (e.code === "Tab") { e.preventDefault(); cycleSpell(); }
+  if (e.code === "KeyF") {
+    if (tomb && Math.hypot(casterX - (tomb.x + 0.5), casterY - (tomb.y + 0.5)) <= 1.6) openTomb();
+  }
+  if (e.code === "KeyK") killCaster(); // K = tự chết để test mộ
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
+
+// Panel buttons (lab.html): test mộ bằng nút thay vì nhớ phím.
+document.getElementById("btnDie")?.addEventListener("click", () => killCaster());
+document.getElementById("btnOpenTomb")?.addEventListener("click", () => {
+  if (!tomb) { log("Chưa có mộ nào. Bấm ☠️ Chết trước."); return; }
+  if (Math.hypot(casterX - (tomb.x + 0.5), casterY - (tomb.y + 0.5)) > 1.6) {
+    log(`Mộ ở (${tomb.x},${tomb.y}) — đi lại gần rồi mở.`); return;
+  }
+  openTomb();
+});
 
 function cycleSpell(): void {
   const sel = document.getElementById("spellSelect") as HTMLSelectElement | null;
@@ -220,6 +280,7 @@ new Phaser.Game({
       this.load.spritesheet("mob-zombie", "mobs/zombie.png", { frameWidth: 32, frameHeight: 32 });
       this.load.spritesheet("pd-base", "players-base.png", { frameWidth: 32, frameHeight: 32 });
       this.load.spritesheet("pd-stick", "weapon-stick.png", { frameWidth: 48, frameHeight: 48 });
+      this.load.image("tombstone", "fx/tombstone.png");
     },
     create(this: Phaser.Scene) {
       const sc = this;
@@ -236,10 +297,19 @@ new Phaser.Game({
           g.fillRect(x * TILE, y * TILE, TILE, TILE);
         }
 
-      // CASTER body + weapon layer (PaperdollBody shape)
-      casterBody = sc.add.sprite(0, 0, "pd-base").setDepth(6);
-      casterStick = sc.add.sprite(0, 0, "pd-stick").setDepth(7);
-      pushCasterFrame(performance.now());
+      // CASTER = PaperdollBody THẬT của game: đăng ký sheet CO GIỐNG game
+      // (registerPaperdollTextures nhận Uint8Array — lab dùng fetch công khai).
+      const toBytes = async (url: string): Promise<Uint8Array> =>
+        new Uint8Array(await (await fetch(url)).arrayBuffer());
+      void (async () => {
+        const baseB = await toBytes("players-base.png");
+        const stickB = await toBytes("weapon-stick.png");
+        registerPaperdollTextures(sc, PlayersManifestLike, baseB, {});
+        registerWeaponSheet(sc, PlayersManifestLike, "stick", stickB);
+        casterDoll = new PaperdollBody(sc, PlayersManifestLike);
+        casterDoll.spawn((casterX + 0.5) * TILE, (casterY + 0.5) * TILE, 7);
+        casterDoll.setWeapon("stick"); // cây gậy (weapon sheet lab)
+      })();
 
       // ZOMBIE — spawn cách caster 4 ô (zombienear parity)
       zombie = createZombie(sc);
@@ -261,29 +331,26 @@ new Phaser.Game({
       const vx = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
       const vy = (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
       const moving = vx !== 0 || vy !== 0;
-      if (moving && casterAnim !== "atk") {
+      if (moving) {
         const tiles = dtMs / MOVE_MS_PER_TILE;
         const nx = casterX + vx * tiles, ny = casterY + vy * tiles;
         // apply_move parity: per-axis walkable gate
         if (isWalkable(Math.floor(nx), Math.floor(casterY))) casterX = nx;
         if (isWalkable(Math.floor(casterX), Math.floor(ny))) casterY = ny;
-        casterDir = vx < 0 ? "left" : vx > 0 ? "right" : (vy > 0 ? "down" : "up");
-        if (casterAnim !== "walk") { casterAnim = "walk"; casterFrameT0 = now; }
-      } else if (!moving && casterAnim === "walk") {
-        casterAnim = "idle"; casterFrameT0 = now;
-      }
-      if (casterAtkEndsAt && now > casterAtkEndsAt) {
-        casterAtkEndsAt = 0; casterAnim = "idle"; casterFrameT0 = now;
+        // facing字符串 như game (DIR_SUFFIX): S/N/E/W... chọn giống mob facingTo
+        casterFrameDir = facingTo(vx, vy); // dùng ux= vx, uy= vy
       }
 
-      if (casterBody && casterStick) {
-        // getSelfPos production: (tile + 0.5) * tilePx. Paperdoll sprite
-        // origin TRÊN-TRÁI với offset (-8,-32) — nghĩa là sprite vẽ 32×32
-        // frame nên tâm BASE = px+8, py+16 (32px frame gốc).
-        const px = (casterX + 0.5) * TILE, py = (casterY + 0.5) * TILE;
-        casterBody.setPosition(px + PD_BODY_OFFSET.x, py + PD_BODY_OFFSET.y);
-        casterStick.setPosition(px + STICK_OFFSET.x, py + STICK_OFFSET.y);
-        pushCasterFrame(now);
+      if (casterDoll) {
+        // animate(x, y, action, dir, now) — PaperdollBody tự lo khung px
+        // feet-anchor (như spawnSelfDoll + update remote dolls của game):
+        casterDoll.animate(
+          (casterX + 0.5) * TILE,
+          (casterY + 0.5) * TILE,
+          moving ? "walk" : "idle",
+          casterFrameDir,
+          now,
+        );
       }
 
       // --- ZOMBIE chase-walk khi caster gần (hunter parity) ---
@@ -347,7 +414,7 @@ function createZombie(sc: Phaser.Scene): LabZombie {
 function castAt(tx: number, ty: number): void {
   const sc = sceneRef;
   if (!sc || !zombie) return;
-  const spellNames = ["Vận chiêu đá", "Khúc gỗ bay (engine?", "Đạn bóng tối (engine?)"];
+  const spellNames = ["Vận chiêu đá", "Khúc gỗ bay (chưa engine)", "Đạn bóng tối (chưa engine)"];
   if (spellSelected !== 0) {
     log(`"${spellNames[spellSelected]}" — chưa port qua engine. Tab đổi về Vận chiêu đá.`);
     return;
@@ -357,41 +424,50 @@ function castAt(tx: number, ty: number): void {
   def.liftMs = Number((document.getElementById("liftMs") as HTMLInputElement).value);
   spellEngine.impactVfx = (document.getElementById("chkImpact") as HTMLInputElement)?.checked ?? false;
 
-  // swing anim (atk — 50ms x 4 frame như manifest)
-  casterAnim = "atk"; casterFrameT0 = performance.now();
-  casterAtkEndsAt = performance.now() + PD_SPEEDS.atk * PD_FRAMES_PER_ROW;
-
-  // HIT-TEST như apply_spell: mob nằm trong impact radius của điểm click
-  const mobCx = zombie.xF, mobCy = zombie.yF;
-  const dTiles = Math.hypot(tx + 0.5 - mobCx, ty + 0.5 - mobCy);
-  const hit = dTiles <= (def.impactRadiusPx ?? 40) / TILE;
+  // swing: PaperdollBody.swing() plays the atk rows ONCE (one-shot, owned
+  // by the class — same as the game's combatSwing path).
+  casterDoll?.swing(performance.now());
 
   spellEngine.cast(def, { x: (casterX + 0.5) * TILE, y: (casterY + 0.5) * TILE }, { x: tx, y: ty });
 
-  if (hit) {
-    // lab server: action_result echo 30ms → resolve deadline = impact_delay
-    lastCritical = Math.random() < 0.15;
-    lastServerDmg = 15 + Math.floor(Math.random() * 9);
-    if (lastCritical) lastServerDmg = Math.round(lastServerDmg * 1.5);
-    setTimeout(() => {
-      spellEngine.notifyServerImpact(tx, ty, flightMs);
-      log(`action_result: impact_delay_ms=${flightMs}, dmg=${lastServerDmg}${lastCritical ? " CRIT" : ""}`);
-    }, 30);
-    resolveDeadline = castT0 + flightMs + 60; // +60ms = pending → tick 20Hz push
-    tlEl.textContent = `CAST 0ms → SERVER ${flightMs}ms → dmg ${lastServerDmg}${lastCritical ? " (CRIT)" : ""}`;
-    resolvePayload = () => {
+  /* HIT-TEST TẠI IMPACT (fix "dejavu"): boss đi từ A→B trong khi đá đang bay,
+   * ném A mà resolve giờ theo vị trí CAST thì mob đã đi rồi → "đá trúng
+   * đường đi quá khứ". ĐỜN GIỐNG game thật: apply_spell cast-time CHỈ
+   * schedule; resolve_pending_spells applies dmg khi flight DUE — tức
+   * là lúc đá CHẠM,외 vị trí mob HIỆN TẠI. Lab giờ giữ ảnh hưởng hit-test
+   * đến khi toolbox: đo khoảng cách (tx,ty)のも mob HIỆN TẠI tại mốc impact. */
+  const radius = (def.impactRadiusPx ?? 40) / TILE;
+  resolveDeadline = castT0 + flightMs + 60; // +60ms = pending → tick 20Hz push
+  tlEl.textContent = "flight " + flightMs + "ms — hit-check at impact…";
+  resolvePayload = () => {
       if (!zombie) return;
+      // ================= HIT-CHECK TẠI ĐIỂM ĐÁ CHẠM =================
+      // Khoảng cách (tx,ty) vs vị trí mob HIỆN TẠI (vừa di chuyển qua
+      // flightMs ms) — mob trượt khỏi bán kính thì TRƯỢT thật.
+      const nowDx = (tx + 0.5) - zombie.xF;
+      const nowDy = (ty + 0.5) - zombie.yF;
+      const nowD2 = Math.hypot(nowDx, nowDy);
+      if (nowD2 > radius) {
+        // MOB ĐI KHỎI trước khi đá tới — đón kết quả "đá rơi đất".
+        tlEl.textContent = "TRƯỢT — mob rời điểm ném trước khi đá chạm (" + nowD2.toFixed(2) + "> " + radius.toFixed(2) + ")";
+        log("TRƯỢT: mob đi tiếp trong lúc đá bay — KHÔNG dmg.");
+        return;
+      }
+      // CRIT + variance roll LÚC RESOLVE (giống apply_spell cast thật:
+      // roll giữ trong pending_spells — lab giả hoạt cùng shape)
+      lastCritical = Math.random() < 0.15;
+      lastServerDmg = 15 + Math.floor(Math.random() * 9);
+      if (lastCritical) lastServerDmg = Math.round(lastServerDmg * 1.5);
+      setTimeout(() => {
+        spellEngine.notifyServerImpact(tx, ty, flightMs);
+      }, 0);
       zombie.hp = Math.max(0, zombie.hp - lastServerDmg);
       zombie.hpFill.width = 28 * zombie.hp / zombie.hpMax;
-      // Anchor dmg = FLOAT POS của mob (xF,yF) × TILE — KHÔNG phải container.x
-      // (nó có thể đang shake lệch) — số damage luôn bám đúng chỗ mob đứng
-      // tại thời điểm hit, kể cả khi mob đang di chuyển.
+      // Anchor dmg = FLOAT POS của mob (xF,yF) × TILE tại mốc hit —
+      // số bám đúng chỗ mob đang đứng, kể cả khi mob đang di chuyển.
       spawnDamageNumber(zombie.xF * TILE, zombie.yF * TILE, lastServerDmg, lastCritical);
       spawnStunFx();
+      tlEl.textContent = `CAST 0ms → SERVER ${flightMs}ms → dmg ${lastServerDmg}${lastCritical ? " (CRIT)" : ""}`;
       if (zombie.hp <= 0) log("Mob CHẾT.");
     };
-  } else {
-    log(`TRƯỢT: ném tại (${tx},${ty}) — mob ở (${mobCx - 0.5},${mobCy - 0.5}) ngoài tầm nổ.`);
-    tlEl.textContent = "TRƯỢT — KHÔNG dmg";
-  }
 }
