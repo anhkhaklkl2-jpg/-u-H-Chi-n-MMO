@@ -16,7 +16,10 @@ import Phaser from "phaser";
 import { spellEngine } from "./spell_engine";
 import { SPELL_ENGINE_DEFS, type SpellDef } from "./spell_defs";
 
-const TILE = 16;
+// TILE = 32 GIỐNG GAME THẬT: game geo dùng welcome.map.tile_width (=32, xem
+// game.ts tilePx = BASE_TILE = 32) — trước đây lab để 16 khiến server
+// flight (ms/tile) và engine speed (px/s) khác game thật 2×.
+const TILE = 32;
 
 const defIn = SPELL_ENGINE_DEFS.find((d) => d.id === "rocklift");
 if (!defIn) throw new Error("rocklift def missing");
@@ -24,6 +27,10 @@ const def: SpellDef = { ...defIn };
 
 const logEl = document.getElementById("log") as HTMLElement;
 const tlEl = document.getElementById("timeline") as HTMLElement;
+
+// CASTER_TILE: caster lab đứng ở tile (2,6) — dùng chung cho create() + cast()
+// px công thức GIỐNG game (getSelfPos: (tile + 0.5) * tilePx).
+const CASTER_TILE = { x: 2, y: 6 };
 
 let tickOn = true;
 let castT0 = 0;
@@ -164,8 +171,10 @@ let lastCastHit = false; // kết quả hit-test của cast đang bay
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "stage",
-  width: 480,
-  height: 270,
+  // Canvas nội bộ 832×480: tile 32 vẽ 1:1 như game thật (BASE_TILE=32).
+  // Caster/mob đặt theo px công thức game (self.x * t + t/2 — getSelfPos).
+  width: 832,
+  height: 480,
   pixelArt: true,
   backgroundColor: "#1c2430",
   scene: {
@@ -184,10 +193,12 @@ new Phaser.Game({
       spellEngine.attach(sc);
       spellEngine.loadTextures(def);
 
-      // Caster: ô xanh đứng yên (thay player doll)
+      // Caster: ô xanh đứng yên (thay player doll) — px GIỐNG công thức
+      // caster của game thật: getSelfPos = (tile + 0.5) * tilePx.
+      const casterPx = { x: (CASTER_TILE.x + 0.5) * TILE, y: (CASTER_TILE.y + 0.5) * TILE };
       const g = sc.add.graphics();
       g.fillStyle(0x44ffaa, 1);
-      g.fillRect(60, 120, 12, 16);
+      g.fillRect(casterPx.x - 6, casterPx.y - 8, 12, 16);
 
       // ZOMBIE REAL: container + image cut cell (idle.down row 8, frame 0)
       // — cùng cách game.ts syncZombies dựng mob từ sheet.
@@ -270,7 +281,8 @@ function castAt(tx: number, ty: number): void {
   const radiusTiles = (def.impactRadiusPx ?? 40) / TILE;
   lastCastHit = dist <= radiusTiles;
 
-  spellEngine.cast(def, { x: 66, y: 128 }, { x: tx, y: ty });
+  // caster px GIỐNG game thật: getSelfPos công thức (tile + 0.5) * tilePx
+  spellEngine.cast(def, { x: (CASTER_TILE.x + 0.5) * TILE, y: (CASTER_TILE.y + 0.5) * TILE }, { x: tx, y: ty });
   if (lastCastHit) {
     labServerResolve(tx, ty);
   } else {
