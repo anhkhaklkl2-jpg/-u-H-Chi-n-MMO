@@ -906,8 +906,24 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
             if d <= pr and d < ref_d:
                 best, ref_d = enemy, d
         if best is None:
+            # NO TARGET: still echo the DISTANCE flight time so the rock's
+            # client animation paces to the same flight length as a hitcast
+            # (user 13/10: "ném trúng chậm mà ném trượt nhanh lẻ" — a hit
+            # waited impact_delay_ms but a miss resolved instantly, so a
+            # miss LOOKED faster). The miss damage lands nowhere; only the
+            # animation timing is echoed.
+            _dist = _math.hypot(ex - ox, ey - oy)
+            _fm = int(spell.get("flight_ms", 0) or 0)
+            _echo = None
+            if _fm > 0:
+                _echo = int(max(
+                    500,
+                    int(spell.get("flight_base_ms", 400))
+                    + int(spell.get("flight_per_tile_ms", 220))
+                    * min(_dist, SPELL_CAST_RANGE + 0.75),
+                ))
             return ActionResult(False, "no_target", state_changed=True,
-                                pos=(int(ex), int(ey)))
+                                pos=(int(ex), int(ey)), impact_delay_ms=_echo)
         # Snap flight destination onto the mob so the client VFX flies there
         ex, ey = best.x_f, best.y_f
 

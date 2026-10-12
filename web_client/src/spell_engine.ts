@@ -102,13 +102,17 @@ export class SpellEngine {
     const sc = this.scene;
     if (!sc) return;
     const t = (sc as unknown as { tilePx: number }).tilePx;
+    // NO ECHO (impactDelayMs null): a miss answered without a flight time —
+    // leave the run on its distance-based legacy flight (the SAME pacing a
+    // hitcast uses, user 13/10: miss must not LOOK faster than a hit).
+    if (impactDelayMs == null) return;
     const px = { x: (tx + 0.5) * t, y: (ty + 0.5) * t };
     for (const r of this.runs) {
       if (r.phase !== "flight" && r.phase !== "lift" && r.phase !== "emerge") continue;
       if (Math.hypot(r.to.x - px.x, r.to.y - px.y) <= (r.def.impactRadiusPx ?? 40)) {
-        // Server-authoritative flight duration (rocklift = 1800 ms),
+        // Server-authoritative flight duration (rocklift schedule),
         // measured from the CAST moment (run start), never from this frame.
-        const minFlightMs = Math.max(0, (impactDelayMs ?? 0));
+        const minFlightMs = Math.max(0, impactDelayMs);
         const deadline = r.phaseT0 + minFlightMs;
         r.serverFlightUntil = deadline; // flight update paces to this
         const snap = () => {
