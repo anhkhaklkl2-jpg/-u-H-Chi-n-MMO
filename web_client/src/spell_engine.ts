@@ -112,7 +112,11 @@ export class SpellEngine {
       if (Math.hypot(r.to.x - px.x, r.to.y - px.y) <= (r.def.impactRadiusPx ?? 40)) {
         // Server-authoritative flight duration (rocklift schedule),
         // measured from the CAST moment (run start), never from this frame.
-        const minFlightMs = Math.max(0, impactDelayMs);
+        // FAST-PACE CAP (user 13/10 "đổi cách tiếp cận — server cũ chưa
+        // restart vẫn ăn"): cap client flight at 800ms REGARDLESS of the
+        // echoed server delay — the rock visually lands fast; hp proceeds
+        // when the (slower) server resolve lands, but the WAIT LOOK is short.
+        const minFlightMs = Math.min(800, Math.max(0, impactDelayMs));
         const deadline = r.phaseT0 + minFlightMs;
         r.serverFlightUntil = deadline; // flight update paces to this
         const snap = () => {
