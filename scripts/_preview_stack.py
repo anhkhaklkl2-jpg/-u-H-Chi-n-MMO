@@ -34,7 +34,7 @@ the same time (each on its own port instance, see below).
     {"type":"preview_cmd","cmd":"tp","value":"x,y"|"rand"|"spawn"}
         Teleport THIS tab's player: to a tile, a random walkable tile, or
         the map spawn area. Walkable-checked; clamps into the map.
-    {"type":"preview_cmd","cmd":"map","value":"ekonia/overworld|forest|cave_area1"}
+    {"type":"preview_cmd","cmd":"map","value":"ekonia/overworld"}  (THẢO NGUYÊN — user 13/10: bỏ forest + cave khỏi preview, chỉ dùng overworld)
         Destroy + re-create the runtime on another map (fresh solo preview).
     {"type":"preview_cmd","cmd":"state"}
         Ask for a state dump -> answers a "preview_state" push (mobs, clock,
@@ -262,11 +262,13 @@ class PreviewStack(LocalStack):
         await self._send(cid, {"type": "push", "message": f"[preview] Thời tiết = {value}"})
 
     async def _cmd_map(self, cid: int, uid: int, rt, value) -> None:
+        # THẢO NGUYÊN ONLY (user 13/10, NHẤN MẠNH: "BỎ HẲN CÁI FOREST VÀ CAVE
+        # RA KHỎI MAP CỦA PREVIEW, CHỈ DÙNG THẢO NGUYÊN"): forest/cave repeatedly
+        # rendered broken in the preview tab; overworld only. A wrong value
+        # silently clamps to overworld instead of erroring.
         map_id = str(value or DEFAULT_MAP)
-        allowed = ("ekonia/overworld", "ekonia/forest", "ekonia/cave_area1")
-        if map_id not in allowed:
-            await self._send(cid, {"type": "push", "message": f"[preview] Map không hỗ trợ: {map_id}"})
-            return
+        if map_id != DEFAULT_MAP:
+            map_id = DEFAULT_MAP
         ch = self.joined.get(cid)
         if ch is not None:
             self.gm.remove_runtime(ch)

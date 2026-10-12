@@ -154,9 +154,10 @@ class LocalStack:
             return
         if t == "map_preview" or t == "join":
             uid = self.sessions[cid]["user_id"]
-            map_id = str(frame.get("map_id") or "ekonia/forest")
-            if map_id not in ("ekonia/forest", "ekonia/cave_area1", "ekonia/overworld", "bigmap"):
-                map_id = "ekonia/forest"
+            # THẢO NGUYÊN ONLY (user 13/10): preview chỉ join overworld —
+            # forest/cave render lỗi lặp lại, bị loại khỏi mọi đường chọn map
+            # của preview stack (join/map_preview + preview_cmd map).
+            map_id = "ekonia/overworld"
             ch = uid ^ 0x5EED000000000000
             old = self.gm.get_runtime(ch)
             if old is not None:
@@ -262,6 +263,7 @@ class LocalStack:
                     "critical": bool(getattr(spell_result, "critical", False)),
                     "missed": bool(getattr(spell_result, "missed", False)),
                     "spell_id": frame.get("spell_id", ""),
+                    "impact_delay_ms": getattr(spell_result, "impact_delay_ms", None),
                 })
                 return
             elif name == "chop":

@@ -73,3 +73,39 @@ def test_projectile_spell_auto_acquires_when_click_line_misses():
     assert result.target_id == mob.zombie_id
     assert result.damage > 0
     assert mob.hp == 90 - result.damage
+
+
+def test_flight_time_scales_with_distance_near_vs_far():
+    """user 13/10 ("gần lâu, xa lẹ"): flight = base + per_tile × dist.
+    A NEAR cast must be FASTER than a FAR cast — the old fixed 1800ms
+    made every distance take exactly the same (wrong) time."""
+    state = GameState(3, "test-map")
+    state.preview_mode = True
+    player = state.add_player(9, "Caster", 5, 5)
+    player.sync_float_from_int()
+
+    inventory = Inventory()
+    inventory.add("magic_wand", 1)
+    state.inventories = {9: inventory}
+    state.held_slots = {9: 0}
+
+    near_mob = Zombie("wz-near", 6, 5)
+    near_mob.x_f, near_mob.y_f = 6.5, 5.5  # 1 ô bên phải
+    near_mob.hp = near_mob.max_hp = 200
+    _add_web_zombie(state, near_mob)
+
+    r_near = apply_spell(state, 9, "rocklift", 1, 0)
+    t_near = r_near.impact_delay_ms
+
+    far_mob = Zombie("wz-far", 9, 8)
+    far_mob.x_f, far_mob.y_f = 9.5, 8.5  # ~5 ô SE
+    far_mob.hp = far_mob.max_hp = 200
+    _add_web_zombie(state, far_mob)
+
+    r_far = apply_spell(state, 9, "rocklift", 4, 3)
+    t_far = r_far.impact_delay_ms
+
+    assert t_near < t_far, f"near ({t_near}ms) must fly FASTER than far ({t_far}ms)"
+    # base + per_tile floor/ceiling sanity (clamped to max cast range)
+    assert t_near >= 400 + 220 * 1
+    assert t_far <= 400 + 220 * 4.75 + 1

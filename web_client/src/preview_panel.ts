@@ -29,10 +29,11 @@ interface PanelHooks {
   castNearest?: (spellId: string) => void;
 }
 
+// THẢO NGUYÊN ONLY (user 13/10, NHẤN MẠNH): forest + cave LOẠI KHỎI preview
+// — map render lỗi lặp lại, server stack cũng chỉ nhận overworld nên nút này
+// không còn giá trị test. Chỉ còn 1 map.
 const MAPS: Array<[string, string]> = [
-  ["ekonia/overworld", "Bigmap"],
-  ["ekonia/forest", "Rừng"],
-  ["ekonia/cave_area1", "Hang"],
+  ["ekonia/overworld", "Thảo nguyên"],
 ];
 
 const WEATHERS: Array<[string, string]> = [
