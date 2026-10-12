@@ -917,9 +917,9 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
             _echo = None
             if _fm > 0:
                 _echo = int(max(
-                    500,
-                    int(spell.get("flight_base_ms", 400))
-                    + int(spell.get("flight_per_tile_ms", 220))
+                    350,
+                    int(spell.get("flight_base_ms", 240))
+                    + int(spell.get("flight_per_tile_ms", 140))
                     * min(_dist, SPELL_CAST_RANGE + 0.75),
                 ))
             return ActionResult(False, "no_target", state_changed=True,
@@ -1032,10 +1032,13 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     # đây (client pace theo deadline, tự khớp)
     if flight_ms > 0:
         dist_tiles = _math.hypot(ex - ox, ey - oy)
-        base_ms = int(spell.get("flight_base_ms", 400))
-        per_tile_ms = int(spell.get("flight_per_tile_ms", 220))
+        # NHANH HƠN (user 13/10: "vẫn ném chậm"): 400+220/ô cho 4.75 ô =
+        # 1445ms vẫn quá dài cho cast trúng. Giảm còn 240 + 140/ô = 905ms
+        # max — l刻nh ném gần ~380ms, snappy hơn gần gấp đôi.
+        base_ms = int(spell.get("flight_base_ms", 240))
+        per_tile_ms = int(spell.get("flight_per_tile_ms", 140))
         flight_ms = int(max(
-            500,
+            350,
             base_ms + per_tile_ms * min(dist_tiles, SPELL_CAST_RANGE + 0.75),
         ))
         delay_ms = flight_ms
@@ -1088,6 +1091,10 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
 def resolve_pending_spells(state: GameState, now: Optional[float] = None):
     """Apply the damage of spell projectiles whose flight has elapsed.
 
+    DEJAVU GUARD (user 13/10): each application RE-CHECKS the impact radius
+    against the mob's CURRENT float position at landing time — a mob that
+    dashed out of the blast circle mid-flight does NOT take the damage.
+
     Called once per web tick (manager._web_tick_runtime) — a spell with
     flight_ms scheduled its hit here at cast time; when the deadline passes
     the mob takes the damage AT THAT MOMENT the rock visually lands, so the
@@ -1095,6 +1102,7 @@ def resolve_pending_spells(state: GameState, now: Optional[float] = None):
     of broadcast payloads [{user_id, damage, target_id, target_defeated,
     drops, critical, pos, spell_id}] for the just-resolved hits.
     """
+    import math as _math
     import time as _t
     pending = getattr(state, "pending_spells", None)
     if not pending:
@@ -1114,6 +1122,16 @@ def resolve_pending_spells(state: GameState, now: Optional[float] = None):
         item["drops"] = []
         if zombie is None or not zombie.alive:
             continue  # target despawned mid-flight — nothing to hit
+        # DEJAVU FIX (user 13/10: "ném vào đường đi trong quá khứ vẫn dính
+        # dmg"): dmg chỉ áp khi mob vẫn nằm trong impact radius tại thời
+        # điểm đá CHẠM. Target-lock only guides the rock; a mob that DASHED
+        # out of the impact zone mid-flight no longer eats the hit.
+        _sx, _sy = item.get("pos", (int(zombie.x_f), int(zombie.y_f)))
+        _spell = WEB_SPELLS.get(item["spell_id"], {})
+        _radius = float(_spell.get("radius", 2.2))
+        _dist_now = _math.hypot(_sx + 0.5 - zombie.x_f, _sy + 0.5 - zombie.y_f)
+        if _dist_now > _radius + 0.5:
+            continue  # mob dã chạy khỏi bán kính lúc đá chạm → MISS (không dmg)
         zombie.hp = max(0, zombie.hp - item["dmg"])
         item["target_defeated"] = not zombie.alive
         if not zombie.alive:

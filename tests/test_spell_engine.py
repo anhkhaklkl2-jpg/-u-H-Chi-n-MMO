@@ -34,11 +34,11 @@ def test_rocklift_auto_acquires_nearest_mob_when_aim_misses():
     assert result.state_changed is True
     assert result.target_id == mob.zombie_id
     assert result.damage > 0
-    # DISTANCE-PROPORTIONAL FLIGHT (user 13/10): flight = base 400 + 220/ô
-    # × quãng đường thật clamp 4.75 (player (5.5,5.5) -> mob (9.5,8.5) = 5 ô
-    # clamped về 4.75 = 1445ms). A fixed 1800 kept near casts sluggish and
-    # far casts speeding.
-    assert result.impact_delay_ms == 400 + 220 * 4.75  # flight duration echo
+    # DISTANCE-PROPORTIONAL FLIGHT (user 13/10, nhanh hơn): flight =
+    # base 240 + 140/ô × cự ly clamp 4.75 = 905ms (đã giảm từ 400+220=1445
+    # — cast trúng vẫn quá dài theo user). Safer đi kèm với miss-echo echo
+    # dùng cùng công thức.
+    assert result.impact_delay_ms == 240 + 140 * 4.75
     assert mob.hp == 90  # damage NOT applied at cast time (pending)
     # After the flight elapses, resolve lands the damage exactly once.
     hits = resolve_pending_spells(state, now=state.pending_spells[0]["at"])
@@ -46,6 +46,67 @@ def test_rocklift_auto_acquires_nearest_mob_when_aim_misses():
     assert mob.hp == 90 - result.damage
     assert resolve_pending_spells(state) == []  # no double-apply
     assert result.pos == (9, 8)
+
+
+def test_dashed_mob_misses_at_impact_time():
+    """user 13/10 dejavu: a mob that DASHES out of impact radius mid-flight
+    must NOT eat the hit. resolve_pending_spells re-checks the radius
+    against the mob's CURRENT float pos at the moment the rock would land."""
+    import math as _m
+    state = GameState(4, "test-map")
+    state.preview_mode = True
+    player = state.add_player(11, "Caster", 5, 5)
+    player.sync_float_from_int()
+
+    inventory = Inventory()
+    inventory.add("magic_wand", 1)
+    state.inventories = {11: inventory}
+    state.held_slots = {11: 0}
+
+    mob = Zombie("wz-dasher", 9, 5)
+    mob.x_f, mob.y_f = 9.5, 5.5
+    mob.hp = mob.max_hp = 90
+    _add_web_zombie(state, mob)
+
+    result = apply_spell(state, 11, "rocklift", 4, 0)
+    assert result.target_id == mob.zombie_id
+    pend = state.pending_spells[0]
+
+    # Mob DASHES away mid-flight (more than the impact radius 2.2)
+    mob.x_f, mob.y_f = 18.5, 5.5
+    hits = resolve_pending_spells(state, now=pend["at"])
+    assert len(hits) == 1 and hits[0]["target_id"] == mob.zombie_id
+    # THE FIX: hp unchanged — the mob left the impact zone before the rock
+    # landed, and resolve_pending_spells must reject the hit.
+    assert mob.hp == 90
+
+
+
+def test_mob_inside_radius_still_takes_impact_damage():
+    """Complement of the dash test: a mob that STAYS near the impact point
+    still eats the damage when the flight lands."""
+    state = GameState(5, "test-map")
+    state.preview_mode = True
+    player = state.add_player(12, "Caster", 5, 5)
+    player.sync_float_from_int()
+
+    inventory = Inventory()
+    inventory.add("magic_wand", 1)
+    state.inventories = {12: inventory}
+    state.held_slots = {12: 0}
+
+    mob = Zombie("wz-stayer", 9, 5)
+    mob.x_f, mob.y_f = 9.5, 5.5
+    mob.hp = mob.max_hp = 90
+    _add_web_zombie(state, mob)
+
+    result = apply_spell(state, 12, "rocklift", 4, 0)
+    pend = state.pending_spells[0]
+    # mob nudges slightly (still inside radius 2.2)
+    mob.x_f, mob.y_f = 10.0, 5.5
+    hits = resolve_pending_spells(state, now=pend["at"])
+    assert len(hits) == 1
+    assert mob.hp == 90 - result.damage
 
 
 def test_projectile_spell_auto_acquires_when_click_line_misses():
@@ -107,5 +168,5 @@ def test_flight_time_scales_with_distance_near_vs_far():
 
     assert t_near < t_far, f"near ({t_near}ms) must fly FASTER than far ({t_far}ms)"
     # base + per_tile floor/ceiling sanity (clamped to max cast range)
-    assert t_near >= 400 + 220 * 1
-    assert t_far <= 400 + 220 * 4.75 + 1
+    assert t_near >= 240 + 140 * 1
+    assert t_far <= 240 + 140 * 4.75 + 1
