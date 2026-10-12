@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>SPELL LAB — engine thật (rocklift)</title>
+<style>
+  body { margin:0; background:#141018; color:#ddd; font-family:monospace; display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:14px; margin:8px; }
+  #stage { image-rendering:pixelated; background:#1c2430; border:2px solid #444; cursor:crosshair; }
+  #info { font-size:12px; margin:6px; text-align:center; line-height:1.6; }
+  #log { font-size:11px; color:#8f8; margin-bottom:10px; min-height:14px; }
+  #timeline { font-size:12px; color:#ffd; margin-bottom:6px; min-height:16px; }
+  button { background:#333; color:#ddd; border:1px solid #555; padding:4px 10px; margin:2px; cursor:pointer; font-family:monospace; }
+  button.on { background:#4a4; color:#000; }
+  label { font-size:11px; margin:0 6px; }
+</style>
+</head>
+<body>
+<h1>🪨 SPELL LAB — chạy spell_engine.ts THẬT của game (không copy code)</h1>
+<div id="timeline">timeline: —</div>
+<div>
+  <button id="btnCast">⚡ Cast tới giữa</button>
+  <button id="btnHeal" style="background:#26503a;color:#bfa">💊 Hồi máu mob</button>
+  <span id="log">—</span>
+</div>
+<div id="info">Click vùng chơi = cast tới điểm đó. Timeline in ms thật: CAST → CHẠM (server impact_delay_ms) → HP (tick mô phỏng 20Hz).</div>
+<!-- Phaser tự mount canvas vào div này (PARENT phải là div, không phải canvas trùn) -->
+<div id="stage"></div>
+<div style="margin:8px">
+  <label>liftMs <input id="liftMs" type="number" value="600" min="0" step="50" style="width:60px"></label>
+  <label>flightMs (server) <input id="flightMs" type="number" value="1445" min="0" step="50" style="width:70px"></label>
+  <label><input id="chkImpact" type="checkbox"> Impact VFX</label>
+  <label>hpAtMs <input id="hpAtMs" type="number" value="1840" min="0" step="20" style="width:70px"></label>
+</div>
+<script type="module" src="./src/lab_main.ts"></script>
+</body>
+</html>

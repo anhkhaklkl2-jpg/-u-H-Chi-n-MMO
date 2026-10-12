@@ -29,6 +29,9 @@ interface Run {
   done: boolean;
   /** server-approved impact: when the frame comes, finish flight instantly */
   serverImpactAt: { x: number; y: number } | null;
+  /** Absolute epoch (ms) when the flight animation MUST land — set from
+   *  the server's impact_delay_ms (authoritative flight duration). */
+  serverFlightUntil: number;
 }
 
 export class SpellEngine {
@@ -36,6 +39,9 @@ export class SpellEngine {
   private runs: Run[] = [];
   private loadedDirs = new Set<string>();
   private updateBound = this.update.bind(this);
+  /** Toggle VFX vỡ tại điểm chạm (user 12/10: "tạm bỏ hiệu ứng impact" —
+   *  nhảm lab điều chỉnh; production mặc định true). */
+  impactVfx = true;
 
   attach(scene: Phaser.Scene): void {
     if (this.scene === scene) return;
@@ -82,30 +88,45 @@ export class SpellEngine {
       from: { x: fromPx.x, y: fromPx.y }, to,
       travelledPx: 0,
       totalPx: Math.max(1, Math.hypot(to.x - fromPx.x, to.y - fromPx.y)),
-      done: false, serverImpactAt: null,
+      done: false, serverImpactAt: null, serverFlightUntil: 0,
     });
   }
 
-  /** SERVER IMPACT EVENT (from action_result echo): đúng mô-men server resolve
-   *  damage — kiểm tra impact sẽ bật đúng lúc này thay vì client tự đo. */
-  notifyServerImpact(tx: number, ty: number): void {
+  /** SERVER IMPACT EVENT (from action_result echo): server resolved (or
+   *  scheduled) the spell — snap flight→impact when the flight animation is
+   *  over. impact_delay_ms (server flight_ms) = the AUTHORITATIVE flight
+   *  time: the exact delay the waited before applying the damage. No more
+   *  MIN_FLIGHT_MS/HP-HOLD band-aids — the client just animates what the
+   *  server says and the hp snapshot naturally lands with the impact. */
+  notifyServerImpact(tx: number, ty: number, impactDelayMs?: number | null): void {
     const sc = this.scene;
     if (!sc) return;
     const t = (sc as unknown as { tilePx: number }).tilePx;
     const px = { x: (tx + 0.5) * t, y: (ty + 0.5) * t };
-    // find a flight run heading near this tile — snap it to impact NOW so
-    // VFX vỡ CÙNG lúc mob dính sát thương (chép server position).
     for (const r of this.runs) {
       if (r.phase !== "flight" && r.phase !== "lift" && r.phase !== "emerge") continue;
       if (Math.hypot(r.to.x - px.x, r.to.y - px.y) <= (r.def.impactRadiusPx ?? 40)) {
-        r.phase = "impact";
-        r.phaseT0 = performance.now();
-        r.to = px; // snap to server pos
-        r.img?.setPosition(px.x, px.y);
-        r.img?.setRotation(0);
-        r.img?.setTexture(`sp_${r.def.dir}_rock6`);
-        r.overlay = sc.add.image(px.x, px.y + 14, `sp_${r.def.dir}_hit0`)
-          .setDepth(SPELL_DEPTH - 2).setScale(r.def.scale ?? 1);
+        // Server-authoritative flight duration (rocklift = 1800 ms),
+        // measured from the CAST moment (run start), never from this frame.
+        const minFlightMs = Math.max(0, (impactDelayMs ?? 0));
+        const deadline = r.phaseT0 + minFlightMs;
+        r.serverFlightUntil = deadline; // flight update paces to this
+        const snap = () => {
+          if (r.done || performance.now() < deadline) return;
+          r.phase = "impact";
+          r.phaseT0 = Math.max(performance.now(), deadline);
+          r.to = px; // snap to server pos
+          r.img?.setPosition(px.x, px.y);
+          r.img?.setRotation(0);
+          r.img?.setTexture(`sp_${r.def.dir}_rock6`);
+          if (this.impactVfx) {
+            r.overlay = sc.add.image(px.x, px.y + 14, `sp_${r.def.dir}_hit0`)
+              .setDepth(SPELL_DEPTH - 2).setScale(r.def.scale ?? 1);
+          }
+        };
+        const delay = deadline - performance.now();
+        if (delay <= 0) snap();
+        else setTimeout(snap, delay);
         return;
       }
     }
@@ -130,33 +151,52 @@ export class SpellEngine {
       if (r.phase === "flight") {
         const stage = d.stages.find(s => s.type === "flight") as
           | { type: "flight"; speedTiles: number; maxMs: number } | undefined;
+        // Server-authoritative deadline (serverFlightUntil, set from the
+        // action_result impact_delay_ms): flight paces itself to land EXACTLY
+        // when the server applies the damage. No server deadline yet = the
+        // legacy distance-based fallback below.
+        if (r.serverFlightUntil && r.serverFlightUntil > now) {
+          const liftMs = d.liftMs ?? 0;
+          const totalMs = Math.max(1, r.serverFlightUntil - (r.phaseT0 + liftMs));
+          const remainMs = r.serverFlightUntil - now;
+          const prog = Math.min(1, Math.max(0, 1 - remainMs / totalMs));
+          const x = r.from.x + (r.to.x - r.from.x) * prog;
+          const y = r.from.y - (d.liftPx ?? 26) * (1 - prog) + (r.to.y - r.from.y) * prog;
+          const arc = -Math.sin(prog * Math.PI) * 11;
+          r.img?.setPosition(x, y + arc);
+          r.img?.setTexture(`sp_${d.dir}_rock5`);
+          continue;
+        }
         const speed = (stage?.speedTiles ?? 10) * t; // px/s
         const dt = Math.min(0.05, (now - r.phaseT0) / 1000);
         r.travelledPx += speed * dt;
         const prog = Math.min(1, r.travelledPx / r.totalPx);
-        const ease = prog * prog; // óng the rocklift ease-in
+        const ease = prog * prog; // rocklift ease-in
         const x = r.from.x + (r.to.x - r.from.x) * ease;
         const y = r.from.y - (d.liftPx ?? 26) * (1 - prog) + (r.to.y - r.from.y) * prog;
         const arc = -Math.sin(prog * Math.PI) * 11;
         r.img?.setPosition(x, y + arc);
         // frame CỨNG frame_06 (rock5) trong lúc bay — README final
         r.img?.setTexture(`sp_${d.dir}_rock5`);
-        if (prog >= 1) {
-          // Client-side expiry (no server event yet): impact at target
+        if (prog >= 1 && (!r.serverFlightUntil || now >= r.serverFlightUntil)) {
+          // Client-side expiry (no server deadline, or the deadline passed):
+          // impact at the target tile.
           r.phase = "impact";
           r.phaseT0 = now;
           r.img?.setRotation(0);
           r.img?.setPosition(r.to.x, r.to.y);
           r.img?.setTexture(`sp_${d.dir}_rock6`);
-          r.overlay = sc.add.image(r.to.x, r.to.y + 14, `sp_${d.dir}_hit0`)
-            .setDepth(SPELL_DEPTH - 2).setScale(d.scale ?? 1);
+          if (this.impactVfx) {
+            r.overlay = sc.add.image(r.to.x, r.to.y + 14, `sp_${d.dir}_hit0`)
+              .setDepth(SPELL_DEPTH - 2).setScale(d.scale ?? 1);
+          }
         }
         continue;
       }
       if (r.phase === "impact") {
         const fi = Math.min(6, Math.floor((now - r.phaseT0) / 1000 * 10));
         r.img?.setTexture(`sp_${d.dir}_rock${Math.min(10, 6 + fi)}`);
-        r.overlay?.setTexture(`sp_${d.dir}_hit${Math.min(6, fi)}`);
+        if (r.overlay) r.overlay.setTexture(`sp_${d.dir}_hit${Math.min(6, fi)}`);
         if (fi >= 6 && now - r.phaseT0 > 700) r.done = true;
         continue;
       }

@@ -733,11 +733,13 @@ WEB_SPELLS: dict = {
                     radius=1.25, cooldown=1.0),
     "dark01": dict(name="Đạn bóng tối", dmg=12, variance=4, mana=10,
                    radius=1.25, cooldown=1.0),
-    # rocklift = hitbox RỘNG hơn (user 11/10: "nhắm dễ hơn, hitbox thật gây
-    # sát thương"): impact VFX ~40px ≈ 2.5 ô ở 16px/ô — radius 2.2 là bán
-    # kính hit-test quanh điểm đích + flight path; cooldown nhẹ hơn (1.2s).
+    # rocklift = hitbox RỘNG hơn (user 11/10): impact VFX ~40px ≈ 2.5 ô —
+    # radius 2.2 + cooldown 1.2s. flight_ms = THỜI GIAN BAY server-side:
+    # damage lands AFTER this delay (resolve_pending_spells), and the client
+    # animates the rock flight for exactly this long (lift + travel).
     "rocklift": dict(name="Vận chiêu đá", dmg=18, variance=5, mana=12,
-                     radius=2.2, acquire_range=9.0, cooldown=1.2),
+                     radius=2.2, acquire_range=9.0, cooldown=1.2,
+                     flight_ms=1800),
     # ---- 4 spell mới (user 10/10, packs vfx done 10/10) ----
     # dark02 = debuff HIỂN THỊ tại địch (README Dark VFX 02): damage nhẹ
     # (user duyệt "chỉ để hiển thị — thêm damage sau" → 0 dmg, mana 4).
@@ -785,18 +787,25 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
     if not player.alive:
         return ActionResult(False, "dead")
 
-    # WAND GATE REMOVED (user 12/10): spells are now a FREE verb — no held
-    # wand required. Cast = fire; nothing to attune, nothing to hold.
+    # WAND GATE (user 12/10): inventory mirror may be missing (pure tests /
+    # early web frames before the runtime mirrors are linked) — skip the gate
+    # only when NO mirror exists at all; a real linked inventory must hold
+    # the wand like production always did.
+    held_items = getattr(state, "held_slots", None)
+    inventories_gate = getattr(state, "inventories", None) or {}
+    if held_items is not None or user_id in inventories_gate:
+        try:
+            _slot = int((held_items or {}).get(user_id, 0) or 0)
+        except (TypeError, ValueError):
+            _slot = 0
+        _inv = inventories_gate.get(user_id)
+        _held = _inv.hotbar().get(_slot) if _inv is not None else None
+        if _held != "magic_wand" or (_inv is not None and _inv.count(_held) <= 0):
+            return ActionResult(False, "no_wand")
 
+    # SPEED-MODE (user 12/10): spells KHÔNG tốn gì cả — không mana,
+    # không cooldown. Cast bất kỳ lúc nào cũng bắn.
     now_s = _t.monotonic()
-    if now_s - getattr(player, "last_spell_at", 0.0) < spell["cooldown"]:
-        return ActionResult(False, "cooldown")
-
-    if player.mana < spell["mana"]:
-        return ActionResult(False, "no_mana")
-    # SPEED-MODE (user 12/10): preview/test cần spell không bao giờ hết mana.
-    # Đặt mana về đủ trước khi trừ — cast LUÔN trúng, KHÔNG dừng vì mana.
-    player.mana = max(player.mana, spell["mana"])
 
     # Cast-range gate: the aim offset (dx,dy) from the player tile must sit
     # within SPELL_CAST_RANGE (same clamp idea as chop/place targeting).
@@ -806,7 +815,8 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
         return ActionResult(False, "out_of_range")
 
     player.last_spell_at = now_s
-    player.mana = max(0, player.mana - spell["mana"])
+    # Mana drain REMOVED (user 12/10): cast không tốn mana nữa.
+    # (player.mana = max(0, player.mana - spell["mana"]))
 
     # DAMAGE ROLL (before any mode branch — bump/cone need it too):
     import random as _r
@@ -881,7 +891,11 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
         # Forgiving auto-aim for every spell: moving mobs and tile-center
         # rounding make a narrow segment miss even when the player clicked
         # near the target. If the segment misses, acquire a nearby hostile.
+        # SPEED-MODE (user 12/10): KHÔNG giới hạn khoảng cách — lấy quái sống
+        # GẦN NHẤT bất kể xa gần (join trong 1 trong bản preview, quái spawn
+        # nhiều khi còn cách vài chục ô). Mục tiêu luôn có, cast luôn trúng.
         pr = float(spell.get("acquire_range", 14.0))
+        pr = 10_000.0  # unlimited acquisition radius
         ref_d = float("inf")
         for enemy in candidates:
             if not enemy.alive or getattr(enemy, "ambient", False):
@@ -983,8 +997,52 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
             target_defeated=False, drops=[],
         )
 
-    best.hp = max(0, best.hp - dmg)
     target_id = best.zombie_id
+
+    # SPELL FLIGHT TIMING (user 12/10): the projectile flight is animated
+    # client-side for ``flight_ms`` — the DAMAGE must land at that same
+    # moment. When the spell has a flight time, DON'T subtract hp here:
+    # schedule it in state.pending_spells and let resolve_pending_spells
+    # (called from the web tick) apply it once the rock has visually
+    # reached the mob. The action_result echo carries impact_delay_ms so
+    # the client animation runs EXACTLY as long as the server delay.
+    flight_ms = int(spell.get("flight_ms", 0) or 0)
+    # DISTANCE-PROPORTIONAL FLIGHT (user 13/10: "ném càng xa thì thi triển
+    # càng nhanh, càng gần thì animation càng lâu"): flight_ms CỨNG 1800
+    # bất kể quãng đường — bay xa phải dữ tốc cao, bay gần lề mề chậm chạp.
+    # Giờ flight = base cố định + ms/ô × quãng đường thật (đã clamp trong
+    # SPELL_CAST_RANGE), nên gần/xa giữ CÙNG tốc độ px/s và animation luôn
+    # cảm giác đúng. Server pending deadline + echo impact_delay_ms cũng
+    # đây (client pace theo deadline, tự khớp)
+    if flight_ms > 0:
+        dist_tiles = _math.hypot(ex - ox, ey - oy)
+        base_ms = int(spell.get("flight_base_ms", 400))
+        per_tile_ms = int(spell.get("flight_per_tile_ms", 220))
+        flight_ms = int(max(
+            500,
+            base_ms + per_tile_ms * min(dist_tiles, SPELL_CAST_RANGE + 0.75),
+        ))
+        delay_ms = flight_ms
+        state.pending_spells.append({
+            "at": now_s + flight_ms / 1000.0,
+            "user_id": user_id,
+            "spell_id": spell_id,
+            "dmg": dmg,
+            "critical": critical,
+            "target_id": target_id,
+            "pos": (int(best.x), int(best.y)),
+        })
+        return ActionResult(
+            True, state_changed=True,
+            pos=(int(best.x), int(best.y)), block_id="zombie",
+            damage=dmg, target_id=target_id,
+            target_defeated=False, drops=[],
+            critical=critical,
+            impact_delay_ms=delay_ms,
+        )
+
+    # Instant spells (no flight time): damage lands now (unchanged path).
+    best.hp = max(0, best.hp - dmg)
     defeated = not best.alive
 
     drops = []
@@ -1009,3 +1067,50 @@ def apply_spell(state: GameState, user_id: int, spell_id: str,
         target_defeated=defeated, drops=drops,
         critical=critical,
     )
+
+
+def resolve_pending_spells(state: GameState, now: Optional[float] = None):
+    """Apply the damage of spell projectiles whose flight has elapsed.
+
+    Called once per web tick (manager._web_tick_runtime) — a spell with
+    flight_ms scheduled its hit here at cast time; when the deadline passes
+    the mob takes the damage AT THAT MOMENT the rock visually lands, so the
+    client never sees hp drop before the projectile arrives. Returns a list
+    of broadcast payloads [{user_id, damage, target_id, target_defeated,
+    drops, critical, pos, spell_id}] for the just-resolved hits.
+    """
+    import time as _t
+    pending = getattr(state, "pending_spells", None)
+    if not pending:
+        return []
+    now = _t.monotonic() if now is None else now
+    resolved = []
+    keep = []
+    for item in pending:
+        if item["at"] > now:
+            keep.append(item)
+            continue
+        resolved.append(item)
+    state.pending_spells = keep
+    for item in resolved:
+        zombie = (state.web_zombies if isinstance(state.web_zombies, dict)
+                  else state.web_zombies or {}).get(item["target_id"])
+        item["drops"] = []
+        if zombie is None or not zombie.alive:
+            continue  # target despawned mid-flight — nothing to hit
+        zombie.hp = max(0, zombie.hp - item["dmg"])
+        item["target_defeated"] = not zombie.alive
+        if not zombie.alive:
+            from game.zombies import remove_web_zombie as _rw
+            _rw(state, item["target_id"])
+            from game.drops import spawn_drops
+            import random
+            rolled = [
+                (item_id, qty)
+                for item_id, chance, qty in mob_drop_table(getattr(zombie, "kind", "zombie"))
+                if random.random() < chance
+            ]
+            if rolled:
+                spawn_drops(state, int(zombie.x), int(zombie.y), rolled)
+            item["drops"] = rolled
+    return resolved
